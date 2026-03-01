@@ -372,6 +372,7 @@ def generate_hhc(tree: dict, output_path: Path):
     lines = [
         '<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">',
         "<HTML><HEAD>",
+        '<meta http-equiv="Content-Type" content="text/html; charset=gbk">',
         '<meta name="GENERATOR" content="XuLieKu Builder">',
         "</HEAD><BODY>",
         '<OBJECT type="text/site properties">',
@@ -415,6 +416,7 @@ def generate_hhk(entries: list, output_path: Path):
     lines = [
         '<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">',
         "<HTML><HEAD>",
+        '<meta http-equiv="Content-Type" content="text/html; charset=gbk">',
         '<meta name="GENERATOR" content="XuLieKu Builder">',
         "</HEAD><BODY>",
         "<UL>",
