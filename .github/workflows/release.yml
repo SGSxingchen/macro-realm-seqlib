@@ -32,28 +32,14 @@ jobs:
         run: choco install pandoc -y
         shell: cmd
 
-      - name: 安装 HTML Help Workshop
-        shell: pwsh
+      - name: 部署 HTML Help Workshop（仓库自带）
+        shell: bash
         run: |
-          # 下载 HTML Help Workshop 安装包
-          $url = "https://web.archive.org/web/20200918141158if_/https://download.microsoft.com/download/0/A/9/0A939EF6-E31C-430F-A3DF-DFAE7960D564/htmlhelp.exe"
-          Invoke-WebRequest -Uri $url -OutFile htmlhelp.exe -UseBasicParsing
-          # 静默安装
-          Start-Process -Wait -FilePath .\htmlhelp.exe -ArgumentList '/C /T:C:\hhw_extract'
-          # 如果静默安装失败，尝试手动提取
-          if (-not (Test-Path "C:\Program Files (x86)\HTML Help Workshop\hhc.exe")) {
-            if (Test-Path "C:\hhw_extract\hhc.exe") {
-              New-Item -ItemType Directory -Force -Path "C:\Program Files (x86)\HTML Help Workshop"
-              Copy-Item "C:\hhw_extract\*" "C:\Program Files (x86)\HTML Help Workshop\" -Recurse -Force
-            }
-          }
-          # 验证安装
-          $hhc = "C:\Program Files (x86)\HTML Help Workshop\hhc.exe"
-          if (Test-Path $hhc) {
-            Write-Host "hhc.exe 安装成功: $hhc"
-          } else {
-            Write-Host "警告: hhc.exe 未找到，将尝试使用 chmcmd"
-          }
+          # 将仓库内置的 hhc.exe 加入 PATH
+          HHW_DIR="$(pwd)/tools/hhw"
+          echo "$HHW_DIR" >> "$GITHUB_PATH"
+          echo "hhc.exe 路径: $HHW_DIR/hhc.exe"
+          ls -lh "$HHW_DIR/"
 
       - name: 确定版本号
         id: version

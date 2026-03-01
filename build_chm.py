@@ -463,6 +463,10 @@ index.html
 def find_chm_compiler():
     """查找 CHM 编译器，返回 (路径, 类型) 或 (None, None)"""
     if sys.platform == "win32":
+        # 优先查找仓库内置的 hhc.exe（tools/hhw/）
+        bundled = Path(__file__).parent / "tools" / "hhw" / "hhc.exe"
+        if bundled.is_file():
+            return str(bundled), "hhc"
         for candidate in [
             r"C:\Program Files (x86)\HTML Help Workshop\hhc.exe",
             r"C:\Program Files\HTML Help Workshop\hhc.exe",
