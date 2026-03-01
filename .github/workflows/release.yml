@@ -1,0 +1,97 @@
+name: 发布序列库
+
+on:
+  push:
+    tags:
+      - "v*"
+
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号（如 v6.2）"
+        required: true
+        default: "dev"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: 签出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: 安装 pandoc
+        run: choco install pandoc -y
+        shell: cmd
+
+      - name: 安装 HTML Help Workshop
+        shell: pwsh
+        run: |
+          # 下载 HTML Help Workshop 安装包
+          $url = "https://web.archive.org/web/20200918141158if_/https://download.microsoft.com/download/0/A/9/0A939EF6-E31C-430F-A3DF-DFAE7960D564/htmlhelp.exe"
+          Invoke-WebRequest -Uri $url -OutFile htmlhelp.exe -UseBasicParsing
+          # 静默安装
+          Start-Process -Wait -FilePath .\htmlhelp.exe -ArgumentList '/C /T:C:\hhw_extract'
+          # 如果静默安装失败，尝试手动提取
+          if (-not (Test-Path "C:\Program Files (x86)\HTML Help Workshop\hhc.exe")) {
+            if (Test-Path "C:\hhw_extract\hhc.exe") {
+              New-Item -ItemType Directory -Force -Path "C:\Program Files (x86)\HTML Help Workshop"
+              Copy-Item "C:\hhw_extract\*" "C:\Program Files (x86)\HTML Help Workshop\" -Recurse -Force
+            }
+          }
+          # 验证安装
+          $hhc = "C:\Program Files (x86)\HTML Help Workshop\hhc.exe"
+          if (Test-Path $hhc) {
+            Write-Host "hhc.exe 安装成功: $hhc"
+          } else {
+            Write-Host "警告: hhc.exe 未找到，将尝试使用 chmcmd"
+          }
+
+      - name: 确定版本号
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 构建 CHM 和 ZIP
+        shell: bash
+        run: |
+          python build_chm.py \
+            --version "${{ steps.version.outputs.version }}" \
+            --source-dir . \
+            --output-dir dist
+
+      - name: 列出产物
+        shell: bash
+        run: ls -lh dist/
+
+      # tag 推送时：创建 GitHub Release
+      - name: 创建 Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "宏观界域强化序列库 ${{ steps.version.outputs.version }}"
+          files: |
+            dist/*.chm
+            dist/*.zip
+          generate_release_notes: true
+
+      # 手动触发时：上传为 Artifact
+      - name: 上传构建产物
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: "序列库-${{ steps.version.outputs.version }}"
+          path: dist/*

@@ -1,0 +1,75 @@
+029】外网memes技能表
+
+Others and Special Ability Trees
+Creator： 小凯ovo
+Reviewer：
+
+Abilities in this Ability Tree can be placed in Skill slots. The prices of these abilities are its corresponding Ability Level*1000 credits. Abilities in this ability tree doesn't take up Combat Power Points, but the StoryTeller has all rights to decide whether it can take effect. The StoryTeller has all rights to stop the following abilities from taking effects.
+
+[Ability Name]： I drive (Level D)【精神影响】
+[Ability Effect]： When you are driving a vehicle, if you are able to knock away or completely destroy normal obstacles in your way (determined by the StoryTeller), your vehicle will take no recoil damage from it. In this time, you will not feel any bumps or hear any noise from the outside, your vehicle will automatically start to play 《Nightcall》-Kevinsky. In this period, you will enter a completely calm and relaxed state.
+[Ability Description]： What do you do for work?
+[Action Type]： Passive
+
+
+[Ability Name]： English or Spanish (Level EX)【异常状态】
+[Ability Effect]： You can use a Forced Instant Action for 0AP and ask "English or Spanish". After the target replies, reply with "Whoever moves first is gay"/"el que se mueva es gay" depending on their answer. If the target thinks that their sexuality is more important than anything else, both of you will get affected by a EX-Level Bind (Unable to move), until one side gives up. During this period, the song 《Static》-Steve Lacy will start to play.
+[Ability Description]： The greatest stunlock of all time
+[Action Type]： 0AP Forced Instant
+[Duration]： Until one side decides to move
+
+
+[Ability Name]： Is that a dog (Level E)【异常状态】【精神影响】
+[Ability Effect]： Choose a target and ask "Is that a dog?", any character in your surrounding 5m radius with the intellect lesser than a 5 year old human child will think your chosen target is a dog, effect lasts for a turn. This can be used to avoid viewing Sanity Checks from enemies (For example enemies from COC)
+[Ability Description]： Once a retard said...
+[Action Type]： Active
+[Duration]： 1 Turn
+
+
+[Ability Name]： Rickroll (Level C)【异常状态】
+[Ability Effect]： Whenever you have deceived someone, or completed a fraud, or anything similar. When they are about to find out the truth, you can make all electronic devices in their close vicinity play 《Never Gonna Give You Up》-Rick Astly in unison. This ability bypasses any cybersecurity, and may work on magical scrolls and etc in a mythical world setting.
+[Ability Description]： It never gets old
+[Action Type]： Conditional
+[Duration]： Until the song finishes or until they decide to destroy all the electronics playing the song
+
+
+
+==============
+ovo 这下看懂了，再次证明了中文为什么是更好的语种
+==============
+
+外网memes技能表
+其它与特殊技能表
+制作人：小凯ovo
+审核人：龙娘（1828449440）玛利亚
+备注：看着就不太想过，你这个画风不太纯，改为正常占战力
+
+
+该技能表的技能可以置入技艺栏，购买价格为技能等级*1000的积分，技能表的技能正常占战力，但是否生效皆有主持人定夺，主持人可以无条件拒绝技能表内技能生效。
+
+
+[能力名称]：I drive（D级）
+[能力效果]：当你驾驶载具时，若你可以成功撞开或摧毁路上的障碍物（主持人决定），你的载具不会受到任何伤害。在此期间，你的载具内部不会感受到任何动荡，不会听到任何来自外界的声音，载具内部会开始播放《Nightcall》-Kevinsky，你的心情会变得完全平静。
+[能力形容]：师傅你是做什么的？
+[释放类型]：被动
+
+
+[能力名称]：English or Spanish（EX级）
+[能力效果]：你可以以一个0AP强制瞬发动作问出“English or Spanish”，在对方回答后，用相应的语言问出“Whoever move first is gay”/“el que se mueva es gay”，若对方对自己的性取向的执着大于其它任何事情，则双方都会自愿获得一个EX级的定身效果（无法移动），直到其中一方决定认输并自行行动。在技能持续期间，周围会出现《Static》-Steve Lacy的背景音乐。
+[能力形容]：硬控开始
+[释放类型]：0AP强制瞬发
+[持续时间]：到其中一方行动为止
+
+
+[能力名称]：Is that a dog（E级）
+[能力效果]：你可以指定一个目标并说出“Is that a dog?”，你半径5m内，智商水平小于一般的5岁人类孩童的角色会认为你指定的目标是一只狗，持续一回合。这可以作为幻觉能力规避类似克系怪物的见面sc。
+[能力形容]：你问我规避见面sc的技能为什么在见面后才能用？你猜为什么不用战力。
+[释放类型]：主动
+[持续时间]：1回合
+
+
+[能力名称]：Rickroll（C级）
+[能力效果]：在你完成一次欺诈或类似的行为后，在对方发现真相时，你可以让其身上和附近的电子设备开始播放《Never Gonna Give You Up》-Rick Astly。此技能无视任何防黑客手段，在神秘侧背景下，可以生效与魔法卷轴或相应的物品上。
+[能力形容]：传奇歌手，传奇永传
+[释放类型]：条件触发
+[持续时间]：直到歌曲播完或对方恼羞成怒砸坏设备

@@ -1,0 +1,86 @@
+154】翠玉录
+制作人：浮士德
+审核人：玛利亚
+修改人：玛利亚
+审核人：沧羽、红月
+
+“Smaragdine Table”
+
+【26.1.24：全面加强】
+
+主特质限定
+
+【E】级：获得基础性能，解锁Verum, sine mendacio, certum et verissimum：
+【D】级：解锁Q. E.P.，升级Verum, sine mendacio, certum et verissimum：
+【C】级：升级Q.E.P.，解锁P.V.，解锁S.I.H.
+【B】级：升级Q.E.P.，升级Verum, sine mendacio, certum et verissimum：，升级P.V.，升级S.I.H.
+【A】级：升级P.V.，升级S.I.H.，解锁S.H.I.T.C.
+【S】级：升级S.H.I.T.C.
+
+【基础性能】
+【能力名称】：Philosopher's Stone(E/C/A）
+【能力介绍】：贤者之石
+【能力效果】：所谓炼金术，本质就是将如同铅石一般污浊的灵魂，升华为黄金一般璀璨灵魂的技术。你的法力值每过1轮回增加4/7/10点。在特质到达A级时，你施展法术的消耗降低10%（进行乘算）。
+【能力形容】： “但愿我们能得到那块既不能被火烧毁也不会腐坏的石头吧，然后我们将摆脱所有的恐惧。”
+【释放类型】：被动
+
+【能力名称】：TABLE(S）
+【能力介绍】：《翠玉录》
+【能力效果】：当你的特质等级达到S级时，法力能量池增加5*精神
+【能力形容】： 据说智慧的源泉赫耳墨斯传授了关于炼金术的主要原则，刻在一块祖母绿玉板上，称为《翠玉录》
+【释放类型】：被动
+
+【成长能力】
+【能力名称】：Verum, sine mendacio, certum et verissimum：（E级/C级/A级）
+【能力简介】：When I entered into the cave, I received the tablet zaradi, which was inscribed, from between the hands of Hermes, in which I discovered these words：
+【能力效果】：
+你造成的魔法伤害额外增加1d/3d/5d精神，你获得等同于战力等级的灵视和灵击。
+【能力说明】：当我走进洞穴，我看到了一块翠玉，上面写着字，那是从赫尔墨斯的双手间被书写出来。从那里我发现了以下这些文字：
+【释放类型】：条件触发
+
+【能力名称】：Q.E.P.（E级/C级/A级）
+【能力简介】：This true without lying, certain & most true：That which is below is like that which is above and that which is above is like that which is below to do ye miracles of one only thing.And as all things have been and arose from one by ye mediation of one： so all things have their birth from this one thing by adaptation.
+【能力效果】：
+你法术造成的伤害有3%/6%/10%转化为法力值，你通过此法恢复的超过你法力值上限的法力会转化为护盾，上限1/2/4*精神点。你的法术消耗增加15%/30%/50%，但你将永远无法撒谎。
+【能力说明】：
+真实不虚，永不说谎，必然带来真实：
+下如同上，上如同下；依此成全太一的奇迹。
+万物本是太一，借由分化从太一创造出来。
+【释放类型】：被动（可开关）
+
+【能力名称】：P.V.（E级/C级/A级）
+【能力简介】：The Sun is its father, the moon its mother, the wind hath carried it in its belly, the earth its nourse.The father of all perfection in ye whole world is here. Its force or power is entire if it be converted into earth.
+【能力效果】：
+你的血量公式同时含有壮硕和精神时，你的ap上限+1(E)
+你受到的伤害可以用翻倍的法力值抵消(C)
+你的每点传奇精神增加法力值上限5%（A）
+【能力说明】：
+太阳为父，月亮为母，从风孕育，从地养护。
+世间一切完美之源就在此处；其能力在地上最为完全。
+【释放类型】：条件触发
+注：效果叠加。
+
+【能力名称】：S.I.H.（E级/C级/A级）
+【能力简介】：Separate thou ye earth from ye fire, ye subtile from the gross sweetly wth great indoustry.It ascends from ye earth to ye heaven & again it desends to ye earth and receives ye force of things superior & inferior.
+【能力效果】：
+[初级效果]：带有精神属性的判定效果增加5%。
+[中级效果]：带有精神属性的判定效果增加10%。
+[高级效果]：带有精神属性的判定效果增加15%。
+【能力说明】：
+分土于火，萃精于糙，谨慎行之。
+从地升天，又从天而降，获得其上、其下之能力。
+如此可得世界的荣耀、远离黑暗蒙昧。
+【释放类型】：条件触发
+
+【特定高级能力】
+【能力名称】：S.H.I.T.C.（A/S级）
+【能力简介】：Its force is above all force, for it vanquishes every subtile thing & penetrates every solid thing.So was ye world created.From this are & do come admirable adaptations whereof ye process is here in this.Hence I am called Hermes Trismegist, having the three parts of ye philosophy of ye whole world.That which I have said of ye operation of ye Sun is accomplished & ended.
+【能力效果】：
+每拥有500点法力值，你的AP上限+1（上限为3/4点)。你的法术拥有30%/50%的真实法术穿透(对数值免伤进行乘算，对百分比免伤进行减算)，该穿透效果与其他类似效果数值取高。
+【能力说明】：
+此为万力之力，摧坚拔韧。
+世界即如此创造。
+依此可达奇迹。
+我被称为三重伟大的赫尔墨斯，因我拥有世界三部分的智慧。
+这就是我所说的伟大工作。
+【释放类型】：条件触发
