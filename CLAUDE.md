@@ -83,6 +83,48 @@ git push origin main --tags
 4. 支持 txt 以外的文件，但需另存为 html 格式
 5. 文件编号格式：`001】名称`，用于排序
 
+## Wiki（Fandom）
+
+### 概述
+项目在 Fandom 上维护了一个 Wiki：**macro-realm.fandom.com**（中文路径 `/zh/`）
+
+### 本地文件
+Wiki 相关文件存放在 `wiki/` 目录：
+```
+wiki/
+├── sync_to_wiki.py          # Fandom Wiki 同步脚本（全量清理+重建）
+├── xlsx_to_wikitext.py       # Excel 转 wikitext 工具
+├── wiki_mainpage.wikitext    # Wiki 主页源码
+├── 玩家名人堂.wikitext       # 界域玩家名人堂页面
+└── *.xlsx / *.wikitext       # 其他待同步的资源页面
+```
+
+### 同步命令
+```bash
+# 同步全部（序列库 + 荣誉室）到 Fandom
+python wiki/sync_to_wiki.py --user BotName --password xxx
+
+# 只同步序列库（跳过荣誉室）
+python wiki/sync_to_wiki.py --user BotName --password xxx --skip-honor
+
+# 试运行（不推送，本地预览）
+python wiki/sync_to_wiki.py --user BotName --password xxx --dry-run
+
+# 只同步某个子目录
+python wiki/sync_to_wiki.py --user BotName --password xxx --filter 职业/战技侧
+```
+
+### 同步依赖
+- **mwclient** — MediaWiki API 客户端（`pip install mwclient`）
+- **pandoc** — docx 转换（已有）
+
+### Wiki 页面格式
+- 使用 **MediaWiki wikitext** 语法
+- 手动维护的页面（主页、名人堂、管理组等）：直接编辑 `.wikitext` 文件
+- 自动同步的页面（序列库资源）：由 `sync_to_wiki.py` 从 txt/docx 自动转换
+- 自动同步的分类标签：职业、战技侧、神秘侧、科技侧、特殊侧、技能表、能量池、公共建筑、特质改造、荣誉室等
+- **注意**：手动创建的页面不要加入自动同步分类，否则会被清理脚本误删
+
 ## 已知问题
 - `chmcmd`（Linux/Free Pascal）编译的 CHM 索引功能不正常（CJK 编码问题），CI 已改用 Windows + hhc.exe
 - `.doc` 格式（非 `.docx`）pandoc 可能无法转换，会生成占位页面
