@@ -12,4 +12,4 @@
 1. 本次更新为6.3大版本更新，内容变更较大，如发现问题请及时反馈审核组
 2. 第七批下架名单
 3. 可查询的网站https://trpg.chordvers.org/（不包含docx文档）
-4. Github仓库：https://github.com/SGSxingchen/macro-realm-seqlib（可用于查询更新）
+4. Github仓库：https://github.com/SGSxingchen/macro-realm-seqlib（可用于查询版本更新）
