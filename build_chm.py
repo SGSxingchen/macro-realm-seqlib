@@ -74,7 +74,7 @@ CHM_PROJECT_ENCODING = "gbk"
 class FileEntry:
     """一个文件的转换记录"""
     original_rel: Path  # 原始相对路径 (如 序列库/职业/001】天师.txt)
-    ascii_path: str     # CHM 内部路径 (如 f/00001.html)
+    chm_path: str       # CHM 内部路径 (如 序列库/职业/001】天师.html)，GBK 编码
     display_name: str   # 显示名称 (如 001】天师)
     dir_parts: tuple    # 目录层级 (如 ("序列库", "职业"))
 
@@ -105,31 +105,6 @@ def read_text_file(path: Path) -> str:
 def gbk_safe(text: str) -> str:
     """确保文本可以被 GBK 编码，替换不可编码的字符"""
     return text.encode("gbk", errors="replace").decode("gbk", errors="replace")
-
-
-def html_entity_encode(text: str) -> str:
-    """
-    将非 ASCII 字符转为 HTML 数字实体（&#NNNN; 格式）。
-    这样文件本身为纯 ASCII，chmcmd 能正确解析，
-    CHM 查看器渲染 HTML 时会自动将实体还原为中文。
-    同时对 HTML 特殊字符（& < > "）进行转义。
-    """
-    result = []
-    for ch in text:
-        code = ord(ch)
-        if ch == "&":
-            result.append("&amp;")
-        elif ch == "<":
-            result.append("&lt;")
-        elif ch == ">":
-            result.append("&gt;")
-        elif ch == '"':
-            result.append("&quot;")
-        elif code > 127:
-            result.append(f"&#{code};")
-        else:
-            result.append(ch)
-    return "".join(result)
 
 
 # ============================================================
@@ -246,20 +221,29 @@ def scan_source_files(source_dir: Path, content_dirs: list, include_root: bool =
 
 def convert_all_to_html(source_dir: Path, build_dir: Path, files: dict) -> list:
     """
-    将所有文件转为 HTML，使用纯 ASCII 文件名存储到 build_dir 中。
+    将所有文件转为 GBK 编码的 HTML，保留原始中文目录结构。
     返回 FileEntry 列表。
     """
     entries = []
-    counter = 0
+    used_paths = set()
 
     for rel_path, abs_path in files.items():
         ext = rel_path.suffix.lower()
-        counter += 1
 
-        # 关键：使用纯 ASCII 路径，避免 CHM 的编码问题
-        ascii_path = f"f/{counter:05d}.html"
-        ascii_abs = build_dir / ascii_path
-        ascii_abs.parent.mkdir(parents=True, exist_ok=True)
+        # 保留原始目录结构，统一改为 .html 后缀
+        chm_rel = rel_path.with_suffix(".html")
+        # CHM 内部路径统一用正斜杠
+        chm_path = str(chm_rel).replace("\\", "/")
+
+        # 处理极端情况：不同后缀的同名文件（如 foo.txt 和 foo.html）
+        if chm_path in used_paths:
+            stem = rel_path.stem
+            chm_rel = rel_path.with_name(f"{stem}_{ext.lstrip('.')}.html")
+            chm_path = str(chm_rel).replace("\\", "/")
+        used_paths.add(chm_path)
+
+        dest_abs = build_dir / chm_rel
+        dest_abs.parent.mkdir(parents=True, exist_ok=True)
 
         display_name = rel_path.stem
         dir_parts = tuple(rel_path.parent.parts) if rel_path.parent != Path(".") else ()
@@ -267,31 +251,30 @@ def convert_all_to_html(source_dir: Path, build_dir: Path, files: dict) -> list:
         success = False
         if ext == ".txt":
             print(f"  [txt ] {rel_path}")
-            write_gbk_html(ascii_abs, txt_to_html(abs_path))
+            write_gbk_html(dest_abs, txt_to_html(abs_path))
             success = True
         elif ext in (".html", ".htm"):
             print(f"  [html] {rel_path}")
-            # 已有 HTML 文件也转为 GBK
             try:
                 content = read_text_file(abs_path)
                 content = content.replace('charset="utf-8"', 'charset="gbk"')
                 content = content.replace("charset=utf-8", "charset=gbk")
-                write_gbk_html(ascii_abs, content)
+                write_gbk_html(dest_abs, content)
             except Exception:
-                shutil.copy2(abs_path, ascii_abs)
+                shutil.copy2(abs_path, dest_abs)
             success = True
         elif ext in (".docx", ".doc"):
             print(f"  [doc ] {rel_path}")
-            if convert_with_pandoc(abs_path, ascii_abs):
+            if convert_with_pandoc(abs_path, dest_abs):
                 success = True
             else:
-                write_gbk_html(ascii_abs, make_fallback_html(abs_path.stem, ext))
+                write_gbk_html(dest_abs, make_fallback_html(abs_path.stem, ext))
                 success = True
 
         if success:
             entries.append(FileEntry(
                 original_rel=rel_path,
-                ascii_path=ascii_path,
+                chm_path=chm_path,
                 display_name=display_name,
                 dir_parts=dir_parts,
             ))
@@ -337,14 +320,14 @@ hr {{ border: none; border-top: 1px solid #ddd; margin: 20px 0; }}
 
 
 # ============================================================
-# CHM 项目文件生成（核心修复：GBK 编码 + ASCII 路径）
+# CHM 项目文件生成（统一 GBK 编码）
 # ============================================================
 
 
 def build_toc_tree(entries: list) -> dict:
     """
     从 FileEntry 列表构建目录树。
-    目录节点为 dict，文件节点为 (display_name, ascii_path) 元组。
+    目录节点为 dict，文件节点为 (display_name, chm_path) 元组。
     """
     tree = {}
     for entry in entries:
@@ -357,17 +340,16 @@ def build_toc_tree(entries: list) -> dict:
                 break
             node = node[part]
         else:
-            # 用原始文件名做 key（确保同目录下唯一），存 (显示名, ASCII路径) 做 value
+            # 用原始文件名做 key（确保同目录下唯一），存 (显示名, CHM路径) 做 value
             original_filename = entry.original_rel.name
-            node[original_filename] = (entry.display_name, entry.ascii_path)
+            node[original_filename] = (entry.display_name, entry.chm_path)
     return tree
 
 
 def generate_hhc(tree: dict, output_path: Path):
     """
-    生成 .hhc 目录文件。
-    显示名称用 GBK 编码（CHM 查看器按 Language=0x804 以 GBK 解码）。
-    文件路径为纯 ASCII，不受编码影响。
+    生成 .hhc 目录文件（GBK 编码）。
+    显示名称和文件路径均为 GBK 编码，CHM 查看器按 Language=0x804 解码。
     """
     lines = [
         '<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">',
@@ -398,11 +380,12 @@ def generate_hhc(tree: dict, output_path: Path):
                 _write_node(value, indent + 1)
                 lines.append(f"{pfx}</UL>")
             elif isinstance(value, tuple):
-                display_name, ascii_path = value
+                display_name, chm_path = value
                 safe_name = gbk_safe(display_name)
+                safe_path = gbk_safe(chm_path)
                 lines.append(f'{pfx}<LI> <OBJECT type="text/sitemap">')
                 lines.append(f'{pfx}  <param name="Name" value="{safe_name}">')
-                lines.append(f'{pfx}  <param name="Local" value="{ascii_path}">')
+                lines.append(f'{pfx}  <param name="Local" value="{safe_path}">')
                 lines.append(f"{pfx}  </OBJECT>")
 
     _write_node(tree)
@@ -412,7 +395,7 @@ def generate_hhc(tree: dict, output_path: Path):
 
 
 def generate_hhk(entries: list, output_path: Path):
-    """生成 .hhk 索引文件（GBK 编码，ASCII 文件路径）"""
+    """生成 .hhk 索引文件（GBK 编码）"""
     lines = [
         '<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">',
         "<HTML><HEAD>",
@@ -424,9 +407,10 @@ def generate_hhk(entries: list, output_path: Path):
 
     for entry in sorted(entries, key=lambda e: sort_key(e.display_name)):
         safe_name = gbk_safe(entry.display_name)
+        safe_path = gbk_safe(entry.chm_path)
         lines.append(f'<LI> <OBJECT type="text/sitemap">')
         lines.append(f'  <param name="Name" value="{safe_name}">')
-        lines.append(f'  <param name="Local" value="{entry.ascii_path}">')
+        lines.append(f'  <param name="Local" value="{safe_path}">')
         lines.append(f"  </OBJECT>")
 
     lines.extend(["</UL>", "</BODY></HTML>"])
@@ -435,8 +419,8 @@ def generate_hhk(entries: list, output_path: Path):
 
 
 def generate_hhp(entries: list, output_path: Path, chm_filename: str, title: str):
-    """生成 .hhp 项目文件（ASCII，标题用 GBK 编码）"""
-    file_list = "\n".join(e.ascii_path for e in entries)
+    """生成 .hhp 项目文件（GBK 编码）"""
+    file_list = "\n".join(e.chm_path for e in entries)
 
     # .hhp 不是 HTML，不能用实体编码，标题用 GBK
     content = f"""[OPTIONS]
@@ -600,7 +584,7 @@ def main():
     print(f"      找到 {len(files)} 个文件（CHM 用）\n")
 
     # --- 2. 转换 ---
-    print("[2/6] 转换文件为 HTML（使用 ASCII 文件名）...")
+    print("[2/6] 转换文件为 HTML（保留原始目录结构）...")
     entries = convert_all_to_html(source_dir, build_dir, files)
     print(f"      生成 {len(entries)} 个 HTML 文件\n")
 

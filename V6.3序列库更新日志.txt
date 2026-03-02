@@ -13,7 +13,7 @@
 3. 注意：冥想和传授的价格不包含在八折优惠中
 4. 第七批下架名单（详见下方及"第七批下架名单.txt"）
 5. 可查询的网站：https://trpg.chordvers.org/（不包含docx文档）
-6. Github仓库：https://github.com/SGSxingchen/macro-realm-seqlib（可用于查询版本更新）
+6. Github仓库地址：https://github.com/SGSxingchen/macro-realm-seqlib（可用于查询版本更新）
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
