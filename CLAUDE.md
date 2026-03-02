@@ -48,12 +48,12 @@ python build_chm.py --version v6.2 --skip-zip
 - **chmcmd** — CHM 编译器（Linux 备选，`sudo apt install fp-utils`，对 CJK 索引支持有缺陷）
 
 ### CHM 编码方案（重要）
-CHM 格式不支持 UTF-8，全程统一使用 GBK 编码：
-1. **内部文件路径保留原始中文目录结构**：`序列库/职业/001】天师.html`，GBK 编码，支持中文全文检索
-2. **项目文件（.hhp/.hhc/.hhk）用 GBK 编码**：Language=0x804，Windows CHM 查看器按 GBK 解码
+CHM 格式不支持 UTF-8，内容统一使用 GBK 编码，文件路径用 ASCII：
+1. **内部文件路径用纯 ASCII**：`f/00001.html`...（hhc.exe 是 ANSI 应用，中文路径在英文 Windows CI 上无法编译）
+2. **项目文件（.hhp/.hhc/.hhk）用 GBK 编码**：Language=0x804，显示名称为中文，CHM 查看器按 GBK 解码
 3. **HTML 内容文件用 GBK 编码**：`charset=gbk`，GBK 不支持的字符用 `xmlcharrefreplace` 自动转成 HTML 实体
 4. **CHM 编译输出文件名用 ASCII**（`output.chm`），编译后改名为中文
-5. **CI 构建时需 `chcp 936`**：英文 Windows 默认代码页为 1252，hhc.exe 需要 GBK 代码页才能处理中文路径
+5. **中文全文检索**依赖 HTML 内容和 `<title>` 标签的 GBK 编码，与文件路径无关
 
 ### CHM 内容范围
 - **CHM 只包含 `序列库/` 目录**（不含荣誉室）

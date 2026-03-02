@@ -54,10 +54,12 @@ jobs:
           fi
 
       - name: 构建 CHM 和 ZIP
-        shell: cmd
+        shell: bash
         run: |
-          chcp 936
-          python build_chm.py --version "${{ steps.version.outputs.version }}" --source-dir . --output-dir dist
+          python -u build_chm.py \
+            --version "${{ steps.version.outputs.version }}" \
+            --source-dir . \
+            --output-dir dist
 
       - name: 列出产物
         shell: bash
