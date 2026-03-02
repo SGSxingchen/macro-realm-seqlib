@@ -53,13 +53,20 @@ jobs:
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: 构建 CHM 和 ZIP
-        shell: bash
+      - name: 设置系统代码页为 GBK（hhc.exe 需要）
+        shell: powershell
         run: |
-          python -u build_chm.py \
-            --version "${{ steps.version.outputs.version }}" \
-            --source-dir . \
-            --output-dir dist
+          # hhc.exe 是 ANSI 应用，依赖系统 ACP 读取中文文件路径
+          # 英文 Windows 默认 ACP=1252，改为 936 (GBK)
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Nls\CodePage' -Name 'ACP' -Value '936'
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Nls\CodePage' -Name 'OEMCP' -Value '936'
+          Write-Host "ACP/OEMCP 已设置为 936 (GBK)"
+
+      - name: 构建 CHM 和 ZIP
+        shell: cmd
+        run: |
+          chcp 936
+          python -u build_chm.py --version "${{ steps.version.outputs.version }}" --source-dir . --output-dir dist
 
       - name: 列出产物
         shell: bash
