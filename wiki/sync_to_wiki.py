@@ -9,6 +9,15 @@
     # 同步全部（序列库 + 荣誉室）
     python sync_to_wiki.py --user BotName --password xxx
 
+    # 增量同步：只同步最近一次提交的改动
+    python sync_to_wiki.py --user BotName --password xxx --incremental
+
+    # 增量同步：同步从指定提交以来的改动
+    python sync_to_wiki.py --user BotName --password xxx --diff-from v6.3.1
+
+    # 增量同步：同步工作区未提交的修改
+    python sync_to_wiki.py --user BotName --password xxx --diff-unstaged
+
     # 只同步序列库
     python sync_to_wiki.py --user BotName --password xxx --skip-honor
 
@@ -117,6 +126,124 @@ def sanitize_page_name(name: str) -> str:
     for old, new in replacements.items():
         name = name.replace(old, new)
     return name.strip()
+
+
+# ============================================================
+# Git 增量检测
+# ============================================================
+
+
+def get_git_root() -> Path:
+    """获取 Git 仓库根目录"""
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True, check=True, encoding='utf-8'
+    )
+    return Path(result.stdout.strip())
+
+
+def get_git_changes(diff_from: str = None, unstaged: bool = False) -> dict:
+    """
+    通过 Git diff 获取文件变更。
+
+    Args:
+        diff_from: 起始提交（如 'HEAD~1', 'v6.3.1'），None 则为最近一次提交
+        unstaged: 是否检测未暂存的工作区修改
+
+    Returns:
+        {
+            'added': [Path, ...],      # 新增文件
+            'modified': [Path, ...],   # 修改文件
+            'deleted': [Path, ...],    # 删除文件
+            'renamed': [(old_path, new_path), ...]  # 重命名文件
+        }
+    """
+    changes = {
+        'added': [],
+        'modified': [],
+        'deleted': [],
+        'renamed': []
+    }
+
+    try:
+        # 构建 git diff 命令
+        # 使用 -z 选项输出 NUL 分隔的路径，避免路径转义问题
+        # 使用 -c core.quotepath=false 禁用路径引号转义
+        if unstaged:
+            # 工作区改动（未暂存）
+            cmd = ["git", "-c", "core.quotepath=false", "diff", "--name-status", "--diff-filter=AMDR"]
+        elif diff_from:
+            # 从指定提交到 HEAD
+            cmd = ["git", "-c", "core.quotepath=false", "diff", "--name-status", "--diff-filter=AMDR", diff_from, "HEAD"]
+        else:
+            # 最近一次提交
+            cmd = ["git", "-c", "core.quotepath=false", "diff", "--name-status", "--diff-filter=AMDR", "HEAD~1", "HEAD"]
+
+        # Git for Windows 默认输出 UTF-8（与系统 ACP/cp936 不同）
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            encoding='utf-8',
+            errors='replace'
+        )
+
+        for line in result.stdout.strip().split('\n'):
+            if not line:
+                continue
+
+            parts = line.split('\t')
+            status = parts[0][0]  # A/M/D/R
+
+            if status == 'A':
+                # 新增
+                file_path = Path(parts[1])
+                if _is_supported_file(file_path):
+                    changes['added'].append(file_path)
+
+            elif status == 'M':
+                # 修改
+                file_path = Path(parts[1])
+                if _is_supported_file(file_path):
+                    changes['modified'].append(file_path)
+
+            elif status == 'D':
+                # 删除
+                file_path = Path(parts[1])
+                if _is_supported_file(file_path):
+                    changes['deleted'].append(file_path)
+
+            elif status == 'R':
+                # 重命名 (格式: R<similarity>\told_path\tnew_path)
+                # 处理可能的相似度数字 (如 R100)
+                old_path = Path(parts[1])
+                new_path = Path(parts[2])
+                if _is_supported_file(old_path) or _is_supported_file(new_path):
+                    changes['renamed'].append((old_path, new_path))
+
+    except subprocess.CalledProcessError as e:
+        print(f"  [!] Git diff 失败: {e}")
+        print(f"  [!] stderr: {e.stderr}")
+    except Exception as e:
+        print(f"  [!] Git diff 执行错误: {e}")
+
+    return changes
+
+
+def _is_supported_file(path: Path) -> bool:
+    """检查文件是否在支持的目录和扩展名范围内"""
+    parts = path.parts
+    if not parts:
+        return False
+
+    # 检查是否在序列库或荣誉室目录
+    top_dir = parts[0]
+    if top_dir not in CONTENT_DIRS and top_dir != HONOR_DIR:
+        return False
+
+    # 检查扩展名
+    return path.suffix.lower() in SUPPORTED_EXTENSIONS
 
 
 # ============================================================
@@ -294,6 +421,38 @@ def build_category_tags(categories: list) -> str:
 # ============================================================
 
 
+def delete_wiki_page(site, page_name: str, delay: float, dry_run: bool = False) -> bool:
+    """
+    删除单个 Wiki 页面。
+
+    Args:
+        site: mwclient.Site 实例
+        page_name: 页面名称
+        delay: 删除后的等待时间
+        dry_run: 是否试运行
+
+    Returns:
+        是否成功删除
+    """
+    if dry_run:
+        print(f"  [dry-run] 将删除页面: {page_name}")
+        return True
+
+    try:
+        page = site.pages[page_name]
+        if page.exists:
+            page.delete(reason="自动同步：源文件已删除")
+            print(f"  已删除页面: {page_name}")
+            time.sleep(delay)
+            return True
+        else:
+            print(f"  [!] 页面不存在，跳过删除: {page_name}")
+            return False
+    except Exception as e:
+        print(f"  [!] 删除失败: {page_name} ({e})")
+        return False
+
+
 def cleanup_wiki_pages(site, categories: list, delay: float, dry_run: bool = False):
     """
     清理自动同步分类下的所有页面。
@@ -422,6 +581,103 @@ def sync_files_to_wiki(
     print(f"\n  同步完成: 共 {total} 个文件，成功 {created}，失败 {errors}")
 
 
+def incremental_sync(
+    source_dir: Path,
+    changes: dict,
+    site,
+    delay: float,
+    dry_run: bool = False
+):
+    """
+    增量同步：根据 Git diff 结果处理文件变更。
+
+    Args:
+        source_dir: 源文件根目录
+        changes: get_git_changes() 返回的变更字典
+        site: mwclient.Site 实例
+        delay: 请求间隔（秒）
+        dry_run: 是否试运行
+    """
+    total_added = len(changes['added'])
+    total_modified = len(changes['modified'])
+    total_deleted = len(changes['deleted'])
+    total_renamed = len(changes['renamed'])
+
+    print(f"  检测到变更:")
+    print(f"    新增: {total_added} 个文件")
+    print(f"    修改: {total_modified} 个文件")
+    print(f"    删除: {total_deleted} 个文件")
+    print(f"    重命名: {total_renamed} 个文件")
+    print()
+
+    success_count = 0
+    error_count = 0
+
+    # --- 处理删除 ---
+    if changes['deleted']:
+        print(f"[1/4] 处理删除的文件 ({total_deleted} 个)...")
+        for rel_path in changes['deleted']:
+            page_name = strip_number_prefix(rel_path.stem)
+            page_name = sanitize_page_name(page_name)
+
+            if delete_wiki_page(site, page_name, delay, dry_run):
+                success_count += 1
+            else:
+                error_count += 1
+        print()
+
+    # --- 处理重命名 (删除旧页面) ---
+    if changes['renamed']:
+        print(f"[2/4] 处理重命名的文件 - 删除旧页面 ({total_renamed} 个)...")
+        for old_path, new_path in changes['renamed']:
+            old_page_name = strip_number_prefix(old_path.stem)
+            old_page_name = sanitize_page_name(old_page_name)
+
+            if delete_wiki_page(site, old_page_name, delay, dry_run):
+                success_count += 1
+            else:
+                error_count += 1
+        print()
+
+    # --- 处理新增和修改 ---
+    # Git diff 路径相对于仓库根目录，需要用 git root 来解析绝对路径
+    git_root = get_git_root()
+    to_sync = {}
+
+    # 新增文件
+    for rel_path in changes['added']:
+        abs_path = git_root / rel_path
+        if abs_path.exists():
+            to_sync[rel_path] = abs_path
+
+    # 修改文件
+    for rel_path in changes['modified']:
+        abs_path = git_root / rel_path
+        if abs_path.exists():
+            to_sync[rel_path] = abs_path
+
+    # 重命名文件的新路径
+    for old_path, new_path in changes['renamed']:
+        abs_path = git_root / new_path
+        if abs_path.exists():
+            to_sync[new_path] = abs_path
+
+    if to_sync:
+        total_sync = len(to_sync)
+        print(f"[3/4] 创建/更新页面 ({total_sync} 个)...")
+        sync_files_to_wiki(
+            source_dir=git_root,
+            files=to_sync,
+            site=site,
+            delay=delay,
+            dry_run=dry_run,
+            filter_path=None
+        )
+
+    print(f"[4/4] 增量同步完成")
+    print(f"  总计处理: {total_added + total_modified + total_deleted + total_renamed} 个变更")
+
+
 # ============================================================
 # 主流程
 # ============================================================
@@ -448,10 +704,30 @@ def main():
     parser.add_argument("--filter", dest="filter_path", help="只同步包含此路径的文件 (如: 职业/战技侧)")
     parser.add_argument("--delay", type=float, default=REQUEST_DELAY, help=f"API 请求间隔秒数 (默认 {REQUEST_DELAY})")
     parser.add_argument("--wiki-site", default=WIKI_SITE, help=f"Wiki 站点 (默认 {WIKI_SITE})")
+
+    # 增量同步选项
+    incremental_group = parser.add_argument_group("增量同步选项")
+    incremental_group.add_argument("--incremental", action="store_true",
+                                   help="增量同步：只同步最近一次提交的改动")
+    incremental_group.add_argument("--diff-from", metavar="COMMIT",
+                                   help="增量同步：同步从指定提交/tag 到 HEAD 的改动 (如: v6.3.1, HEAD~5)")
+    incremental_group.add_argument("--diff-unstaged", action="store_true",
+                                   help="增量同步：同步工作区未暂存的修改")
+
     args = parser.parse_args()
 
     source_dir = Path(args.source_dir).resolve()
     include_honor = not args.skip_honor
+
+    # 检测增量同步模式
+    is_incremental = args.incremental or args.diff_from or args.diff_unstaged
+    mode_desc = "增量同步" if is_incremental else "全量同步"
+    if args.incremental:
+        mode_desc += " (最近一次提交)"
+    elif args.diff_from:
+        mode_desc += f" (从 {args.diff_from})"
+    elif args.diff_unstaged:
+        mode_desc += " (工作区未暂存)"
 
     print("=" * 50)
     print("  序列库 Wiki 同步工具")
@@ -460,11 +736,65 @@ def main():
     print(f"  用户:     {args.user}")
     print(f"  荣誉室:   {'包含' if include_honor else '跳过'}")
     print(f"  过滤:     {args.filter_path or '无'}")
-    print(f"  模式:     {'试运行' if args.dry_run else '正式同步'}")
+    print(f"  模式:     {mode_desc}")
+    if args.dry_run:
+        print(f"  试运行:   是")
     print("=" * 50)
     print()
 
-    # --- 1. 扫描文件 ---
+    # --- 增量同步模式 ---
+    if is_incremental:
+        print("[1/3] 检测文件变更 (Git diff)...")
+
+        # 获取变更
+        if args.diff_unstaged:
+            changes = get_git_changes(diff_from=None, unstaged=True)
+        elif args.diff_from:
+            changes = get_git_changes(diff_from=args.diff_from, unstaged=False)
+        else:
+            changes = get_git_changes(diff_from=None, unstaged=False)
+
+        # 统计变更
+        total_changes = (len(changes['added']) + len(changes['modified']) +
+                        len(changes['deleted']) + len(changes['renamed']))
+
+        if total_changes == 0:
+            print("      没有检测到文件变更，退出。")
+            return
+
+        print(f"      检测到 {total_changes} 个变更\n")
+
+        # 连接 Wiki
+        site = None
+        if not args.dry_run:
+            print("[2/3] 连接 Wiki...")
+            try:
+                site = mwclient.Site(args.wiki_site, path=WIKI_PATH)
+                site.login(args.user, args.password)
+                print(f"      已登录: {args.user}\n")
+            except Exception as e:
+                print(f"      [!] 连接失败: {e}")
+                sys.exit(1)
+        else:
+            print("[2/3] 试运行模式，跳过 Wiki 连接\n")
+
+        # 执行增量同步
+        print("[3/3] 增量同步...")
+        incremental_sync(
+            source_dir=source_dir,
+            changes=changes,
+            site=site,
+            delay=args.delay,
+            dry_run=args.dry_run
+        )
+
+        print()
+        print("=" * 50)
+        print("  增量同步完成!")
+        print("=" * 50)
+        return
+
+    # --- 全量同步模式 ---
     print("[1/3] 扫描源文件...")
     files = scan_files(source_dir, CONTENT_DIRS, include_honor=include_honor)
     print(f"      找到 {len(files)} 个文件\n")
