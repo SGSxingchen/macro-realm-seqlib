@@ -25,6 +25,8 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from xlsx_to_chm_html import convert_xlsx_to_html_document
+
 # ============================================================
 # 配置
 # ============================================================
@@ -33,13 +35,14 @@ from pathlib import Path
 CHM_CONTENT_DIRS = ["序列库"]
 # ZIP 包含全部
 ZIP_CONTENT_DIRS = ["序列库", "荣誉室"]
-ROOT_EXTENSIONS = {".txt", ".html", ".htm", ".docx", ".doc"}
+ROOT_EXTENSIONS = {".txt", ".html", ".htm", ".docx", ".doc", ".xlsx"}
 DEFAULT_TITLE = "序列库"
 
 PAGE_STYLE = """\
 body {
     font-family: "Microsoft YaHei", "SimSun", "PingFang SC", sans-serif;
     padding: 15px 20px;
+    margin: 0 auto;
     line-height: 1.8;
     color: #333;
     max-width: 900px;
@@ -174,6 +177,15 @@ def convert_with_pandoc(src_path: Path, dst_path: Path) -> bool:
         # 替换 charset 声明
         utf8_html = utf8_html.replace('charset="utf-8"', 'charset="gbk"')
         utf8_html = utf8_html.replace("charset=utf-8", "charset=gbk")
+        # 注入统一页面样式（含内容居中）
+        if "</head>" in utf8_html.lower():
+            utf8_html = re.sub(
+                r"</head>",
+                f"<style>{PAGE_STYLE}</style></head>",
+                utf8_html,
+                count=1,
+                flags=re.IGNORECASE,
+            )
         write_gbk_html(dst_path, utf8_html)
         return True
     except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as e:
@@ -199,7 +211,7 @@ def make_fallback_html(name: str, ext: str) -> str:
 
 def scan_source_files(source_dir: Path, content_dirs: list, include_root: bool = True) -> dict:
     """扫描源目录，返回 {相对路径: 绝对路径}"""
-    supported = {".txt", ".html", ".htm", ".docx", ".doc"}
+    supported = {".txt", ".html", ".htm", ".docx", ".doc", ".xlsx"}
     files = {}
 
     if include_root:
@@ -267,6 +279,22 @@ def convert_all_to_html(source_dir: Path, build_dir: Path, files: dict) -> list:
             if convert_with_pandoc(abs_path, dest_abs):
                 success = True
             else:
+                write_gbk_html(dest_abs, make_fallback_html(abs_path.stem, ext))
+                success = True
+        elif ext == ".xlsx":
+            print(f"  [xlsx] {rel_path}")
+            try:
+                html_doc = convert_xlsx_to_html_document(
+                    abs_path,
+                    title=abs_path.stem,
+                    page_style=PAGE_STYLE,
+                )
+                html_doc = html_doc.replace('charset="utf-8"', 'charset="gbk"')
+                html_doc = html_doc.replace("charset=utf-8", "charset=gbk")
+                write_gbk_html(dest_abs, html_doc)
+                success = True
+            except Exception as e:
+                print(f"  [!] xlsx 转换失败: {abs_path.name} ({e})")
                 write_gbk_html(dest_abs, make_fallback_html(abs_path.stem, ext))
                 success = True
 
