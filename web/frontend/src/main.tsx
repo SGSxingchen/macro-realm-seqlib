@@ -230,6 +230,7 @@ function App() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [tab, setTab] = useState<'read' | 'admin'>('read');
   const [showResults, setShowResults] = useState(true);
+  const [showClassify, setShowClassify] = useState(true);
   const category = useMemo(() => selectedCat.split('/').slice(1).join('/'), [selectedCat]);
   const root = useMemo(() => selectedCat.split('/')[0] || '', [selectedCat]);
 
@@ -257,8 +258,8 @@ function App() {
           <input value={q} onChange={e => { setQ(e.target.value); setShowResults(true); }} placeholder="搜索标题、路径、正文…" />
           <button className="ghost-toggle" onClick={() => setShowResults(v => !v)}>{showResults ? '隐藏结果' : `显示结果 (${items.length})`}</button>
         </div>
-        <div className="panel-head compact-head"><span>CLASSIFICATION</span><b>分类索引</b></div>
-        <Tree nodes={tree} selected={selectedCat} onPick={(path) => { setSelectedCat(path); setShowResults(true); }} />
+        <div className="panel-head compact-head collapsible-head"><div><span>CLASSIFICATION</span><b>分类索引</b></div><button className="ghost-toggle mini" onClick={() => setShowClassify(v => !v)}>{showClassify ? '收起' : '展开'}</button></div>
+        {showClassify && <Tree nodes={tree} selected={selectedCat} onPick={(path) => { setSelectedCat(path); setShowResults(true); }} />}
         {showResults && <section className="rail-results">
           <div className="results-head"><b>{resultTitle}</b><button onClick={() => setShowResults(false)}>收起</button></div>
           <div className="cards compact-results terminal-scroll">{items.map(it => <ResourceCard key={it.path} item={it} active={detail?.path === it.path} onOpen={() => open(it.path)} />)}</div>

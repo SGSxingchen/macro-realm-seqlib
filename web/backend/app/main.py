@@ -8,6 +8,7 @@ import os
 import re
 import secrets
 import shutil
+import sys
 import subprocess
 import time
 from pathlib import Path
@@ -662,7 +663,7 @@ def wiki_sync(dry_run: bool = True, skip_honor: bool = False, _admin: None = Dep
     password = os.getenv("WIKI_PASSWORD") or os.getenv("FANDOM_PASSWORD")
     if not dry_run and (not user or not password):
         raise HTTPException(503, "未配置 WIKI_USER/WIKI_PASSWORD，无法执行真实同步")
-    args = ["python", "wiki/sync_to_wiki.py", "--user", user or "DRY_RUN_USER", "--password", password or "DRY_RUN_PASSWORD"]
+    args = [sys.executable, "wiki/sync_to_wiki.py", "--user", user or "DRY_RUN_USER", "--password", password or "DRY_RUN_PASSWORD"]
     if dry_run:
         args.append("--dry-run")
     if skip_honor:
