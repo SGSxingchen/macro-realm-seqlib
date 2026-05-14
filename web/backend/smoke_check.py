@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+from fastapi import HTTPException
+from app.main import REPO_ROOT, git_changes, get_resource, get_raw, list_resources, safe_resource_path, tree
+
+print('repo =', REPO_ROOT)
+resources = list_resources(include_content=False)
+assert resources['count'] > 0
+assert all(not item['path'].startswith('荣誉室/') for item in resources['items'])
+print('resources =', resources['count'], '(public only)')
+node_items = tree()['items']
+assert node_items
+assert all(node['path'] != '荣誉室' for node in node_items)
+print('tree ok (honor hidden)')
+sample = next(item for item in resources['items'] if item['path'].endswith('.txt'))
+detail = get_resource(sample['path'])
+assert detail['content']
+print('sample =', sample['path'], 'encoding =', detail['encoding'])
+try:
+    safe_resource_path('../README.md')
+    raise AssertionError('path traversal not rejected')
+except HTTPException:
+    print('path guard ok')
+try:
+    get_resource('荣誉室/_should_not_be_public.txt')
+    raise AssertionError('honor resource not rejected')
+except HTTPException:
+    print('honor public guard ok')
+try:
+    get_raw('荣誉室/_should_not_be_public.txt')
+    raise AssertionError('honor raw not rejected')
+except HTTPException:
+    print('honor raw guard ok')
+changes = git_changes()
+assert 'summary' in changes
+print('git changes from', changes['from_ref'])
+print('SMOKE OK')

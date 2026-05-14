@@ -1,5 +1,9 @@
 # 构建产物
 dist/
+web/frontend/dist/
+web/frontend/node_modules/
+web/backend/.venv/
+web/frontend/tsconfig.tsbuildinfo
 .claude/
 __pycache__/
 *.pyc
