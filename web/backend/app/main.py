@@ -49,6 +49,13 @@ def write_text_utf8(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8", newline="\n")
 
 
+def sort_key(name: str):
+    match = re.match(r"(\d+)", name)
+    if match:
+        return (0, int(match.group(1)), name)
+    return (1, 0, name)
+
+
 def strip_number_prefix(name: str) -> str:
     stem = Path(name).stem
     return re.sub(r"^\d+】", "", stem).strip() or stem
@@ -198,6 +205,12 @@ class DeleteRequest(BaseModel):
     path: str
 
 
+class PackageFileRequest(BaseModel):
+    path: str
+    content: str = ""
+    overwrite: bool = False
+
+
 class MoveToHonorRequest(BaseModel):
     path: str
     category: str | None = None
@@ -303,6 +316,93 @@ def get_raw(path: str):
     full = public_resource_path(path, must_exist=True)
     return read_text(full)[0]
 
+
+
+PACKAGE_ROOT_EXTENSIONS = {".txt", ".html", ".htm", ".docx", ".doc", ".xlsx"}
+PACKAGE_EDIT_EXTENSIONS = {".txt"}
+PACKAGE_EXCLUDE_NAMES = {"README.txt"}
+
+
+def safe_package_file_path(name: str, *, must_exist: bool = False, require_editable: bool = False) -> Path:
+    if "\x00" in name or "/" in name or "\\" in name:
+        raise HTTPException(400, "发行文件必须是仓库根目录单文件名")
+    rel = Path(name)
+    if rel.is_absolute() or ".." in rel.parts or len(rel.parts) != 1:
+        raise HTTPException(400, "发行文件路径越界")
+    if rel.name.startswith(".") or rel.name in PACKAGE_EXCLUDE_NAMES:
+        raise HTTPException(400, "该文件不是发行说明文件")
+    suffix = rel.suffix.lower()
+    if suffix not in PACKAGE_ROOT_EXTENSIONS:
+        raise HTTPException(400, "只允许发行包支持的根目录说明文件类型")
+    if require_editable and suffix not in PACKAGE_EDIT_EXTENSIONS:
+        raise HTTPException(400, "本轮只支持编辑根目录 .txt 发行文件")
+    full = (REPO_ROOT / rel).resolve()
+    if full.parent != REPO_ROOT.resolve():
+        raise HTTPException(400, "发行文件必须位于仓库根目录")
+    if must_exist and not full.is_file():
+        raise HTTPException(404, "发行文件不存在")
+    return full
+
+
+def package_file_entry(path: Path) -> dict:
+    stat = path.stat()
+    title = path.stem
+    if path.suffix.lower() == ".txt":
+        try:
+            title = title_for(path)
+        except Exception:
+            title = path.stem
+    return {
+        "path": path.name,
+        "filename": path.name,
+        "title": title,
+        "size": stat.st_size,
+        "mtime": stat.st_mtime,
+        "editable": path.suffix.lower() in PACKAGE_EDIT_EXTENSIONS,
+        "extension": path.suffix.lower(),
+    }
+
+
+def iter_package_files() -> Iterable[Path]:
+    for path in sorted(REPO_ROOT.iterdir(), key=lambda p: sort_key(p.name)):
+        if not path.is_file() or path.suffix.lower() not in PACKAGE_ROOT_EXTENSIONS:
+            continue
+        if path.name.startswith(".") or path.name in PACKAGE_EXCLUDE_NAMES:
+            continue
+        yield path
+
+
+@app.get("/api/admin/package-files")
+def list_package_files(_admin: None = Depends(require_admin)):
+    items = [package_file_entry(path) for path in iter_package_files()]
+    return {"items": items, "count": len(items)}
+
+
+@app.get("/api/admin/package-files/{path:path}")
+def get_package_file(path: str, _admin: None = Depends(require_admin)):
+    full = safe_package_file_path(path, must_exist=True)
+    if full.suffix.lower() != ".txt":
+        return {**package_file_entry(full), "content": None, "encoding": None}
+    content, encoding = read_text(full)
+    return {**package_file_entry(full), "content": content, "encoding": encoding}
+
+
+@app.post("/api/admin/package-files")
+def create_package_file(req: PackageFileRequest, _admin: None = Depends(require_admin)):
+    full = safe_package_file_path(req.path, require_editable=True)
+    if full.exists() and not req.overwrite:
+        raise HTTPException(409, "目标已存在；如需覆盖请设置 overwrite=true")
+    before = git("status", "--short", "--", req.path)
+    write_text_utf8(full, req.content)
+    return {"ok": True, "path": full.name, "git_status_before": before, "git_status_after": git("status", "--short", "--", full.name)}
+
+
+@app.put("/api/admin/package-files/{path:path}")
+def save_package_file(path: str, req: PackageFileRequest, _admin: None = Depends(require_admin)):
+    full = safe_package_file_path(path, must_exist=True, require_editable=True)
+    before = git("status", "--short", "--", full.name)
+    write_text_utf8(full, req.content)
+    return {"ok": True, "path": full.name, "git_status_before": before, "git_status_after": git("status", "--short", "--", full.name)}
 
 @app.post("/api/admin/resources")
 def save_resource(req: SaveRequest, _admin: None = Depends(require_admin)):
@@ -552,6 +652,8 @@ def parse_name_status(output: str) -> dict:
 
 def category_for_path(path: str) -> str:
     parts = Path(path).parts
+    if len(parts) == 1:
+        return "发行文件"
     if len(parts) <= 2:
         return "根目录"
     return "/".join(parts[1:-1]) or "根目录"
@@ -559,6 +661,8 @@ def category_for_path(path: str) -> str:
 
 def root_for_path(path: str) -> str:
     parts = Path(path).parts
+    if len(parts) == 1:
+        return "发行包根目录"
     return parts[0] if parts else ""
 
 
@@ -640,9 +744,9 @@ def git_changes(from_ref: str | None = None):
     if not from_ref:
         tag = git("describe", "--tags", "--abbrev=0")
         from_ref = tag["stdout"].strip() if tag["returncode"] == 0 and tag["stdout"].strip() else "HEAD"
-    committed = git("diff", "--name-status", "--find-renames", "--diff-filter=AMDR", from_ref, "HEAD", "--", *ALLOWED_ROOTS)
-    worktree = git("diff", "--name-status", "--find-renames", "--diff-filter=AMDR", "HEAD", "--", *ALLOWED_ROOTS)
-    untracked = git("ls-files", "--others", "--exclude-standard", "--", *ALLOWED_ROOTS)
+    committed = git("diff", "--name-status", "--find-renames", "--diff-filter=AMDR", from_ref, "HEAD", "--", *ALLOWED_ROOTS, ":(top)*.txt")
+    worktree = git("diff", "--name-status", "--find-renames", "--diff-filter=AMDR", "HEAD", "--", *ALLOWED_ROOTS, ":(top)*.txt")
+    untracked = git("ls-files", "--others", "--exclude-standard", "--", *ALLOWED_ROOTS, ":(top)*.txt")
     summary = parse_name_status((committed["stdout"] if committed["returncode"] == 0 else "") + "\n" + (worktree["stdout"] if worktree["returncode"] == 0 else ""))
     for p in untracked["stdout"].splitlines():
         if p.endswith(".txt") and p not in summary["added"]:
