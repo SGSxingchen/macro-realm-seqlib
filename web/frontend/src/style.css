@@ -33,3 +33,5 @@ select{width:100%;border:1px solid #24455f;border-radius:12px;background:#06101f
 .control-rail:not(:has(.rail-results)) .tree{flex:1 1 auto;max-height:none}
 .control-rail:has(.rail-results) .tree:empty{display:none}
 @media(max-width:1180px){.control-rail{max-height:none}.control-rail .tree{max-height:280px}.control-rail .rail-results{max-height:420px;flex:0 1 auto}.control-rail .compact-results{max-height:360px}}
+
+.back-read{margin:0 0 10px;border-color:#4f6f8a;background:linear-gradient(180deg,#0d2237,#081323);color:#dff6ff;text-align:center!important}.console-auth .section-head{align-items:center;margin-bottom:10px}.console-auth .section-head h2{margin:0}

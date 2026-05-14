@@ -142,7 +142,7 @@ function HumanLog({ title, data }: { title: string; data: unknown }) {
   return <details className="raw-details admin-raw"><summary>{title}</summary><pre className="log terminal-scroll">{typeof data === 'string' ? data : JSON.stringify(data, null, 2)}</pre></details>;
 }
 
-function AdminPanel({ detail, reload, onResourceMoved }: { detail: Detail | null; reload: () => void; onResourceMoved: () => void }) {
+function AdminPanel({ detail, reload, onResourceMoved, onBackToRead }: { detail: Detail | null; reload: () => void; onResourceMoved: () => void; onBackToRead: () => void }) {
   const [me, setMe] = useState<AdminState>({ admin_configured: false, authenticated: false });
   const [password, setPassword] = useState('');
   const [tab, setTab] = useState<AdminTab>('overview');
@@ -190,7 +190,7 @@ function AdminPanel({ detail, reload, onResourceMoved }: { detail: Detail | null
   };
 
   if (!me.authenticated) return <section className="admin-card auth-panel console-auth">
-    <p className="eyebrow">MAINTENANCE CONSOLE</p><h2>维护控制台接入</h2>
+    <div className="section-head"><div><p className="eyebrow">MAINTENANCE CONSOLE</p><h2>维护控制台接入</h2></div><button className="ghost-toggle" onClick={onBackToRead}>返回查阅</button></div>
     <p className="hint">{me.admin_configured ? '输入 ADMIN_PASSWORD 后进入维护控制台。' : '未配置 ADMIN_PASSWORD，后台写操作禁用。'}</p>
     <div className="row"><input type="password" placeholder="ADMIN_PASSWORD" value={password} onChange={e => setPassword(e.target.value)} /><button onClick={() => runAction('登录', async () => { const r = await api('/api/admin/login', { method: 'POST', body: JSON.stringify({ password }) }); setMe({ ...me, authenticated: true }); return r; })}>解锁控制台</button></div>
     <HumanLog title="查看登录响应" data={rawLog} />
@@ -205,7 +205,7 @@ function AdminPanel({ detail, reload, onResourceMoved }: { detail: Detail | null
 
   return <section className="admin-console">
     <aside className="admin-nav">
-      <p className="eyebrow">MAINTENANCE</p><h2>维护控制台</h2>
+      <p className="eyebrow">MAINTENANCE</p><h2>维护控制台</h2><button className="back-read" onClick={onBackToRead}>← 返回查阅</button>
       {tabs.map(([id, label]) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>{label}</button>)}
       <div className="console-mini"><StatusBadge ok={!dirty} warn={dirty}>{dirty ? '工作区有改动' : '工作区干净'}</StatusBadge><StatusBadge ok={!!gitInfo?.wiki_configured} warn={!gitInfo?.wiki_configured}>{gitInfo?.wiki_configured ? 'Wiki 已配置' : 'Wiki 未配置'}</StatusBadge></div>
     </aside>
@@ -266,7 +266,7 @@ function App() {
         </section>}
       </aside>
       <Reader detail={detail} />
-    </div> : <AdminPanel detail={detail} reload={load} onResourceMoved={() => { setDetail(null); load(); }} />}
+    </div> : <AdminPanel detail={detail} reload={load} onResourceMoved={() => { setDetail(null); load(); }} onBackToRead={() => setTab('read')} />}
   </main>;
 }
 
