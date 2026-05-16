@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Detail } from '../../types';
-import { kb, words, stamp } from '../../utils';
+import { kb, words } from '../../utils';
 import { parseDocument } from './parser';
 import { Structured } from './Structured';
 
@@ -30,32 +30,28 @@ export function Reader({ detail }: { detail: Detail | null }) {
   return (
     <article className="reader terminal-scroll">
       <div className="reader-head">
-        <div>
-          <p className="eyebrow">ARCHIVE DETAIL · SEQ-{stamp(detail.path)}</p>
-          <h2>{detail.title}</h2>
-          <div className="breadcrumbs">
-            {detail.path.split('/').map((p, i, arr) => (
-              <React.Fragment key={`${p}-${i}`}>
-                <span>{p}</span>
-                {i < arr.length - 1 && <i>/</i>}
-              </React.Fragment>
-            ))}
-          </div>
+        <h2>{detail.title}</h2>
+        <div className="breadcrumbs">
+          {detail.path.split('/').map((p, i, arr) => (
+            <React.Fragment key={`${p}-${i}`}>
+              <span>{p}</span>
+              {i < arr.length - 1 && <i>/</i>}
+            </React.Fragment>
+          ))}
         </div>
-        <div className="stamp">已校准<br />PUBLIC</div>
       </div>
       <div className="detail-toolbar">
-        <span>分类：{detail.category || '根目录'}</span>
-        <span>大小：{kb(detail.size)}</span>
-        <span>字数：{words(detail.content)}</span>
-        <span>编码：{detail.encoding}</span>
+        <span>{detail.category || '根目录'}</span>
+        <span>{kb(detail.size)}</span>
+        <span>{words(detail.content)} 字</span>
+        <span>{detail.encoding}</span>
         <div className="toolbar-spacer" />
         <div className="mode-toggle">
-          <button className={mode === 'structured' ? 'active' : ''} onClick={() => setMode('structured')}>结构化</button>
-          <button className={mode === 'raw' ? 'active' : ''} onClick={() => setMode('raw')}>原文</button>
+          <button type="button" className={mode === 'structured' ? 'active' : ''} onClick={() => setMode('structured')}>结构化</button>
+          <button type="button" className={mode === 'raw' ? 'active' : ''} onClick={() => setMode('raw')}>原文</button>
         </div>
-        <button onClick={() => copy(detail.path)}>复制路径</button>
-        <button onClick={() => copy(detail.content)}>复制全文</button>
+        <button type="button" onClick={() => copy(detail.path)}>复制路径</button>
+        <button type="button" onClick={() => copy(detail.content)}>复制全文</button>
       </div>
       {mode === 'structured' && parsed
         ? <Structured blocks={parsed.blocks} />

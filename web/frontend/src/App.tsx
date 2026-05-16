@@ -1,40 +1,44 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, buildQuery, routePath } from './api';
-import { Detail, Resource, ResourceListResponse, SearchFilters, TreeNode } from './types';
+import { AppTab, Detail, Resource, ResourceListResponse, SearchFilters, TreeNode } from './types';
 import { Header } from './components/Header';
 import { SearchBar } from './components/SearchBar';
 import { FilterRail } from './components/FilterRail';
 import { ResourceList } from './components/ResourceList';
 import { Reader } from './components/Reader';
 import { AdminPanel } from './components/Admin';
+import { RecentUpdates } from './components/RecentUpdates';
+import { NormalizationReviewPage } from './components/NormalizationReview';
 
 const DEFAULT_FILTERS: SearchFilters = { q: '', category: '', kinds: [], sides: [], authors: [] };
 
-function readUrlState(): { tab: 'read' | 'admin'; filters: SearchFilters; openPath: string } {
+function readUrlState(): { tab: AppTab; filters: SearchFilters; openPath: string } {
   const url = new URL(window.location.href);
   const sp = url.searchParams;
   const arr = (k: string) => sp.getAll(k).filter(Boolean);
+  const rawTab = sp.get('tab');
+  const tab: AppTab = rawTab === 'admin' || rawTab === 'updates' ? rawTab : 'read';
   return {
-    tab: sp.get('tab') === 'admin' ? 'admin' : 'read',
+    tab,
     filters: {
       q: sp.get('q') || '',
       category: sp.get('cat') || '',
-      kinds: arr('kind'),
-      sides: arr('side'),
-      authors: arr('author'),
+      kinds: arr('kinds'),
+      sides: arr('sides'),
+      authors: arr('authors'),
     },
     openPath: sp.get('open') || '',
   };
 }
 
-function writeUrlState(tab: 'read' | 'admin', f: SearchFilters, openPath: string) {
+function writeUrlState(tab: AppTab, f: SearchFilters, openPath: string) {
   const sp = new URLSearchParams();
-  if (tab === 'admin') sp.set('tab', 'admin');
+  if (tab !== 'read') sp.set('tab', tab);
   if (f.q) sp.set('q', f.q);
   if (f.category) sp.set('cat', f.category);
-  f.kinds.forEach(k => sp.append('kind', k));
-  f.sides.forEach(s => sp.append('side', s));
-  f.authors.forEach(a => sp.append('author', a));
+  f.kinds.forEach(k => sp.append('kinds', k));
+  f.sides.forEach(s => sp.append('sides', s));
+  f.authors.forEach(a => sp.append('authors', a));
   if (openPath) sp.set('open', openPath);
   const qs = sp.toString();
   const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
@@ -42,8 +46,16 @@ function writeUrlState(tab: 'read' | 'admin', f: SearchFilters, openPath: string
 }
 
 export function App() {
+  if (window.location.pathname === '/normalize-review') {
+    return <NormalizationReviewPage />;
+  }
+
+  return <LibraryApp />;
+}
+
+function LibraryApp() {
   const initial = useRef(readUrlState());
-  const [tab, setTab] = useState<'read' | 'admin'>(initial.current.tab);
+  const [tab, setTab] = useState<AppTab>(initial.current.tab);
   const [filters, setFilters] = useState<SearchFilters>(initial.current.filters);
   const [items, setItems] = useState<Resource[]>([]);
   const [tree, setTree] = useState<TreeNode[]>([]);
@@ -61,9 +73,9 @@ export function App() {
     const qs = buildQuery({
       q: f.q,
       category: f.category,
-      kind: f.kinds,
-      side: f.sides,
-      author: f.authors,
+      kinds: f.kinds,
+      sides: f.sides,
+      authors: f.authors,
       include_content: false,
       limit: 500,
     });
@@ -171,6 +183,8 @@ export function App() {
           </div>
           {drawerOpen && <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} />}
         </div>
+      ) : tab === 'updates' ? (
+        <RecentUpdates onOpen={async path => { await openResource(path); setTab('read'); }} />
       ) : (
         <AdminPanel
           detail={detail}

@@ -57,12 +57,29 @@ npm run dev
 ### 前台
 
 - `GET /api/health`：健康检查与后台是否配置。
-- `GET /api/tree`：`序列库/`、`荣誉室/` 分类树。
-- `GET /api/resources?q=&root=&category=&include_content=true`：资源列表/搜索。
+- `GET /api/tree`：公开前台分类树，仅包含 `序列库/`。
+- `GET /api/resources?q=&root=&category=&kinds=&sides=&authors=&limit=200&offset=0&include_content=false`：资源列表/智能搜索。
 - `GET /api/resources/{path}`：资源详情，自动兼容 `utf-8/utf-8-sig/gbk/gb2312/big5`。
 - `GET /api/raw/{path}`：纯文本内容。
 
-列表字段包含：相对路径、文件名、标题、根目录类型、分类路径、mtime、size。
+`kinds`、`sides`、`authors` 是可重复 query 参数，例如：
+
+```text
+/api/resources?q=百夫长&kinds=职业&sides=战技侧&authors=沧羽
+```
+
+列表字段包含：相对路径、文件名、标题、根目录类型、分类路径、mtime、size、侧向、资源类型、作者、评分和片段。默认不返回全文；需要全文时传 `include_content=true`。
+
+### 规范化审核
+
+规范化审核是单独入口，不挂在前台导航，也不使用后台密码。访问 `/normalize-review` 可查看全部审核任务；如果链接带 `?id=...`，页面会默认聚焦该任务，但仍保留全部任务列表。
+
+- `GET /api/normalization/reviews`：列出全部规范化审核任务。
+- `POST /api/normalization/reviews`：创建审核任务。body: `{ resource_path, normalized_content, original_content?, title?, note? }`
+- `GET /api/normalization/reviews/{id}`：读取某个审核任务的规范化前后文本。
+- `POST /api/normalization/reviews/{id}/sign`：签名通过。body: `{ signer, note? }`
+
+审核任务以 JSON 文件保存在 `web/normalization_reviews/`。每个任务记录规范化前文本、规范化后文本、签名列表和状态；当前规则为凑齐 1 个签名即通过。
 
 ### 后台鉴权
 
@@ -157,7 +174,7 @@ npm run build
 python web/backend/smoke_check.py
 ```
 
-它会验证：扫描资源、分类树、读取示例 TXT、非法路径拦截、Git 摘要接口可执行。
+它会验证：扫描资源、分类树、读取示例 TXT、智能搜索、分面 query 参数绑定、非法路径拦截、Git 摘要接口可执行。
 
 ## 注意事项 / 风险
 

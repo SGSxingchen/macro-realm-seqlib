@@ -1,39 +1,41 @@
-/** 阅读区结构化解析器：把 TXT 拆成 Section / Ability / Paragraph 三类节点。
- * 设计目标是 fail-safe — 任何识别失败都退回为 paragraph，永远能渲染原文。
+/** 阅读区结构化解析器：泛用、不折叠 section（避免误切）。
+ *
+ * 设计原则：
+ * - 凡是包在 `【...】` 里的整行内容（小节标题、修订标签、更新条目），统一作为 'banner' 渲染——
+ *   视觉上突出但不可折叠。这样无论是「【职业称号】」、「【加强伤害和烂钱】」、还是
+ *   「【25.10.4：为所有技能明确词条】」都不会误切结构。
+ * - 真正结构化只识别 `[能力名称]:`、`[字段]:值` 形式的能力卡，把它们渲染成属性表。
+ * - 其余一律 paragraph 平铺。
+ *
+ * 等用户内容侧统一格式后，再决定是否启用 section 折叠。
  */
 
 export type Block =
   | { kind: 'title'; text: string }
-  | { kind: 'meta'; text: string }       // (制作人:xxx) (审核人：xxx)
-  | { kind: 'section'; text: string; raw: string } // 【职业称号】
+  | { kind: 'meta'; text: string }
+  | { kind: 'banner'; text: string }                                   // 【...】 行
   | { kind: 'ability'; name: string; level?: string; tags: string[]; fields: Array<{ key: string; value: string }>; tail?: string }
-  | { kind: 'paragraph'; text: string }
-  | { kind: 'note'; text: string };       // 编者注、更新日期等
+  | { kind: 'paragraph'; text: string };
 
-const SECTION_RE = /^【([^】]+)】\s*$/;
-const SECTION_INLINE_RE = /^【([^】]+)】(.+)$/;
+const BANNER_BARE_RE = /^【([^】]+)】\s*$/;
+const BANNER_INLINE_RE = /^【([^】]+)】(.+)$/;
 const ABILITY_NAME_RE = /^\[能力名称\]\s*[:：]\s*(.+)$/;
 const ABILITY_FIELD_RE = /^\[([^\]]+)\]\s*[:：]\s*(.*)$/;
 const META_LINE_RE = /^[（(]\s*(?:制作人|作者|原作者|审核人|修改人|调整人|重置人|复查人|策划)\s*[:：][^)）]*[)）]\s*$/;
-const NOTE_LINE_RE = /^(?:【)?(\d{2,4}[.·]\d{1,2}[.·]\d{1,2}|\d{4}\/\d{1,2}\/\d{1,2})/;
 
 const LEVEL_TAGS = ['EX', 'S', 'A', 'B', 'C', 'D', 'E', 'F'];
 const LEVEL_RE = new RegExp(`[（(]\\s*(${LEVEL_TAGS.join('|')})级?\\s*[)）]`);
 
 function extractAbilityHeader(name: string): { name: string; level?: string; tags: string[] } {
-  // [能力名称]：罗马！（B级）【异常状态】
   let lvl: string | undefined;
   const tags: string[] = [];
   let cleaned = name;
-  const lvlMatch = cleaned.match(LEVEL_RE);
-  if (lvlMatch) {
-    lvl = lvlMatch[1];
+  const m = cleaned.match(LEVEL_RE);
+  if (m) {
+    lvl = m[1];
     cleaned = cleaned.replace(LEVEL_RE, '').trim();
   }
-  cleaned = cleaned.replace(/【([^】]+)】/g, (_m, t) => {
-    tags.push(t.trim());
-    return '';
-  }).trim();
+  cleaned = cleaned.replace(/【([^】]+)】/g, (_m, t) => { tags.push(t.trim()); return ''; }).trim();
   return { name: cleaned, level: lvl, tags };
 }
 
@@ -43,7 +45,6 @@ export function parseDocument(content: string): { title: string; blocks: Block[]
   const blocks: Block[] = [];
 
   let i = 0;
-  // 标题行
   while (i < lines.length && !lines[i].trim()) i++;
   const title = (lines[i] || '').trim();
   if (title) {
@@ -51,49 +52,22 @@ export function parseDocument(content: string): { title: string; blocks: Block[]
     i++;
   }
 
-  // 元数据行（连续的 (制作人/审核人/...) ）
-  while (i < lines.length) {
-    const ln = lines[i].trim();
-    if (!ln) { i++; continue; }
-    if (META_LINE_RE.test(ln)) {
-      blocks.push({ kind: 'meta', text: ln });
-      i++;
-    } else {
-      break;
-    }
-  }
-
   let pendingPara: string[] = [];
 
   const flushPara = () => {
-    if (pendingPara.length) {
-      const text = pendingPara.join('\n').trim();
-      if (text) {
-        if (NOTE_LINE_RE.test(text)) blocks.push({ kind: 'note', text });
-        else blocks.push({ kind: 'paragraph', text });
-      }
-      pendingPara = [];
-    }
+    if (!pendingPara.length) return;
+    const text = pendingPara.join('\n').trim();
+    if (text) blocks.push({ kind: 'paragraph', text });
+    pendingPara = [];
   };
 
   while (i < lines.length) {
-    const ln = lines[i];
-    const t = ln.trim();
+    const t = lines[i].trim();
     if (!t) { flushPara(); i++; continue; }
 
-    const inline = t.match(SECTION_INLINE_RE);
-    const sec = t.match(SECTION_RE) || (inline && inline[2].trim() === '' ? [t, inline[1]] as RegExpMatchArray : null);
-    if (sec) {
+    if (META_LINE_RE.test(t)) {
       flushPara();
-      blocks.push({ kind: 'section', text: sec[1].trim(), raw: t });
-      i++;
-      continue;
-    }
-    if (inline) {
-      // 【小节】尾部还有内容（如「【终极能力】消耗9000+B兑换」），section + 后续段落
-      flushPara();
-      blocks.push({ kind: 'section', text: inline[1].trim(), raw: t });
-      pendingPara.push(inline[2].trim());
+      blocks.push({ kind: 'meta', text: t });
       i++;
       continue;
     }
@@ -103,28 +77,29 @@ export function parseDocument(content: string): { title: string; blocks: Block[]
       flushPara();
       const head = extractAbilityHeader(am[1].trim());
       const fields: Array<{ key: string; value: string }> = [];
-      i++;
       const tail: string[] = [];
+      i++;
       while (i < lines.length) {
-        const ln2 = lines[i];
-        const t2 = ln2.trim();
-        if (!t2) {
-          // 空行：能力字段段落结束
-          break;
-        }
-        if (ABILITY_NAME_RE.test(t2) || SECTION_RE.test(t2) || SECTION_INLINE_RE.test(t2)) break;
+        const t2 = lines[i].trim();
+        if (!t2) break;
+        if (ABILITY_NAME_RE.test(t2)) break;
+        if (BANNER_BARE_RE.test(t2)) break;
         const fm = t2.match(ABILITY_FIELD_RE);
         if (fm) {
           fields.push({ key: fm[1].trim(), value: fm[2].trim() });
           i++;
-          // 可能跨多行：下一行不是 [字段]: 也不是空行也不是新能力/小节，则视作上一字段续行
+          // 续行
           while (i < lines.length) {
-            const next = lines[i];
-            const nt = next.trim();
-            if (!nt) break;
-            if (ABILITY_NAME_RE.test(nt) || SECTION_RE.test(nt) || SECTION_INLINE_RE.test(nt) || ABILITY_FIELD_RE.test(nt)) break;
+            const next = lines[i].trim();
+            if (!next) break;
+            if (
+              ABILITY_NAME_RE.test(next) ||
+              ABILITY_FIELD_RE.test(next) ||
+              BANNER_BARE_RE.test(next) ||
+              BANNER_INLINE_RE.test(next)
+            ) break;
             const last = fields[fields.length - 1];
-            last.value = (last.value ? last.value + '\n' : '') + nt;
+            last.value = (last.value ? last.value + '\n' : '') + next;
             i++;
           }
         } else {
@@ -133,6 +108,21 @@ export function parseDocument(content: string): { title: string; blocks: Block[]
         }
       }
       blocks.push({ kind: 'ability', ...head, fields, tail: tail.join('\n') || undefined });
+      continue;
+    }
+
+    const sb = t.match(BANNER_BARE_RE);
+    if (sb) {
+      flushPara();
+      blocks.push({ kind: 'banner', text: sb[1].trim() });
+      i++;
+      continue;
+    }
+    const si = t.match(BANNER_INLINE_RE);
+    if (si) {
+      flushPara();
+      blocks.push({ kind: 'banner', text: `${si[1].trim()}：${si[2].trim()}` });
+      i++;
       continue;
     }
 

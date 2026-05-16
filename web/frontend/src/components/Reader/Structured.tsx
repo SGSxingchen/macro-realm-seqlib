@@ -1,8 +1,10 @@
-import { useState } from 'react';
 import { Block } from './parser';
 
 const FIELD_PALETTE: Record<string, string> = {
   '能力效果': 'effect',
+  '初级效果': 'effect',
+  '中级效果': 'effect',
+  '高级效果': 'effect',
   '能力简介': 'intro',
   '能力形容': 'flavor',
   '释放类型': 'kind',
@@ -10,6 +12,7 @@ const FIELD_PALETTE: Record<string, string> = {
   '伤害类型': 'kind',
   '消耗能量': 'cost',
   '冷却时间': 'cooldown',
+  '技能冷却': 'cooldown',
   '持续时间': 'duration',
   '补充说明': 'note',
 };
@@ -29,35 +32,10 @@ function levelClass(level?: string) {
 }
 
 export function Structured({ blocks }: { blocks: Block[] }) {
-  // 按 section 把后续块归到一组，做可折叠
-  const groups: Array<{ section?: string; items: Block[] }> = [];
-  for (const b of blocks) {
-    if (b.kind === 'section') groups.push({ section: b.text, items: [] });
-    else if (groups.length === 0) groups.push({ items: [b] });
-    else groups[groups.length - 1].items.push(b);
-  }
-
   return (
     <section className="document doc-structured">
-      {groups.map((g, idx) => <Group key={idx} group={g} index={idx} />)}
+      {blocks.map((b, i) => <BlockNode key={i} block={b} />)}
     </section>
-  );
-}
-
-function Group({ group, index }: { group: { section?: string; items: Block[] }; index: number }) {
-  const [open, setOpen] = useState(true);
-  if (!group.section) {
-    return <div className="doc-group doc-group-head">{group.items.map((b, i) => <BlockNode key={i} block={b} />)}</div>;
-  }
-  return (
-    <div className={`doc-group doc-group-section ${open ? 'open' : 'closed'}`}>
-      <button className="doc-section-head" onClick={() => setOpen(o => !o)} aria-expanded={open}>
-        <span className="doc-section-num">{String(index).padStart(2, '0')}</span>
-        <span className="doc-section-title">{group.section}</span>
-        <span className="doc-section-icon">{open ? '−' : '+'}</span>
-      </button>
-      {open && <div className="doc-group-body">{group.items.map((b, i) => <BlockNode key={i} block={b} />)}</div>}
-    </div>
   );
 }
 
@@ -67,8 +45,8 @@ function BlockNode({ block }: { block: Block }) {
       return <h1 className="doc-title">{block.text}</h1>;
     case 'meta':
       return <p className="doc-meta">{block.text}</p>;
-    case 'note':
-      return <p className="doc-note">{block.text}</p>;
+    case 'banner':
+      return <div className="doc-banner">{block.text}</div>;
     case 'paragraph':
       return <p className="doc-para">{block.text}</p>;
     case 'ability':

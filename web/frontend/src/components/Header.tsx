@@ -1,7 +1,10 @@
+import { ThemeToggle } from './ThemeToggle';
+import { AppTab } from '../types';
+
 type Props = {
   recordCount: number;
-  tab: 'read' | 'admin';
-  onTab: (t: 'read' | 'admin') => void;
+  tab: AppTab;
+  onTab: (t: AppTab) => void;
 };
 
 export function Header({ recordCount, tab, onTab }: Props) {
@@ -18,8 +21,10 @@ export function Header({ recordCount, tab, onTab }: Props) {
         <span>HONOR VAULT SEALED</span>
       </div>
       <nav>
-        <button className={tab === 'read' ? 'active' : ''} onClick={() => onTab('read')}>查阅终端</button>
-        <button className={tab === 'admin' ? 'active admin-entry' : 'admin-entry'} onClick={() => onTab('admin')}>后台</button>
+        <ThemeToggle />
+        <button type="button" className={tab === 'read' ? 'active' : ''} onClick={() => onTab('read')}>查阅终端</button>
+        <button type="button" className={tab === 'updates' ? 'active' : ''} onClick={() => onTab('updates')}>最近更新</button>
+        <button type="button" className={tab === 'admin' ? 'active admin-entry' : 'admin-entry'} onClick={() => onTab('admin')}>后台</button>
       </nav>
     </header>
   );

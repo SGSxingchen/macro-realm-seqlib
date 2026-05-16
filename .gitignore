@@ -4,6 +4,7 @@ web/frontend/dist/
 web/frontend/node_modules/
 web/backend/.venv/
 web/frontend/tsconfig.tsbuildinfo
+web/normalization_reviews/*.json
 .claude/
 __pycache__/
 *.pyc

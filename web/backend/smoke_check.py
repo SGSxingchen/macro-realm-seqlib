@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from fastapi import HTTPException
-from app.main import REPO_ROOT, SEARCH_INDEX, git_changes, get_resource, get_raw, list_resources, safe_resource_path, tree
+from app.main import REPO_ROOT, SEARCH_INDEX, app, git_changes, get_resource, get_raw, list_resources, safe_resource_path, tree
 
 print('repo =', REPO_ROOT)
 SEARCH_INDEX.refresh()
@@ -26,6 +26,22 @@ print('search title-prefix ok, hits =', q1['count'])
 assert 'facets' in q1 and 'kinds' in q1['facets']
 print('facets ok, kinds =', len(q1['facets']['kinds']))
 
+# HTTP 层回归：多值 facet 参数必须是 query 参数，不能被 FastAPI 当成 GET body。
+resources_route = next(route for route in app.routes if getattr(route, 'path', None) == '/api/resources')
+query_param_names = {param.name for param in resources_route.dependant.query_params}
+body_param_names = {param.name for param in resources_route.dependant.body_params}
+for name in {'kinds', 'sides', 'authors'}:
+    assert name in query_param_names, f'{name} should be a query parameter'
+    assert name not in body_param_names, f'{name} should not be a GET body parameter'
+print('facet query params ok')
+
+kind_facets = q1['facets']['kinds']
+if kind_facets:
+    kind = kind_facets[0]['name']
+    filtered = list_resources(q=sample['title'][:4], kinds=[kind], include_content=False, limit=50)
+    assert all(item['top_kind'] == kind for item in filtered['items']), 'facet kind filter should constrain results'
+    print('facet filter ok, kind =', kind, 'hits =', filtered['count'])
+
 try:
     safe_resource_path('../README.md')
     raise AssertionError('path traversal not rejected')
@@ -41,6 +57,11 @@ try:
     raise AssertionError('honor raw not rejected')
 except HTTPException:
     print('honor raw guard ok')
+try:
+    list_resources(root='荣誉室')
+    raise AssertionError('honor list root not rejected')
+except HTTPException:
+    print('honor list root guard ok')
 changes = git_changes()
 assert 'summary' in changes
 print('git changes from', changes['from_ref'])

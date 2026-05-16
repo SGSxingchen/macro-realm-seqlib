@@ -92,12 +92,12 @@ export function AdminPanel({ detail, reload, onResourceMoved, onBackToRead }: Pr
     <section className="admin-card auth-panel console-auth">
       <div className="section-head">
         <div><p className="eyebrow">MAINTENANCE CONSOLE</p><h2>维护控制台接入</h2></div>
-        <button className="ghost-toggle" onClick={onBackToRead}>返回查阅</button>
+        <button type="button" className="ghost-toggle" onClick={onBackToRead}>返回查阅</button>
       </div>
       <p className="hint">{me.admin_configured ? '输入 ADMIN_PASSWORD 后进入维护控制台。' : '未配置 ADMIN_PASSWORD，后台写操作禁用。'}</p>
       <div className="row">
         <input type="password" placeholder="ADMIN_PASSWORD" value={password} onChange={e => setPassword(e.target.value)} />
-        <button onClick={() => runAction('登录', async () => { const r = await api('/api/admin/login', { method: 'POST', body: JSON.stringify({ password }) }); setMe({ ...me, authenticated: true }); return r; })}>解锁控制台</button>
+        <button type="button" onClick={() => runAction('登录', async () => { const r = await api('/api/admin/login', { method: 'POST', body: JSON.stringify({ password }) }); setMe({ ...me, authenticated: true }); return r; })}>解锁控制台</button>
       </div>
       <HumanLog title="查看登录响应" data={rawLog} />
     </section>
@@ -118,8 +118,8 @@ export function AdminPanel({ detail, reload, onResourceMoved, onBackToRead }: Pr
       <aside className="admin-nav">
         <p className="eyebrow">MAINTENANCE</p>
         <h2>维护控制台</h2>
-        <button className="back-read" onClick={onBackToRead}>← 返回查阅</button>
-        {tabs.map(([id, label]) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>{label}</button>)}
+        <button type="button" className="back-read" onClick={onBackToRead}>← 返回查阅</button>
+        {tabs.map(([id, label]) => <button type="button" key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>{label}</button>)}
         <div className="console-mini">
           <StatusBadge ok={!dirty} warn={dirty}>{dirty ? '工作区有改动' : '工作区干净'}</StatusBadge>
           <StatusBadge ok={!!gitInfo?.wiki_configured} warn={!gitInfo?.wiki_configured}>{gitInfo?.wiki_configured ? 'Wiki 已配置' : 'Wiki 未配置'}</StatusBadge>

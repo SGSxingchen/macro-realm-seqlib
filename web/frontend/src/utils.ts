@@ -2,9 +2,6 @@ export const kb = (n: number) => n < 1024 ? `${n} B` : `${(n / 1024).toFixed(n >
 
 export const words = (s: string) => Array.from(s.replace(/\s+/g, '')).length;
 
-export const stamp = (path: string) =>
-  (Math.abs(Array.from(path).reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0)) % 9000 + 1000).toString();
-
 export const suggestHonorCategory = (path: string, category: string) => {
   const top = path.split('/')[1] || category.split('/')[0] || '';
   const map: Record<string, string> = {

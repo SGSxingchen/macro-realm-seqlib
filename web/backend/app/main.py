@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import difflib
 import hashlib
 import hmac
 import json
@@ -12,9 +13,9 @@ import sys
 import subprocess
 import time
 from pathlib import Path
-from typing import Iterable, Literal
+from typing import Annotated, Iterable, Literal
 
-from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Query, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
@@ -26,6 +27,8 @@ ALLOWED_ROOTS = ("序列库", "荣誉室")
 PUBLIC_ROOTS = ("序列库",)
 TEXT_ENCODINGS = ("utf-8", "utf-8-sig", "gbk", "gb2312", "big5")
 SESSION_COOKIE = "seqlib_admin"
+NORMALIZATION_REVIEW_DIR = REPO_ROOT / "web" / "normalization_reviews"
+NORMALIZATION_SIGNATURES_REQUIRED = 1
 
 app = FastAPI(title="宏观界域强化序列库 Web API", version="0.2.0")
 app.add_middleware(
@@ -61,6 +64,10 @@ def read_text(path: Path) -> tuple[str, str]:
 def write_text_utf8(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8", newline="\n")
+
+
+def now_iso() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime())
 
 
 def sort_key(name: str):
@@ -199,6 +206,26 @@ def git(*args: str) -> dict:
     return run_cmd(["git", "-c", "core.quotepath=false", *args])
 
 
+def git_bytes(*args: str, timeout: int = 120) -> dict:
+    started = time.time()
+    try:
+        p = subprocess.run(
+            ["git", "-c", "core.quotepath=false", *args],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            timeout=timeout,
+        )
+        return {
+            "cmd": ["git", "-c", "core.quotepath=false", *args],
+            "returncode": p.returncode,
+            "stdout": p.stdout,
+            "stderr": p.stderr.decode("utf-8", errors="replace"),
+            "seconds": round(time.time() - started, 3),
+        }
+    except subprocess.TimeoutExpired as e:
+        return {"cmd": ["git", "-c", "core.quotepath=false", *args], "returncode": 124, "stdout": b"", "stderr": f"超时: {e}", "seconds": timeout}
+
+
 class LoginRequest(BaseModel):
     password: str
 
@@ -217,6 +244,19 @@ class MoveRequest(BaseModel):
 
 class DeleteRequest(BaseModel):
     path: str
+
+
+class NormalizationReviewCreateRequest(BaseModel):
+    resource_path: str
+    normalized_content: str
+    original_content: str | None = None
+    title: str | None = None
+    note: str | None = None
+
+
+class NormalizationReviewSignRequest(BaseModel):
+    signer: str = Field(min_length=1, max_length=80)
+    note: str | None = Field(default=None, max_length=500)
 
 
 class PackageFileRequest(BaseModel):
@@ -245,10 +285,121 @@ def wiki_credentials_configured() -> bool:
     return bool((os.getenv("WIKI_USER") or os.getenv("FANDOM_USER")) and (os.getenv("WIKI_PASSWORD") or os.getenv("FANDOM_PASSWORD")))
 
 
+def safe_review_id(review_id: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9._-]{8,80}", review_id):
+        raise HTTPException(400, "审核任务 ID 非法")
+    return review_id
+
+
+def review_file_path(review_id: str) -> Path:
+    safe_id = safe_review_id(review_id)
+    full = (NORMALIZATION_REVIEW_DIR / f"{safe_id}.json").resolve()
+    if NORMALIZATION_REVIEW_DIR.resolve() not in full.parents:
+        raise HTTPException(400, "审核任务路径越界")
+    return full
+
+
+def load_review(review_id: str) -> dict:
+    full = review_file_path(review_id)
+    if not full.is_file():
+        raise HTTPException(404, "审核任务不存在")
+    try:
+        return json.loads(full.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        raise HTTPException(500, "审核任务文件损坏")
+
+
+def save_review(review: dict) -> None:
+    review_id = safe_review_id(str(review.get("id", "")))
+    full = review_file_path(review_id)
+    full.parent.mkdir(parents=True, exist_ok=True)
+    full.write_text(json.dumps(review, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+
+
+def review_summary(review: dict) -> dict:
+    signatures = review.get("signatures") or []
+    required = int(review.get("required_signatures") or NORMALIZATION_SIGNATURES_REQUIRED)
+    status = "approved" if len(signatures) >= required else "pending"
+    review["status"] = status
+    return {
+        "id": review.get("id"),
+        "resource_path": review.get("resource_path"),
+        "title": review.get("title"),
+        "status": status,
+        "signature_count": len(signatures),
+        "required_signatures": required,
+        "updated_at": review.get("updated_at"),
+        "created_at": review.get("created_at"),
+    }
+
 
 @app.get("/api/health")
 def health():
     return {"ok": True, "repo": str(REPO_ROOT), "admin_configured": bool(admin_password()), "wiki_configured": wiki_credentials_configured()}
+
+
+@app.get("/api/normalization/reviews")
+def list_normalization_reviews():
+    """公开列出规范化审核任务。直达审核入口不依赖后台登录。"""
+    if not NORMALIZATION_REVIEW_DIR.exists():
+        return {"items": [], "count": 0, "required_signatures": NORMALIZATION_SIGNATURES_REQUIRED}
+    items = []
+    for path in sorted(NORMALIZATION_REVIEW_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            items.append(review_summary(json.loads(path.read_text(encoding="utf-8"))))
+        except Exception:
+            continue
+    return {"items": items, "count": len(items), "required_signatures": NORMALIZATION_SIGNATURES_REQUIRED}
+
+
+@app.post("/api/normalization/reviews")
+def create_normalization_review(req: NormalizationReviewCreateRequest):
+    """创建规范化审核任务。无密码，供批量规范脚本生成直达审核链接。"""
+    full = public_resource_path(req.resource_path, must_exist=True)
+    original = req.original_content if req.original_content is not None else read_text(full)[0]
+    review_id = hashlib.sha1(f"{req.resource_path}\0{time.time()}\0{secrets.token_hex(8)}".encode("utf-8")).hexdigest()[:16]
+    review = {
+        "id": review_id,
+        "resource_path": rel_posix(full),
+        "title": req.title or title_for(full),
+        "original_content": original,
+        "normalized_content": req.normalized_content,
+        "note": req.note or "",
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+        "required_signatures": NORMALIZATION_SIGNATURES_REQUIRED,
+        "signatures": [],
+        "status": "pending",
+    }
+    save_review(review)
+    return {**review_summary(review), "review_url": f"/normalize-review?id={review_id}"}
+
+
+@app.get("/api/normalization/reviews/{review_id}")
+def get_normalization_review(review_id: str):
+    review = load_review(review_id)
+    review_summary(review)
+    return review
+
+
+@app.post("/api/normalization/reviews/{review_id}/sign")
+def sign_normalization_review(review_id: str, req: NormalizationReviewSignRequest):
+    review = load_review(review_id)
+    signer = req.signer.strip()
+    if not signer:
+        raise HTTPException(400, "签名不能为空")
+    signatures = review.setdefault("signatures", [])
+    now = now_iso()
+    existing = next((s for s in signatures if str(s.get("signer", "")).strip() == signer), None)
+    if existing:
+        existing["note"] = req.note or ""
+        existing["signed_at"] = now
+    else:
+        signatures.append({"signer": signer, "note": req.note or "", "signed_at": now})
+    review["updated_at"] = now
+    review_summary(review)
+    save_review(review)
+    return review
 
 
 @app.post("/api/admin/login")
@@ -281,16 +432,16 @@ def list_resources(
     root: Literal["", "序列库", "荣誉室"] = "",
     category: str = "",
     include_content: bool = False,
-    kinds: list[str] | None = None,
-    sides: list[str] | None = None,
-    authors: list[str] | None = None,
+    kinds: Annotated[list[str] | None, Query()] = None,
+    sides: Annotated[list[str] | None, Query()] = None,
+    authors: Annotated[list[str] | None, Query()] = None,
     limit: int = 200,
     offset: int = 0,
 ):
     """资源列表/智能搜索。支持拼音、繁简、子序列、多 token 评分、分面。"""
+    if root and root not in PUBLIC_ROOTS:
+        raise HTTPException(403, "该资源根目录不在前台公开范围")
     roots = (root,) if root else PUBLIC_ROOTS
-    # 防御：荣誉室不公开
-    roots = tuple(r for r in roots if r in PUBLIC_ROOTS)
     return SEARCH_INDEX.search(
         q,
         roots=roots,
@@ -703,9 +854,15 @@ def inferred_title_for_path(path: str) -> str:
     return strip_number_prefix(Path(path).name)
 
 
-def change_item(path: str, *, old_path: str | None = None, score: str | None = None) -> dict:
+def change_item(
+    path: str,
+    *,
+    old_path: str | None = None,
+    score: str | None = None,
+    allowed_roots: tuple[str, ...] = ALLOWED_ROOTS,
+) -> dict:
     full = (REPO_ROOT / Path(path)).resolve()
-    exists = full.is_file() and root_for_path(path) in ALLOWED_ROOTS
+    exists = full.is_file() and root_for_path(path) in allowed_roots
     entry = resource_entry(full) if exists else None
     return {
         "title": entry["title"] if entry else inferred_title_for_path(path),
@@ -729,13 +886,110 @@ def dedupe_keep_order(items: list[str]) -> list[str]:
     return out
 
 
-def build_readable_changes(summary: dict, from_ref: str) -> dict:
+def default_from_ref() -> str:
+    tag = git("describe", "--tags", "--abbrev=0")
+    return tag["stdout"].strip() if tag["returncode"] == 0 and tag["stdout"].strip() else "HEAD"
+
+
+def safe_ref(ref: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9._/\-]+", ref):
+        raise HTTPException(400, "版本引用非法")
+    exists = git("rev-parse", "--verify", f"{ref}^{{commit}}")
+    if exists["returncode"] != 0:
+        raise HTTPException(404, f"版本引用不存在: {ref}")
+    return ref
+
+
+def safe_git_path(rel_path: str, *, allowed_roots: tuple[str, ...]) -> str:
+    if "\x00" in rel_path:
+        raise HTTPException(400, "路径包含非法字符")
+    normalized = rel_path.replace("\\", "/").strip("/")
+    rel = Path(normalized)
+    if rel.is_absolute() or ".." in rel.parts:
+        raise HTTPException(400, "路径越界")
+    if not rel.parts or rel.parts[0] not in allowed_roots:
+        root_hint = " 或 ".join(f"{root}/" for root in allowed_roots)
+        raise HTTPException(400, f"路径必须位于 {root_hint} 内")
+    if rel.suffix.lower() != ".txt":
+        raise HTTPException(400, "只允许查看 .txt 资源差异")
+    full = (REPO_ROOT / rel).resolve()
+    roots = [(REPO_ROOT / root).resolve() for root in allowed_roots]
+    if not any(full == root or root in full.parents for root in roots):
+        raise HTTPException(400, "路径越界")
+    return rel.as_posix()
+
+
+def decode_blob(data: bytes) -> tuple[str, str]:
+    for enc in TEXT_ENCODINGS:
+        try:
+            return data.decode(enc), enc
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace"), "utf-8-replace"
+
+
+def git_text_at(ref: str, rel_path: str) -> tuple[str, str, bool]:
+    result = git_bytes("show", f"{ref}:{rel_path}")
+    if result["returncode"] != 0:
+        return "", "", False
+    text, enc = decode_blob(result["stdout"])
+    return text, enc, True
+
+
+def current_text_at(rel_path: str) -> tuple[str, str, bool]:
+    full = (REPO_ROOT / Path(rel_path)).resolve()
+    if not full.is_file():
+        return "", "", False
+    text, enc = read_text(full)
+    return text, enc, True
+
+
+def build_line_diff(old_text: str, new_text: str, *, context: int = 3, max_rows: int = 900) -> dict:
+    old_lines = old_text.splitlines()
+    new_lines = new_text.splitlines()
+    matcher = difflib.SequenceMatcher(None, old_lines, new_lines)
+    rows: list[dict] = []
+    additions = 0
+    deletions = 0
+
+    for group in matcher.get_grouped_opcodes(n=context):
+        if rows:
+            rows.append({"type": "gap"})
+        for tag, i1, i2, j1, j2 in group:
+            if tag == "equal":
+                for offset, line in enumerate(old_lines[i1:i2]):
+                    rows.append({"type": "context", "old_no": i1 + offset + 1, "new_no": j1 + offset + 1, "text": line})
+            elif tag == "delete":
+                for offset, line in enumerate(old_lines[i1:i2]):
+                    deletions += 1
+                    rows.append({"type": "removed", "old_no": i1 + offset + 1, "new_no": None, "text": line})
+            elif tag == "insert":
+                for offset, line in enumerate(new_lines[j1:j2]):
+                    additions += 1
+                    rows.append({"type": "added", "old_no": None, "new_no": j1 + offset + 1, "text": line})
+            elif tag == "replace":
+                for offset, line in enumerate(old_lines[i1:i2]):
+                    deletions += 1
+                    rows.append({"type": "removed", "old_no": i1 + offset + 1, "new_no": None, "text": line})
+                for offset, line in enumerate(new_lines[j1:j2]):
+                    additions += 1
+                    rows.append({"type": "added", "old_no": None, "new_no": j1 + offset + 1, "text": line})
+            if len(rows) >= max_rows:
+                return {"rows": rows[:max_rows], "truncated": True, "additions": additions, "deletions": deletions}
+
+    if not rows and old_text == new_text:
+        preview = old_lines[: min(len(old_lines), 60)]
+        rows = [{"type": "context", "old_no": i + 1, "new_no": i + 1, "text": line} for i, line in enumerate(preview)]
+    return {"rows": rows, "truncated": False, "additions": additions, "deletions": deletions}
+
+
+def build_readable_changes(summary: dict, from_ref: str, *, allowed_roots: tuple[str, ...] = ALLOWED_ROOTS) -> dict:
     labels = {"added": "新增", "modified": "修改", "deleted": "删除", "renamed": "移动/改名"}
     readable = {
-        "added": [change_item(p) for p in dedupe_keep_order(summary["added"])],
-        "modified": [change_item(p) for p in dedupe_keep_order(summary["modified"])],
-        "deleted": [change_item(p) for p in dedupe_keep_order(summary["deleted"])],
-        "renamed": [change_item(r["new"], old_path=r["old"], score=r.get("score")) for r in summary["renamed"]],
+        "added": [change_item(p, allowed_roots=allowed_roots) for p in dedupe_keep_order(summary["added"])],
+        "modified": [change_item(p, allowed_roots=allowed_roots) for p in dedupe_keep_order(summary["modified"])],
+        "deleted": [change_item(p, allowed_roots=allowed_roots) for p in dedupe_keep_order(summary["deleted"])],
+        "renamed": [change_item(r["new"], old_path=r["old"], score=r.get("score"), allowed_roots=allowed_roots) for r in summary["renamed"]],
     }
     for items in readable.values():
         items.sort(key=lambda i: (i["root"], i["category"], i["title"], i["path"]))
@@ -773,24 +1027,81 @@ def build_readable_changes(summary: dict, from_ref: str) -> dict:
 
 
 @app.get("/api/git/changes")
-def git_changes(from_ref: str | None = None):
+def git_changes(from_ref: str | None = None, public_only: bool = False):
     if not from_ref:
-        tag = git("describe", "--tags", "--abbrev=0")
-        from_ref = tag["stdout"].strip() if tag["returncode"] == 0 and tag["stdout"].strip() else "HEAD"
-    committed = git("diff", "--name-status", "--find-renames", "--diff-filter=AMDR", from_ref, "HEAD", "--", *ALLOWED_ROOTS, ":(top)*.txt")
-    worktree = git("diff", "--name-status", "--find-renames", "--diff-filter=AMDR", "HEAD", "--", *ALLOWED_ROOTS, ":(top)*.txt")
-    untracked = git("ls-files", "--others", "--exclude-standard", "--", *ALLOWED_ROOTS, ":(top)*.txt")
+        from_ref = default_from_ref()
+    else:
+        from_ref = safe_ref(from_ref)
+    roots = PUBLIC_ROOTS if public_only else ALLOWED_ROOTS
+    pathspecs = [*roots] if public_only else [*roots, ":(top)*.txt"]
+    committed = git("diff", "--name-status", "--find-renames", "--diff-filter=AMDR", from_ref, "HEAD", "--", *pathspecs)
+    worktree = git("diff", "--name-status", "--find-renames", "--diff-filter=AMDR", "HEAD", "--", *pathspecs)
+    untracked = git("ls-files", "--others", "--exclude-standard", "--", *pathspecs)
     summary = parse_name_status((committed["stdout"] if committed["returncode"] == 0 else "") + "\n" + (worktree["stdout"] if worktree["returncode"] == 0 else ""))
     for p in untracked["stdout"].splitlines():
         if p.endswith(".txt") and p not in summary["added"]:
             summary["added"].append(p)
-    friendly = build_readable_changes(summary, from_ref)
+    friendly = build_readable_changes(summary, from_ref, allowed_roots=roots)
     return {
         "from_ref": from_ref,
         "to": "working-tree/latest",
+        "public_only": public_only,
         "summary": summary,
         **friendly,
         "raw": {"committed": committed, "worktree": worktree, "untracked": untracked},
+    }
+
+
+@app.get("/api/git/change-detail/{path:path}")
+def git_change_detail(
+    path: str,
+    kind: Literal["added", "modified", "deleted", "renamed"] = "modified",
+    old_path: str | None = None,
+    from_ref: str | None = None,
+    public_only: bool = False,
+):
+    from_ref = safe_ref(from_ref) if from_ref else default_from_ref()
+    roots = PUBLIC_ROOTS if public_only else ALLOWED_ROOTS
+    rel_path = safe_git_path(path, allowed_roots=roots)
+    old_rel_path = safe_git_path(old_path, allowed_roots=roots) if old_path else rel_path
+
+    old_text = ""
+    old_encoding = ""
+    old_exists = False
+    new_text = ""
+    new_encoding = ""
+    new_exists = False
+
+    if kind != "added":
+        old_text, old_encoding, old_exists = git_text_at(from_ref, old_rel_path)
+    if kind != "deleted":
+        new_text, new_encoding, new_exists = current_text_at(rel_path)
+        if not new_exists:
+            new_text, new_encoding, new_exists = git_text_at("HEAD", rel_path)
+
+    if kind == "added" and not new_exists:
+        raise HTTPException(404, "新增资源当前不存在，无法显示内容")
+    if kind == "deleted" and not old_exists:
+        raise HTTPException(404, "旧版本中找不到该资源，无法显示删除内容")
+    if kind in ("modified", "renamed") and not old_exists and not new_exists:
+        raise HTTPException(404, "找不到可比较的资源内容")
+
+    diff = build_line_diff(old_text, new_text)
+    title_path = rel_path if new_exists else old_rel_path
+    return {
+        "from_ref": from_ref,
+        "to": "working-tree/latest",
+        "kind": kind,
+        "path": rel_path,
+        "old_path": old_path,
+        "title": inferred_title_for_path(title_path),
+        "old_exists": old_exists,
+        "new_exists": new_exists,
+        "old_encoding": old_encoding,
+        "new_encoding": new_encoding,
+        "old_line_count": len(old_text.splitlines()),
+        "new_line_count": len(new_text.splitlines()),
+        **diff,
     }
 
 
@@ -824,6 +1135,7 @@ def publish(req: PublishRequest, _admin: None = Depends(require_admin)):
         "web/backend/app",
         "web/backend/*.py",
         "web/backend/requirements.txt",
+        "web/normalization_reviews/README.md",
         "web/frontend/index.html",
         "web/frontend/package.json",
         "web/frontend/package-lock.json",

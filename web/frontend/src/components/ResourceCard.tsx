@@ -1,5 +1,5 @@
 import { Resource } from '../types';
-import { kb, highlight, stamp } from '../utils';
+import { kb, highlight } from '../utils';
 
 type Props = {
   item: Resource;
@@ -11,9 +11,8 @@ type Props = {
 export function ResourceCard({ item, active, onOpen, highlightTokens }: Props) {
   const titleParts = highlight(item.title, highlightTokens);
   return (
-    <button className={active ? 'res-card active' : 'res-card'} onClick={onOpen}>
+    <button type="button" className={active ? 'res-card active' : 'res-card'} onClick={onOpen}>
       <div className="res-card-row">
-        <span className="file-id">SEQ-{stamp(item.path)}</span>
         {item.side && <span className="res-tag tag-side">{item.side}</span>}
         {item.top_kind && item.top_kind !== item.side && <span className="res-tag tag-kind">{item.top_kind}</span>}
       </div>

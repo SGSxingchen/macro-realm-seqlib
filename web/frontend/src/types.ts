@@ -15,6 +15,8 @@ export type Resource = {
 
 export type Detail = Resource & { content: string; encoding: string };
 
+export type AppTab = 'read' | 'updates' | 'admin';
+
 export type TreeNode = { name: string; path: string; count: number; children: TreeNode[] };
 
 export type FacetItem = { name: string; count: number };
@@ -44,10 +46,35 @@ export type ChangeItem = {
   exists: boolean;
   score?: string | null;
 };
+export type ChangeDiffRow = {
+  type: 'context' | 'added' | 'removed' | 'gap';
+  old_no?: number | null;
+  new_no?: number | null;
+  text?: string;
+};
+export type ChangeDetail = {
+  from_ref: string;
+  to: string;
+  kind: ChangeKind;
+  path: string;
+  old_path?: string | null;
+  title: string;
+  old_exists: boolean;
+  new_exists: boolean;
+  old_encoding: string;
+  new_encoding: string;
+  old_line_count: number;
+  new_line_count: number;
+  additions: number;
+  deletions: number;
+  truncated: boolean;
+  rows: ChangeDiffRow[];
+};
 export type ChangeStats = { added: number; modified: number; deleted: number; renamed: number; total: number };
 export type GitChanges = {
   from_ref: string;
   to: string;
+  public_only?: boolean;
   stats: ChangeStats;
   readable: Record<ChangeKind, ChangeItem[]>;
   text: string;
@@ -90,6 +117,37 @@ export type PackageFile = {
   extension: string;
   content?: string | null;
   encoding?: string | null;
+};
+
+export type NormalizationSignature = {
+  signer: string;
+  note?: string;
+  signed_at: string;
+};
+
+export type NormalizationReview = {
+  id: string;
+  resource_path: string;
+  title: string;
+  original_content: string;
+  normalized_content: string;
+  note?: string;
+  created_at: string;
+  updated_at: string;
+  required_signatures: number;
+  signatures: NormalizationSignature[];
+  status: 'pending' | 'approved';
+};
+
+export type NormalizationReviewSummary = {
+  id: string;
+  resource_path: string;
+  title: string;
+  status: 'pending' | 'approved';
+  signature_count: number;
+  required_signatures: number;
+  created_at: string;
+  updated_at: string;
 };
 
 export type SearchFilters = {
