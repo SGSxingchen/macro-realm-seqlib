@@ -19,13 +19,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
+from .search import SearchIndex
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ALLOWED_ROOTS = ("序列库", "荣誉室")
 PUBLIC_ROOTS = ("序列库",)
 TEXT_ENCODINGS = ("utf-8", "utf-8-sig", "gbk", "gb2312", "big5")
 SESSION_COOKIE = "seqlib_admin"
 
-app = FastAPI(title="宏观界域强化序列库 Web API", version="0.1.0")
+app = FastAPI(title="宏观界域强化序列库 Web API", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("WEB_CORS_ORIGINS", "http://localhost:5173").split(","),
@@ -33,6 +35,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 全局搜索索引：仅索引公开 root，进程内 mtime 缓存
+SEARCH_INDEX = SearchIndex(REPO_ROOT, PUBLIC_ROOTS)
+
+
+@app.on_event("startup")
+def _warm_index() -> None:
+    try:
+        SEARCH_INDEX.refresh()
+    except Exception:
+        # 启动期失败不阻塞服务，首个查询会再尝试构建
+        pass
 
 
 def read_text(path: Path) -> tuple[str, str]:
@@ -262,27 +276,39 @@ def me(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
 
 
 @app.get("/api/resources")
-def list_resources(q: str = "", root: Literal["", "序列库", "荣誉室"] = "", category: str = "", include_content: bool = True):
-    query = q.strip().lower()
-    rows = []
-    public_roots = PUBLIC_ROOTS if root != "荣誉室" else ()
-    for path in iter_txt_files(public_roots):
-        entry = resource_entry(path)
-        if root and entry["root"] != root:
-            continue
-        if category and not entry["category"].startswith(category.strip("/")):
-            continue
-        if query:
-            hay = f"{entry['path']}\n{entry['filename']}\n{entry['title']}".lower()
-            if include_content:
-                try:
-                    hay += "\n" + read_text(path)[0].lower()
-                except Exception:
-                    pass
-            if query not in hay:
-                continue
-        rows.append(entry)
-    return {"items": rows, "count": len(rows)}
+def list_resources(
+    q: str = "",
+    root: Literal["", "序列库", "荣誉室"] = "",
+    category: str = "",
+    include_content: bool = False,
+    kinds: list[str] | None = None,
+    sides: list[str] | None = None,
+    authors: list[str] | None = None,
+    limit: int = 200,
+    offset: int = 0,
+):
+    """资源列表/智能搜索。支持拼音、繁简、子序列、多 token 评分、分面。"""
+    roots = (root,) if root else PUBLIC_ROOTS
+    # 防御：荣誉室不公开
+    roots = tuple(r for r in roots if r in PUBLIC_ROOTS)
+    return SEARCH_INDEX.search(
+        q,
+        roots=roots,
+        category=category,
+        kinds=kinds,
+        sides=sides,
+        authors=authors,
+        limit=max(1, min(limit, 500)),
+        offset=max(0, offset),
+        include_content=include_content,
+    )
+
+
+@app.get("/api/facets")
+def list_facets():
+    """直接拿索引里的 facet 计数（不带任何查询过滤），便于前端首屏渲染分面初始态。"""
+    SEARCH_INDEX.refresh()
+    return {"facets": SEARCH_INDEX.facets(), "total": len(SEARCH_INDEX.all_entries())}
 
 
 @app.get("/api/tree")
@@ -412,6 +438,7 @@ def save_resource(req: SaveRequest, _admin: None = Depends(require_admin)):
         raise HTTPException(409, "目标已存在；如需覆盖请设置 overwrite=true")
     before = git("status", "--short", "--", req.path)
     write_text_utf8(full, req.content)
+    SEARCH_INDEX.invalidate(req.path)
     return {"ok": True, "existed": existed, "path": rel_posix(full), "git_status_before": before, "git_status_after": git("status", "--short", "--", req.path)}
 
 
@@ -420,6 +447,7 @@ def edit_resource(path: str, req: SaveRequest, _admin: None = Depends(require_ad
     full = safe_resource_path(path, must_exist=True)
     before = git("status", "--short", "--", path)
     write_text_utf8(full, req.content)
+    SEARCH_INDEX.invalidate(path)
     return {"ok": True, "path": rel_posix(full), "git_status_before": before, "git_status_after": git("status", "--short", "--", path)}
 
 
@@ -445,6 +473,7 @@ async def upload_txt(path: str, file: UploadFile = File(...), _admin: None = Dep
         used = "utf-8-replace"
     before = git("status", "--short", "--", path)
     write_text_utf8(full, text)
+    SEARCH_INDEX.invalidate(path)
     return {"ok": True, "path": rel_posix(full), "source_encoding": used, "git_status_before": before, "git_status_after": git("status", "--short", "--", path)}
 
 
@@ -457,6 +486,8 @@ def move_resource(req: MoveRequest, _admin: None = Depends(require_admin)):
     before = git("status", "--short", "--", req.old_path, req.new_path)
     new.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(old), str(new))
+    SEARCH_INDEX.invalidate(req.old_path)
+    SEARCH_INDEX.invalidate(rel_posix(new))
     return {"ok": True, "old_path": req.old_path, "new_path": rel_posix(new), "git_status_before": before, "git_status_after": git("status", "--short", "--", req.old_path, req.new_path)}
 
 
@@ -465,6 +496,7 @@ def delete_resource(req: DeleteRequest, _admin: None = Depends(require_admin)):
     full = safe_resource_path(req.path, must_exist=True)
     before = git("status", "--short", "--", req.path)
     full.unlink()
+    SEARCH_INDEX.invalidate(req.path)
     return {"ok": True, "path": req.path, "git_status_before": before, "git_status_after": git("status", "--short", "--", req.path)}
 
 
@@ -578,6 +610,7 @@ def move_to_honor(req: MoveToHonorRequest, _admin: None = Depends(require_admin)
     new.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(old), str(new))
     cleanup_empty_dirs_after_move(old)
+    SEARCH_INDEX.invalidate(req.path)
     new_path = rel_posix(new)
     return {
         "ok": True,

@@ -3,3 +3,6 @@ uvicorn[standard]>=0.27
 python-multipart>=0.0.9
 pydantic>=2
 mwclient>=0.10.1
+# 智能搜索可选依赖；缺失时拼音/繁简归一会自动降级
+pypinyin>=0.51
+opencc-python-reimplemented>=0.1.7
