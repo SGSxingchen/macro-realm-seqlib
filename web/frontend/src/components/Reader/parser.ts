@@ -25,7 +25,7 @@ const BANNER_BARE_RE = /^【([^】]+)】\s*$/;
 const BANNER_INLINE_RE = /^【([^】]+)】(.+)$/;
 const ABILITY_NAME_RE = /^\[能力名称\]\s*[:：]\s*(.+)$/;
 const ABILITY_FIELD_RE = /^\[([^\]]+)\]\s*[:：]\s*(.*)$/;
-const META_LINE_RE = /^[（(]\s*(?:制作人|制作者|作者|原作者|投稿人|审核|审核人|审核者|修改人|修改内容|调整人|重置人|重置内容|复查人|策划)\s*[:：][^)）]*[)）]\s*$/;
+const META_LINE_RE = /^[（(]\s*(?:制作人|制作者|作者|原作者|投稿人|审核|审核人|审核者|修改人|修改内容|调整人|重置人|重置内容|复查人|策划|文本优化)\s*[:：].*[)）]\s*$/;
 const LEVEL_TREE_RE = /^(?:【\s*)?(EX|S|A|B|C|D|E|F)(?:\s*】)?\s*(?:级)?\s*[:：]\s*(.+)$/i;
 
 const CARD_STARTERS: Record<string, string> = {
