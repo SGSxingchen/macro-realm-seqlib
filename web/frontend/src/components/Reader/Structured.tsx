@@ -11,6 +11,7 @@ const FIELD_PALETTE: Record<string, string> = {
   '魔药效果': 'effect',
   '称号解锁条件': 'requirement',
   '解锁条件': 'requirement',
+  '使用要求': 'requirement',
   '开放条件': 'requirement',
   '兑换/消耗条件': 'requirement',
   '获取资格': 'requirement',
@@ -87,9 +88,9 @@ export function Structured({ blocks }: { blocks: Block[] }) {
 function BlockNode({ block }: { block: Block }) {
   switch (block.kind) {
     case 'title':
-      return <h1 className="doc-title">{block.text}</h1>;
+      return <DocumentTitle text={block.text} />;
     case 'meta':
-      return <p className="doc-meta">{block.text}</p>;
+      return <MetaLine text={block.text} />;
     case 'banner':
       return <div className="doc-banner">{block.text}</div>;
     case 'ability-note':
@@ -107,6 +108,29 @@ function BlockNode({ block }: { block: Block }) {
     default:
       return null;
   }
+}
+
+function DocumentTitle({ text }: { text: string }) {
+  const match = text.match(/^(\d+】)\s*(.+)$/);
+  if (!match) return <h1 className="doc-title">{text}</h1>;
+  return (
+    <h1 className="doc-title">
+      <span className="doc-title-index">{match[1]}</span>
+      <span>{match[2]}</span>
+    </h1>
+  );
+}
+
+function MetaLine({ text }: { text: string }) {
+  const cleaned = text.replace(/^[（(]\s*/, '').replace(/\s*[)）]$/, '');
+  const parts = cleaned.match(/^([^:：]+)\s*[:：]\s*(.*)$/);
+  if (!parts) return <p className="doc-meta">{text}</p>;
+  return (
+    <p className="doc-meta">
+      <span>{parts[1]}</span>
+      <b>{parts[2]}</b>
+    </p>
+  );
 }
 
 function LevelTree({ block }: { block: Extract<Block, { kind: 'level-tree' }> }) {

@@ -12,16 +12,16 @@ export function Reader({ detail }: { detail: Detail | null }) {
   if (!detail) return (
     <article className="reader empty-reader">
       <div className="empty-sigil">∴</div>
-      <h2>等待调阅序列档案</h2>
-      <p>从左侧分类或顶部搜索结果选择资源。公开终端仅显示「序列库」，荣誉室记录已从前台隔离。</p>
+      <h2>从左侧选择一项档案</h2>
+      <p>公开终端仅显示「序列库」。荣誉室记录已从前台隔离。</p>
       <div className="empty-tips">
-        <small>提示</small>
+        <small>搜索小提示</small>
         <ul>
-          <li>支持拼音首字母（如 <code>bfz</code>）</li>
+          <li>支持拼音首字母（<code>bfz</code> → 百夫长）</li>
           <li>支持模糊（<code>强驱散</code> → 强制驱散）</li>
           <li>支持中英混搜（<code>Centurion 百夫长</code>）</li>
-          <li>多个词用空格隔开做 AND 检索</li>
-          <li>按 <code>Ctrl/⌘ + K</code> 唤起搜索</li>
+          <li>多个词以空格分隔做 AND 检索</li>
+          <li><kbd>Ctrl/⌘</kbd> + <kbd>K</kbd> 唤起搜索</li>
         </ul>
       </div>
     </article>

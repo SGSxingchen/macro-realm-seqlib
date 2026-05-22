@@ -248,7 +248,7 @@ export function RecentUpdates({ onOpen }: { onOpen: (path: string) => void }) {
     <section className="updates-view terminal-scroll">
       <div className="updates-hero">
         <div>
-          <p className="eyebrow">RELEASE DIFF</p>
+          <p className="eyebrow">最近更新</p>
           <h2>{title}</h2>
           <p>{data ? `共 ${data.stats.total} 项变化。点开任意条目查看左右对比。` : '正在读取版本变更。'}</p>
         </div>
