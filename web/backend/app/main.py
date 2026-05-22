@@ -5,6 +5,7 @@ import difflib
 import hashlib
 import hmac
 import json
+import locale
 import os
 import re
 import secrets
@@ -26,6 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 ALLOWED_ROOTS = ("序列库", "荣誉室")
 PUBLIC_ROOTS = ("序列库",)
 TEXT_ENCODINGS = ("utf-8", "utf-8-sig", "gbk", "gb2312", "big5")
+PROCESS_ENCODINGS = tuple(dict.fromkeys(("utf-8", locale.getpreferredencoding(False), sys.getfilesystemencoding(), "gbk", "gb2312")))
 SESSION_COOKIE = "seqlib_admin"
 NORMALIZATION_REVIEW_DIR = REPO_ROOT / "web" / "normalization_reviews"
 NORMALIZATION_SIGNATURES_REQUIRED = 1
@@ -186,16 +188,13 @@ def run_cmd(args: list[str], timeout: int = 120) -> dict:
             args,
             cwd=REPO_ROOT,
             capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
             timeout=timeout,
         )
         return {
             "cmd": args,
             "returncode": p.returncode,
-            "stdout": p.stdout,
-            "stderr": p.stderr,
+            "stdout": decode_process_output(p.stdout),
+            "stderr": decode_process_output(p.stderr),
             "seconds": round(time.time() - started, 3),
         }
     except subprocess.TimeoutExpired as e:
@@ -204,6 +203,19 @@ def run_cmd(args: list[str], timeout: int = 120) -> dict:
 
 def git(*args: str) -> dict:
     return run_cmd(["git", "-c", "core.quotepath=false", *args])
+
+
+def decode_process_output(data: bytes | str | None) -> str:
+    if data is None:
+        return ""
+    if isinstance(data, str):
+        return data
+    for enc in PROCESS_ENCODINGS:
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
 
 
 def git_bytes(*args: str, timeout: int = 120) -> dict:
@@ -219,7 +231,7 @@ def git_bytes(*args: str, timeout: int = 120) -> dict:
             "cmd": ["git", "-c", "core.quotepath=false", *args],
             "returncode": p.returncode,
             "stdout": p.stdout,
-            "stderr": p.stderr.decode("utf-8", errors="replace"),
+            "stderr": decode_process_output(p.stderr),
             "seconds": round(time.time() - started, 3),
         }
     except subprocess.TimeoutExpired as e:
@@ -834,6 +846,41 @@ def parse_name_status(output: str) -> dict:
     return changes
 
 
+def normalized_resource_path_key(path: str) -> str:
+    """用于未提交工作区的改名兜底：展示规范化括号不应让旧版对比丢失。"""
+    return path.replace("[", "【").replace("]", "】")
+
+
+def pair_normalized_worktree_renames(summary: dict) -> None:
+    added_by_key: dict[str, list[str]] = {}
+    for path in summary["added"]:
+        added_by_key.setdefault(normalized_resource_path_key(path), []).append(path)
+
+    paired_added: set[str] = set()
+    paired_deleted: set[str] = set()
+    inferred: list[dict] = []
+    for old_path in summary["deleted"]:
+        key = normalized_resource_path_key(old_path)
+        candidates = [path for path in added_by_key.get(key, []) if path not in paired_added]
+        if len(candidates) != 1:
+            continue
+        new_path = candidates[0]
+        if old_path == new_path:
+            continue
+        paired_deleted.add(old_path)
+        paired_added.add(new_path)
+        inferred.append({"old": old_path, "new": new_path, "score": "规范化"})
+
+    if not inferred:
+        return
+    summary["added"] = [path for path in summary["added"] if path not in paired_added]
+    summary["deleted"] = [path for path in summary["deleted"] if path not in paired_deleted]
+    existing_pairs = {(item["old"], item["new"]) for item in summary["renamed"]}
+    for item in inferred:
+        if (item["old"], item["new"]) not in existing_pairs:
+            summary["renamed"].append(item)
+
+
 def category_for_path(path: str) -> str:
     parts = Path(path).parts
     if len(parts) == 1:
@@ -1041,6 +1088,7 @@ def git_changes(from_ref: str | None = None, public_only: bool = False):
     for p in untracked["stdout"].splitlines():
         if p.endswith(".txt") and p not in summary["added"]:
             summary["added"].append(p)
+    pair_normalized_worktree_renames(summary)
     friendly = build_readable_changes(summary, from_ref, allowed_roots=roots)
     return {
         "from_ref": from_ref,

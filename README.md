@@ -2,7 +2,7 @@
 
 [![Latest Release](https://img.shields.io/github/v/release/SGSxingchen/macro-realm-seqlib?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC&color=blue)](https://github.com/SGSxingchen/macro-realm-seqlib/releases/latest)
 
-TRPG「宏观界域」的强化序列资料库，收录职业、特质改造、技能表、能量池、公共建筑等游戏资源，当前版本 **V6.4**，共 **754** 个资源文件。
+TRPG「宏观界域」的强化序列资料库，收录职业、特质改造、技能表、能量池、公共建筑等游戏资源，当前版本 **V6.5**，共 **772** 个资源文件。
 
 ## 下载使用
 
@@ -10,8 +10,8 @@ TRPG「宏观界域」的强化序列资料库，收录职业、特质改造、�
 
 | 文件 | 说明 |
 |------|------|
-| `宏观界域强化序列库V6.4.chm` | Windows CHM 帮助文档，支持全文检索，推荐使用 |
-| `宏观界域强化序列库V6.4.zip` | 完整资源包（含序列库 + 荣誉室 + 更新日志） |
+| `宏观界域强化序列库V6.5.chm` | Windows CHM 帮助文档，支持全文检索，推荐使用 |
+| `宏观界域强化序列库V6.5.zip` | 完整资源包（含序列库 + 荣誉室 + 更新日志） |
 
 > CHM 文件如果打开后显示空白，右键文件 → 属性 → 勾选「解除锁定」后重新打开。
 
@@ -24,21 +24,21 @@ TRPG「宏观界域」的强化序列资料库，收录职业、特质改造、�
 ## 目录结构
 
 ```
-序列库/                     当前版本在用的资源（754个文件）
+序列库/                     当前版本在用的资源（772个文件）
 ├── 公共建筑/               公共设施（13个）
-├── 技能表/                 技能表资源（223个）
+├── 技能表/                 技能表资源（228个）
 │   ├── 其他及特殊/
 │   ├── 战技侧/
 │   ├── 特殊侧/
 │   ├── 神秘侧/
 │   └── 科技侧/
 ├── 能量池/                 能量池资源（24个）
-├── 特质改造/               特质改造资源（325个）
+├── 特质改造/               特质改造资源（333个）
 │   ├── 异化改造类/
 │   ├── 特化改造类/
 │   ├── 生化改造类/
 │   └── 特殊特质/
-└── 职业/                   职业资源（169个）
+└── 职业/                   职业资源（174个）
     ├── 战技侧/
     ├── 特殊侧/
     ├── 神秘侧/
@@ -68,23 +68,23 @@ TRPG「宏观界域」的强化序列资料库，收录职业、特质改造、�
 
 ```bash
 # 完整构建（CHM + ZIP）
-python build_chm.py --version v6.4
+python build_chm.py --version v6.5
 
 # 只构建 ZIP
-python build_chm.py --version v6.4 --skip-chm
+python build_chm.py --version v6.5 --skip-chm
 
 # 只构建 CHM
-python build_chm.py --version v6.4 --skip-zip
+python build_chm.py --version v6.5 --skip-zip
 ```
 
-输出文件：`宏观界域强化序列库V6.4.chm` / `.zip`
+输出文件：`宏观界域强化序列库V6.5.chm` / `.zip`
 
 ### CI/CD
 
 推送 `v*` tag 到 GitHub 会自动触发 Actions 构建并创建 Release：
 
 ```bash
-git tag v6.4
+git tag v6.5
 git push origin main --tags
 ```
 
