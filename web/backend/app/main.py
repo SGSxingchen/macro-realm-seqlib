@@ -26,7 +26,7 @@ from .search import SearchIndex
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ALLOWED_ROOTS = ("序列库", "荣誉室")
 PUBLIC_ROOTS = ("序列库",)
-TEXT_ENCODINGS = ("utf-8", "utf-8-sig", "gbk", "gb2312", "big5")
+TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "gbk", "gb2312", "big5")
 PROCESS_ENCODINGS = tuple(dict.fromkeys(("utf-8", locale.getpreferredencoding(False), sys.getfilesystemencoding(), "gbk", "gb2312")))
 SESSION_COOKIE = "seqlib_admin"
 NORMALIZATION_REVIEW_DIR = REPO_ROOT / "web" / "normalization_reviews"
@@ -87,7 +87,7 @@ def strip_number_prefix(name: str) -> str:
 def title_for(path: Path) -> str:
     try:
         text, _ = read_text(path)
-        first = next((line.strip() for line in text.splitlines() if line.strip()), "")
+        first = next((line.strip().lstrip("\ufeff") for line in text.splitlines() if line.strip()), "")
         return first or strip_number_prefix(path.name)
     except Exception:
         return strip_number_prefix(path.name)

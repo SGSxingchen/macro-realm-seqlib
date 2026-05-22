@@ -45,7 +45,7 @@ TOKEN_SPLIT_RE = re.compile(
 AUTHOR_LINE_RE = re.compile(
     r"[（(](?:制作人|作者|原作者|审核人|修改人|调整人|重置人|复查人|策划)\s*[：:]\s*([^)）]+?)[)）]"
 )
-TEXT_ENCODINGS = ("utf-8", "utf-8-sig", "gbk", "gb2312", "big5")
+TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "gbk", "gb2312", "big5")
 SIDE_NAMES = ("战技侧", "神秘侧", "科技侧", "特殊侧")
 
 
@@ -216,7 +216,7 @@ class SearchIndex:
         parts = rel.parts
         root = parts[0] if parts else ""
         category = "/".join(parts[1:-1])
-        first_line = next((ln.strip() for ln in content.splitlines() if ln.strip()), "")
+        first_line = next((ln.strip().lstrip("\ufeff") for ln in content.splitlines() if ln.strip()), "")
         title = first_line or re.sub(r"^\d+】", "", rel.stem).strip() or rel.stem
         side = next((p for p in parts if p in SIDE_NAMES), "")
         top_kind = parts[1] if len(parts) >= 2 else ""
