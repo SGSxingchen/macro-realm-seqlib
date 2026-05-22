@@ -177,16 +177,17 @@ function isAbilityNote(title: string, lines: string[], nextIndex: number): boole
 function parseLevelTreeLine(line: string): { level: string; text: string } | undefined {
   const prefixed = line.trim().replace(LEVEL_TREE_PREFIX_RE, '');
   const patterns: Array<RegExp> = [
-    new RegExp(`^[【\\[]\\s*(EX|S|A|B|C|D|E|F)\\s*级\\s*[】\\]]\\s*[:：]?\\s*(.+)$`, 'i'),
-    new RegExp(`^[【\\[]\\s*(EX|S|A|B|C|D|E|F)\\s*[】\\]]\\s*(?:级)?\\s*[:：]?\\s*(.+)$`, 'i'),
-    new RegExp(`^(EX|S|A|B|C|D|E|F)\\s*级\\s*[:：]\\s*(.+)$`, 'i'),
+    new RegExp(`^[【\\[]\\s*(EX|S|A|B|C|D|E|F)\\s*级\\s*[】\\]]\\s*[:：,，、]?\\s*(.+)$`, 'i'),
+    new RegExp(`^[【\\[]\\s*(EX|S|A|B|C|D|E|F)\\s*[】\\]]\\s*(?:级)?\\s*[:：,，、]?\\s*(.+)$`, 'i'),
+    new RegExp(`^(EX|S|A|B|C|D|E|F)\\s*级(?:别)?\\s*([（(][^)）]+[)）])?\\s*[:：,，、\\-—]+\\s*(.+)$`, 'i'),
     new RegExp(`^(EX|S|A|B|C|D|E|F)\\s*级\\s*((?:${LEVEL_TREE_UNLOCK_WORDS}).+)$`, 'i'),
+    new RegExp(`^(EX|S|A|B|C|D|E|F)\\s+(.+)$`, 'i'),
     new RegExp(`^(EX|S|A|B|C|D|E|F)\\s*[:：]\\s*(.+)$`, 'i'),
   ];
   for (const pattern of patterns) {
     const m = prefixed.match(pattern);
     if (!m) continue;
-    const text = m[2].trim();
+    const text = (m.length >= 4 ? `${m[2] || ''}${m[3] || ''}` : m[2]).trim();
     if (!text || /^\[[^\]]+\]\s*[:：]/.test(text)) continue;
     return { level: m[1].toUpperCase(), text };
   }
@@ -396,6 +397,12 @@ export function parseDocument(content: string): { title: string; blocks: Block[]
           if (next && (isAbilityNameLine(next) || (BANNER_BARE_RE.test(next) && !parseLevelTreeHeading(next)) || (BANNER_INLINE_RE.test(next) && !parseLevelTreeLine(next)))) {
             break;
           }
+          if (next && (parseLevelTreeLine(next) || parseLevelTreeHeading(next)) && fields.length) {
+            const nextOffset = lines.findIndex((line, index) => index > i && line.trim() === next);
+            const possibleTree = nextOffset >= 0 ? readLevelTree(lines, nextOffset) : undefined;
+            const afterTree = possibleTree ? nextMeaningfulLine(lines, possibleTree.next) : '';
+            if (possibleTree && (!afterTree || !isStructuredFieldLine(afterTree))) break;
+          }
           if (next && fields.length) {
             i++;
             continue;
@@ -459,6 +466,13 @@ export function parseDocument(content: string): { title: string; blocks: Block[]
       flushPara();
       const titleText = sb[1].trim();
       if (RULE_SECTION_TITLES.has(titleText)) {
+        const titledTree = readLevelTree(lines, i + 1);
+        if (titledTree) {
+          blocks.push({ kind: 'banner', text: titleText });
+          blocks.push({ kind: 'level-tree', items: titledTree.items });
+          i = titledTree.next;
+          continue;
+        }
         const linesOut: string[] = [];
         i++;
         while (i < lines.length) {
