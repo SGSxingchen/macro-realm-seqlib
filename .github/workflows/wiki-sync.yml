@@ -1,0 +1,111 @@
+name: Wiki 同步
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "同步模式"
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - sync
+      skip_honor:
+        description: "是否跳过荣誉室"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      filter:
+        description: "可选：只同步某个子目录，例如 职业/战技侧"
+        required: false
+        default: ""
+        type: string
+      delay:
+        description: "Fandom API 请求间隔秒数"
+        required: true
+        default: "5"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: 执行 Wiki 同步
+    runs-on: windows-latest
+    env:
+      PYTHONIOENCODING: utf-8
+      WIKI_USER_SECRET: ${{ secrets.WIKI_USER }}
+      WIKI_PASSWORD_SECRET: ${{ secrets.WIKI_PASSWORD }}
+
+    steps:
+      - name: 签出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: 安装 pandoc
+        run: choco install pandoc -y
+        shell: cmd
+
+      - name: 安装 Wiki 同步依赖
+        run: python -m pip install --upgrade mwclient
+        shell: pwsh
+
+      - name: 执行同步脚本
+        shell: pwsh
+        env:
+          MODE_INPUT: ${{ github.event.inputs.mode }}
+          SKIP_HONOR_INPUT: ${{ github.event.inputs.skip_honor }}
+          FILTER_INPUT: ${{ github.event.inputs.filter }}
+          DELAY_INPUT: ${{ github.event.inputs.delay }}
+        run: |
+          $mode = $env:MODE_INPUT
+          $skipHonor = $env:SKIP_HONOR_INPUT
+          $filter = $env:FILTER_INPUT
+          $delay = $env:DELAY_INPUT
+
+          if ([string]::IsNullOrWhiteSpace($delay)) {
+            $delay = "5"
+          }
+
+          if ($mode -eq "sync") {
+            if ([string]::IsNullOrWhiteSpace($env:WIKI_USER_SECRET) -or [string]::IsNullOrWhiteSpace($env:WIKI_PASSWORD_SECRET)) {
+              Write-Error "真实同步需要配置 GitHub Secrets：WIKI_USER 和 WIKI_PASSWORD。"
+              exit 1
+            }
+            $wikiUser = $env:WIKI_USER_SECRET
+            $wikiPassword = $env:WIKI_PASSWORD_SECRET
+          } else {
+            $wikiUser = "DRY_RUN_USER"
+            $wikiPassword = "DRY_RUN_PASSWORD"
+          }
+
+          $scriptArgs = @(
+            "wiki/sync_to_wiki.py",
+            "--source-dir", ".",
+            "--user", $wikiUser,
+            "--password", $wikiPassword,
+            "--delay", $delay
+          )
+
+          if ($mode -eq "dry-run") {
+            $scriptArgs += "--dry-run"
+          }
+
+          if ($skipHonor -eq "true") {
+            $scriptArgs += "--skip-honor"
+          }
+
+          if (-not [string]::IsNullOrWhiteSpace($filter)) {
+            $scriptArgs += @("--filter", $filter)
+          }
+
+          python @scriptArgs
