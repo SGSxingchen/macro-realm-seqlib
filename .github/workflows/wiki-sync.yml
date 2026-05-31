@@ -101,6 +101,8 @@ jobs:
             $delay = "5"
           }
 
+          $diffBaseText = "无（full 全量同步）"
+
           if ($mode -eq "sync" -and $syncRange -eq "full" -and -not [string]::IsNullOrWhiteSpace($filter)) {
             Write-Error "过滤同步不能搭配 full 真实同步；请改用 latest-tag/custom-ref/last-commit，或清空 filter 后全量同步。"
             exit 1
@@ -133,14 +135,17 @@ jobs:
               exit 1
             }
             Write-Host "使用最近 tag 作为同步差异基准：$latestTag"
+            $diffBaseText = $latestTag
             $scriptArgs += @("--diff-from", $latestTag)
           } elseif ($syncRange -eq "custom-ref") {
             if ([string]::IsNullOrWhiteSpace($diffFrom)) {
               Write-Error "custom-ref 模式需要填写 diff_from。"
               exit 1
             }
+            $diffBaseText = $diffFrom
             $scriptArgs += @("--diff-from", $diffFrom)
           } elseif ($syncRange -eq "last-commit") {
+            $diffBaseText = "HEAD~1"
             $scriptArgs += "--incremental"
           } elseif ($syncRange -ne "full") {
             Write-Error "未知同步范围：$syncRange"
@@ -159,4 +164,27 @@ jobs:
             $scriptArgs += @("--filter", $filter)
           }
 
-          python @scriptArgs
+          Write-Host "::group::Wiki 同步参数"
+          Write-Host "同步模式: $mode"
+          Write-Host "同步范围: $syncRange"
+          Write-Host "差异基准: $diffBaseText"
+          Write-Host "跳过荣誉室: $skipHonor"
+          Write-Host "过滤目录: $(if ([string]::IsNullOrWhiteSpace($filter)) { '无' } else { $filter })"
+          Write-Host "请求间隔: $delay 秒"
+          Write-Host "实际写入 Wiki: $(if ($mode -eq 'sync') { '是' } else { '否，dry-run' })"
+          Write-Host "脚本参数: $($scriptArgs -join ' ')"
+          Write-Host "::endgroup::"
+
+          @(
+            "## Wiki 同步参数"
+            ""
+            "- 同步模式: ``$mode``"
+            "- 同步范围: ``$syncRange``"
+            "- 差异基准: ``$diffBaseText``"
+            "- 跳过荣誉室: ``$skipHonor``"
+            "- 过滤目录: ``$(if ([string]::IsNullOrWhiteSpace($filter)) { '无' } else { $filter })``"
+            "- 请求间隔: ``$delay`` 秒"
+            "- 实际写入 Wiki: ``$(if ($mode -eq 'sync') { '是' } else { '否，dry-run' })``"
+          ) | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
+
+          python -u @scriptArgs

@@ -63,6 +63,15 @@ class WikiSyncWorkflowTest(unittest.TestCase):
 
         self.assertIn("过滤同步不能搭配 full 真实同步", text)
 
+    def test_workflow_prints_human_readable_logs(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertIn("::group::Wiki 同步参数", text)
+        self.assertIn("同步范围:", text)
+        self.assertIn("差异基准:", text)
+        self.assertIn("GITHUB_STEP_SUMMARY", text)
+        self.assertIn("python -u @scriptArgs", text)
+
 
 if __name__ == "__main__":
     unittest.main()
