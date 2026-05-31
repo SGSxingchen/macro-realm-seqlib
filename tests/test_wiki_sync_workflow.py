@@ -20,6 +20,12 @@ class WikiSyncWorkflowTest(unittest.TestCase):
     def test_workflow_supports_scope_inputs(self):
         text = WORKFLOW.read_text(encoding="utf-8")
 
+        self.assertIn("sync_range:", text)
+        self.assertIn("- latest-tag", text)
+        self.assertIn("- custom-ref", text)
+        self.assertIn("- last-commit", text)
+        self.assertIn("- full", text)
+        self.assertIn("diff_from:", text)
         self.assertIn("skip_honor:", text)
         self.assertIn("filter:", text)
         self.assertIn("delay:", text)
@@ -43,6 +49,19 @@ class WikiSyncWorkflowTest(unittest.TestCase):
         self.assertIn("--filter", text)
         self.assertIn("--delay", text)
         self.assertIn("--source-dir", text)
+        self.assertIn("--diff-from", text)
+        self.assertIn("--incremental", text)
+
+    def test_workflow_fetches_history_for_diff_based_delete(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertIn("fetch-depth: 0", text)
+        self.assertIn("git describe --tags --abbrev=0", text)
+
+    def test_workflow_blocks_filtered_full_real_sync(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertIn("过滤同步不能搭配 full 真实同步", text)
 
 
 if __name__ == "__main__":

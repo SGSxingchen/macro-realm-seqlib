@@ -11,6 +11,21 @@ on:
         options:
           - dry-run
           - sync
+      sync_range:
+        description: "同步范围：latest-tag 按最近 tag 差异同步，full 会全量清理重建"
+        required: true
+        default: latest-tag
+        type: choice
+        options:
+          - latest-tag
+          - custom-ref
+          - last-commit
+          - full
+      diff_from:
+        description: "custom-ref 模式使用的起始 tag/commit，例如 v6.5"
+        required: false
+        default: ""
+        type: string
       skip_honor:
         description: "是否跳过荣誉室"
         required: true
@@ -45,6 +60,8 @@ jobs:
     steps:
       - name: 签出代码
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: 安装 Python
         uses: actions/setup-python@v5
@@ -63,17 +80,30 @@ jobs:
         shell: pwsh
         env:
           MODE_INPUT: ${{ github.event.inputs.mode }}
+          SYNC_RANGE_INPUT: ${{ github.event.inputs.sync_range }}
+          DIFF_FROM_INPUT: ${{ github.event.inputs.diff_from }}
           SKIP_HONOR_INPUT: ${{ github.event.inputs.skip_honor }}
           FILTER_INPUT: ${{ github.event.inputs.filter }}
           DELAY_INPUT: ${{ github.event.inputs.delay }}
         run: |
           $mode = $env:MODE_INPUT
+          $syncRange = $env:SYNC_RANGE_INPUT
+          $diffFrom = $env:DIFF_FROM_INPUT
           $skipHonor = $env:SKIP_HONOR_INPUT
           $filter = $env:FILTER_INPUT
           $delay = $env:DELAY_INPUT
 
+          if ([string]::IsNullOrWhiteSpace($syncRange)) {
+            $syncRange = "latest-tag"
+          }
+
           if ([string]::IsNullOrWhiteSpace($delay)) {
             $delay = "5"
+          }
+
+          if ($mode -eq "sync" -and $syncRange -eq "full" -and -not [string]::IsNullOrWhiteSpace($filter)) {
+            Write-Error "过滤同步不能搭配 full 真实同步；请改用 latest-tag/custom-ref/last-commit，或清空 filter 后全量同步。"
+            exit 1
           }
 
           if ($mode -eq "sync") {
@@ -95,6 +125,27 @@ jobs:
             "--password", $wikiPassword,
             "--delay", $delay
           )
+
+          if ($syncRange -eq "latest-tag") {
+            $latestTag = (git describe --tags --abbrev=0).Trim()
+            if ([string]::IsNullOrWhiteSpace($latestTag)) {
+              Write-Error "未找到可用于 diff 的最新 tag；请改用 custom-ref 或 full。"
+              exit 1
+            }
+            Write-Host "使用最近 tag 作为同步差异基准：$latestTag"
+            $scriptArgs += @("--diff-from", $latestTag)
+          } elseif ($syncRange -eq "custom-ref") {
+            if ([string]::IsNullOrWhiteSpace($diffFrom)) {
+              Write-Error "custom-ref 模式需要填写 diff_from。"
+              exit 1
+            }
+            $scriptArgs += @("--diff-from", $diffFrom)
+          } elseif ($syncRange -eq "last-commit") {
+            $scriptArgs += "--incremental"
+          } elseif ($syncRange -ne "full") {
+            Write-Error "未知同步范围：$syncRange"
+            exit 1
+          }
 
           if ($mode -eq "dry-run") {
             $scriptArgs += "--dry-run"
