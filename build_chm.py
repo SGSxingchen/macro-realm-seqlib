@@ -24,6 +24,7 @@ import sys
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 from xlsx_to_chm_html import convert_xlsx_to_html_document
 
@@ -37,6 +38,7 @@ CHM_CONTENT_DIRS = ["序列库"]
 ZIP_CONTENT_DIRS = ["序列库", "荣誉室"]
 ROOT_EXTENSIONS = {".txt", ".html", ".htm", ".docx", ".doc", ".xlsx"}
 DEFAULT_TITLE = "序列库"
+VERSIONED_ROOT_FILE_RE = re.compile(r"^(?:V)?(?P<version>\d+(?:\.\d+)*)序列库(?:编者注|更新日志)\.", re.IGNORECASE)
 
 PAGE_STYLE = """\
 body {
@@ -108,6 +110,25 @@ def read_text_file(path: Path) -> str:
 def gbk_safe(text: str) -> str:
     """确保文本可以被 GBK 编码，替换不可编码的字符"""
     return text.encode("gbk", errors="replace").decode("gbk", errors="replace")
+
+
+def version_number(version: str) -> Optional[str]:
+    """从 v6.5 / V6.5 / 6.5 中取出 6.5；dev 不做版本过滤。"""
+    if version == "dev":
+        return None
+    return version.lstrip("vV")
+
+
+def should_include_root_file(path: Path, version: str) -> bool:
+    """根目录版本说明只打包当前版本，避免旧版更新日志混入发布包。"""
+    if not path.is_file() or path.suffix.lower() not in ROOT_EXTENSIONS:
+        return False
+
+    current_version = version_number(version)
+    match = VERSIONED_ROOT_FILE_RE.match(path.name)
+    if current_version and match:
+        return match.group("version") == current_version
+    return True
 
 
 # ============================================================
@@ -209,14 +230,14 @@ def make_fallback_html(name: str, ext: str) -> str:
 # ============================================================
 
 
-def scan_source_files(source_dir: Path, content_dirs: list, include_root: bool = True) -> dict:
+def scan_source_files(source_dir: Path, content_dirs: list, include_root: bool = True, version: str = "dev") -> dict:
     """扫描源目录，返回 {相对路径: 绝对路径}"""
     supported = {".txt", ".html", ".htm", ".docx", ".doc", ".xlsx"}
     files = {}
 
     if include_root:
         for f in sorted(source_dir.iterdir(), key=lambda p: sort_key(p.name)):
-            if f.is_file() and f.suffix.lower() in ROOT_EXTENSIONS:
+            if should_include_root_file(f, version):
                 files[f.relative_to(source_dir)] = f
 
     for dir_name in content_dirs:
@@ -542,7 +563,7 @@ def compile_chm(build_dir: Path, hhp_file: str) -> bool:
 # ============================================================
 
 
-def create_zip(source_dir: Path, output_path: Path):
+def create_zip(source_dir: Path, output_path: Path, version: str):
     """创建 ZIP 压缩包（原始文件，包含全部目录）"""
     count = 0
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -556,7 +577,7 @@ def create_zip(source_dir: Path, output_path: Path):
                     count += 1
 
         for f in sorted(source_dir.iterdir(), key=lambda p: sort_key(p.name)):
-            if f.is_file() and f.suffix.lower() in ROOT_EXTENSIONS:
+            if should_include_root_file(f, version):
                 zf.write(f, f.name)
                 count += 1
 
@@ -612,7 +633,7 @@ def main():
 
     # --- 1. 扫描（CHM 只包含序列库，不含荣誉室）---
     print("[1/6] 扫描源文件...")
-    files = scan_source_files(source_dir, CHM_CONTENT_DIRS, include_root=True)
+    files = scan_source_files(source_dir, CHM_CONTENT_DIRS, include_root=True, version=version)
     print(f"      找到 {len(files)} 个文件（CHM 用）\n")
 
     # --- 2. 转换 ---
@@ -652,7 +673,7 @@ def main():
     # --- 6. ZIP ---
     if not args.skip_zip:
         print("[6/6] 创建 ZIP 压缩包...")
-        create_zip(source_dir, output_dir / zip_filename)
+        create_zip(source_dir, output_dir / zip_filename, version)
         print()
     else:
         print("[6/6] 跳过 ZIP\n")
