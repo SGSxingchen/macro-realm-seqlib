@@ -91,6 +91,8 @@ git tag v6.5
 git push origin main --tags
 ```
 
+同一个 tag 推送也会触发 Wiki 增量同步：工作流会自动取上一个 tag 到当前 tag 的差异，真实写入 Fandom Wiki；需要先在 GitHub Secrets 配置 `WIKI_USER` 和 `WIKI_PASSWORD`。手动 Wiki 同步仍可在 Actions 中以 dry-run 方式预览。
+
 ## 联系方式
 
 - 制作人：**沧羽**
