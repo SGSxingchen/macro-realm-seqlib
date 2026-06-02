@@ -16,6 +16,7 @@
 
 import argparse
 import html
+import json
 import os
 import re
 import shutil
@@ -38,6 +39,7 @@ CHM_CONTENT_DIRS = ["序列库"]
 ZIP_CONTENT_DIRS = ["序列库", "荣誉室"]
 ROOT_EXTENSIONS = {".txt", ".html", ".htm", ".docx", ".doc", ".xlsx"}
 DEFAULT_TITLE = "序列库"
+BUILD_CONFIG_FILE = "build_config.json"
 VERSIONED_ROOT_FILE_RE = re.compile(r"^(?:V)?(?P<version>\d+(?:\.\d+)*)序列库(?:编者注|更新日志)\.", re.IGNORECASE)
 
 PAGE_STYLE = """\
@@ -119,15 +121,65 @@ def version_number(version: str) -> Optional[str]:
     return version.lstrip("vV")
 
 
-def should_include_root_file(path: Path, version: str) -> bool:
+def root_file_version_matches(file_version: str, current_version: str) -> bool:
+    """版本说明文件匹配当前版本，补丁版本沿用同一大/小版本说明。"""
+    return current_version == file_version or current_version.startswith(f"{file_version}.")
+
+
+def config_key_matches(config_version: str, current_version: str) -> bool:
+    config_version = config_version.lstrip("vV")
+    return root_file_version_matches(config_version, current_version)
+
+
+def load_build_config(source_dir: Path) -> dict:
+    config_path = source_dir / BUILD_CONFIG_FILE
+    if not config_path.is_file():
+        return {}
+    return json.loads(config_path.read_text(encoding="utf-8"))
+
+
+def config_value_list(config: dict, key: str, default: list[str]) -> list[str]:
+    value = config.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"{BUILD_CONFIG_FILE} 的 {key} 必须是字符串数组")
+    return value
+
+
+def configured_root_files(config: dict, version: str) -> Optional[set[str]]:
+    current_version = version_number(version)
+    if not current_version:
+        return None
+
+    root_files = config.get("include_root_files", {})
+    if not isinstance(root_files, dict):
+        raise ValueError(f"{BUILD_CONFIG_FILE} 的 include_root_files 必须是对象")
+
+    matched: set[str] = set()
+    for config_version, file_names in root_files.items():
+        if not isinstance(config_version, str):
+            raise ValueError(f"{BUILD_CONFIG_FILE} 的 include_root_files 版本号必须是字符串")
+        if not config_key_matches(config_version, current_version):
+            continue
+        if not isinstance(file_names, list) or not all(isinstance(item, str) for item in file_names):
+            raise ValueError(f"{BUILD_CONFIG_FILE} 的 include_root_files.{config_version} 必须是字符串数组")
+        matched.update(file_names)
+
+    return matched or None
+
+
+def should_include_root_file(path: Path, version: str, root_files_config: Optional[set[str]] = None) -> bool:
     """根目录版本说明只打包当前版本，避免旧版更新日志混入发布包。"""
     if not path.is_file() or path.suffix.lower() not in ROOT_EXTENSIONS:
         return False
 
     current_version = version_number(version)
     match = VERSIONED_ROOT_FILE_RE.match(path.name)
+    if root_files_config is not None and match:
+        return path.name in root_files_config
     if current_version and match:
-        return match.group("version") == current_version
+        return root_file_version_matches(match.group("version"), current_version)
     return True
 
 
@@ -230,14 +282,20 @@ def make_fallback_html(name: str, ext: str) -> str:
 # ============================================================
 
 
-def scan_source_files(source_dir: Path, content_dirs: list, include_root: bool = True, version: str = "dev") -> dict:
+def scan_source_files(
+    source_dir: Path,
+    content_dirs: list,
+    include_root: bool = True,
+    version: str = "dev",
+    root_files_config: Optional[set[str]] = None,
+) -> dict:
     """扫描源目录，返回 {相对路径: 绝对路径}"""
     supported = {".txt", ".html", ".htm", ".docx", ".doc", ".xlsx"}
     files = {}
 
     if include_root:
         for f in sorted(source_dir.iterdir(), key=lambda p: sort_key(p.name)):
-            if should_include_root_file(f, version):
+            if should_include_root_file(f, version, root_files_config):
                 files[f.relative_to(source_dir)] = f
 
     for dir_name in content_dirs:
@@ -563,11 +621,17 @@ def compile_chm(build_dir: Path, hhp_file: str) -> bool:
 # ============================================================
 
 
-def create_zip(source_dir: Path, output_path: Path, version: str):
+def create_zip(
+    source_dir: Path,
+    output_path: Path,
+    version: str,
+    zip_content_dirs: Optional[list[str]] = None,
+    root_files_config: Optional[set[str]] = None,
+):
     """创建 ZIP 压缩包（原始文件，包含全部目录）"""
     count = 0
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for dir_name in ZIP_CONTENT_DIRS:
+        for dir_name in zip_content_dirs or ZIP_CONTENT_DIRS:
             content_dir = source_dir / dir_name
             if not content_dir.is_dir():
                 continue
@@ -577,7 +641,7 @@ def create_zip(source_dir: Path, output_path: Path, version: str):
                     count += 1
 
         for f in sorted(source_dir.iterdir(), key=lambda p: sort_key(p.name)):
-            if should_include_root_file(f, version):
+            if should_include_root_file(f, version, root_files_config):
                 zf.write(f, f.name)
                 count += 1
 
@@ -602,6 +666,10 @@ def main():
     output_dir = Path(args.output_dir).resolve()
     build_dir = output_dir / "_chm_build"
     version = args.version
+    build_config = load_build_config(source_dir)
+    chm_content_dirs = config_value_list(build_config, "chm_content_dirs", CHM_CONTENT_DIRS)
+    zip_content_dirs = config_value_list(build_config, "zip_content_dirs", ZIP_CONTENT_DIRS)
+    root_files_config = configured_root_files(build_config, version)
 
     # 统一命名格式：宏观界域强化序列库V版本号
     # 版本号处理：v6.2 → V6.2, 6.2 → V6.2
@@ -623,6 +691,8 @@ def main():
     print(f"  源目录:   {source_dir}")
     print(f"  输出目录: {output_dir}")
     print(f"  版本:     {version}")
+    print(f"  CHM 目录: {', '.join(chm_content_dirs)}")
+    print(f"  ZIP 目录: {', '.join(zip_content_dirs)}")
     print("=" * 50)
     print()
 
@@ -633,7 +703,13 @@ def main():
 
     # --- 1. 扫描（CHM 只包含序列库，不含荣誉室）---
     print("[1/6] 扫描源文件...")
-    files = scan_source_files(source_dir, CHM_CONTENT_DIRS, include_root=True, version=version)
+    files = scan_source_files(
+        source_dir,
+        chm_content_dirs,
+        include_root=True,
+        version=version,
+        root_files_config=root_files_config,
+    )
     print(f"      找到 {len(files)} 个文件（CHM 用）\n")
 
     # --- 2. 转换 ---
@@ -673,7 +749,13 @@ def main():
     # --- 6. ZIP ---
     if not args.skip_zip:
         print("[6/6] 创建 ZIP 压缩包...")
-        create_zip(source_dir, output_dir / zip_filename, version)
+        create_zip(
+            source_dir,
+            output_dir / zip_filename,
+            version,
+            zip_content_dirs=zip_content_dirs,
+            root_files_config=root_files_config,
+        )
         print()
     else:
         print("[6/6] 跳过 ZIP\n")

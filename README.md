@@ -82,6 +82,28 @@ python build_chm.py --version v6.5 --skip-zip
 
 输出文件：`宏观界域强化序列库V6.5.chm` / `.zip`
 
+### 打包配置
+
+根目录的版本说明文件、CHM/ZIP 收录目录由 `build_config.json` 配置：
+
+```json
+{
+  "chm_content_dirs": ["序列库"],
+  "zip_content_dirs": ["序列库", "荣誉室"],
+  "include_root_files": {
+    "6.5": [
+      "6.5序列库编者注.txt",
+      "V6.5序列库更新日志.txt"
+    ]
+  }
+}
+```
+
+- `chm_content_dirs`：CHM 收录的目录。
+- `zip_content_dirs`：ZIP 收录的目录。
+- `include_root_files`：根目录版本说明文件。`6.5` 会同时匹配 `v6.5`、`v6.5.1`、`v6.5.2` 这类补丁版本；如果某个补丁版本需要单独说明，可以再加 `"6.5.2": [...]`。
+- 没写进配置的普通根目录文件仍按原规则收录；版本说明文件优先按配置名单收录，避免旧版更新日志混入。
+
 ### CI/CD
 
 推送 `v*` tag 到 GitHub 会自动触发 Actions 构建并创建 Release：

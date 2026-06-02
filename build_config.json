@@ -1,0 +1,15 @@
+{
+  "chm_content_dirs": [
+    "序列库"
+  ],
+  "zip_content_dirs": [
+    "序列库",
+    "荣誉室"
+  ],
+  "include_root_files": {
+    "6.5": [
+      "6.5序列库编者注.txt",
+      "V6.5序列库更新日志.txt"
+    ]
+  }
+}
