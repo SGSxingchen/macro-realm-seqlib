@@ -152,18 +152,20 @@ def configured_root_files(config: dict, version: str) -> Optional[set[str]]:
     if not current_version:
         return None
 
-    root_files = config.get("include_root_files", {})
+    root_files = config.get("root_files")
+    if root_files is None:
+        root_files = config.get("include_root_files", {})
     if not isinstance(root_files, dict):
-        raise ValueError(f"{BUILD_CONFIG_FILE} 的 include_root_files 必须是对象")
+        raise ValueError(f"{BUILD_CONFIG_FILE} 的 root_files 必须是对象")
 
     matched: set[str] = set()
     for config_version, file_names in root_files.items():
         if not isinstance(config_version, str):
-            raise ValueError(f"{BUILD_CONFIG_FILE} 的 include_root_files 版本号必须是字符串")
+            raise ValueError(f"{BUILD_CONFIG_FILE} 的 root_files 版本号必须是字符串")
         if not config_key_matches(config_version, current_version):
             continue
         if not isinstance(file_names, list) or not all(isinstance(item, str) for item in file_names):
-            raise ValueError(f"{BUILD_CONFIG_FILE} 的 include_root_files.{config_version} 必须是字符串数组")
+            raise ValueError(f"{BUILD_CONFIG_FILE} 的 root_files.{config_version} 必须是字符串数组")
         matched.update(file_names)
 
     return matched or None
@@ -176,7 +178,7 @@ def should_include_root_file(path: Path, version: str, root_files_config: Option
 
     current_version = version_number(version)
     match = VERSIONED_ROOT_FILE_RE.match(path.name)
-    if root_files_config is not None and match:
+    if root_files_config is not None:
         return path.name in root_files_config
     if current_version and match:
         return root_file_version_matches(match.group("version"), current_version)

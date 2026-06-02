@@ -90,10 +90,14 @@ python build_chm.py --version v6.5 --skip-zip
 {
   "chm_content_dirs": ["序列库"],
   "zip_content_dirs": ["序列库", "荣誉室"],
-  "include_root_files": {
+  "root_files": {
     "6.5": [
       "6.5序列库编者注.txt",
-      "V6.5序列库更新日志.txt"
+      "V6.5序列库更新日志.txt",
+      "第七批下架名单.txt",
+      "第八批下架名单.txt",
+      "第九批下架名单.txt",
+      "资源标准模板.txt"
     ]
   }
 }
@@ -101,8 +105,8 @@ python build_chm.py --version v6.5 --skip-zip
 
 - `chm_content_dirs`：CHM 收录的目录。
 - `zip_content_dirs`：ZIP 收录的目录。
-- `include_root_files`：根目录版本说明文件。`6.5` 会同时匹配 `v6.5`、`v6.5.1`、`v6.5.2` 这类补丁版本；如果某个补丁版本需要单独说明，可以再加 `"6.5.2": [...]`。
-- 没写进配置的普通根目录文件仍按原规则收录；版本说明文件优先按配置名单收录，避免旧版更新日志混入。
+- `root_files`：根目录收录文件白名单。`6.5` 会同时匹配 `v6.5`、`v6.5.1`、`v6.5.2` 这类补丁版本；如果某个补丁版本需要单独名单，可以再加 `"6.5.2": [...]`。
+- 只要当前版本匹配到 `root_files`，根目录文件就完全按白名单收录；没写进去的下架名单、旧版更新日志、模板等都不会进入 CHM/ZIP。
 
 ### CI/CD
 

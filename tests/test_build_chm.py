@@ -31,7 +31,7 @@ def test_configured_root_files_apply_to_patch_version(tmp_path: Path):
     changelog = touch(tmp_path, "V6.5序列库更新日志.txt")
     old_editor_note = touch(tmp_path, "6.4序列库编者注.txt")
     config = {
-        "include_root_files": {
+        "root_files": {
             "6.5": [
                 "6.5序列库编者注.txt",
                 "V6.5序列库更新日志.txt",
@@ -49,6 +49,7 @@ def test_create_zip_uses_configured_root_files(tmp_path: Path):
     touch(tmp_path, "6.5序列库编者注.txt")
     touch(tmp_path, "V6.5序列库更新日志.txt")
     touch(tmp_path, "6.4序列库编者注.txt")
+    touch(tmp_path, "第八批下架名单.txt")
     (tmp_path / "序列库").mkdir()
     touch(tmp_path / "序列库", "001】示例.txt")
     output_path = tmp_path / "out.zip"
@@ -71,4 +72,5 @@ def test_create_zip_uses_configured_root_files(tmp_path: Path):
     assert "6.5序列库编者注.txt" in names
     assert "V6.5序列库更新日志.txt" in names
     assert "6.4序列库编者注.txt" not in names
+    assert "第八批下架名单.txt" not in names
     assert "序列库/001】示例.txt" in names
