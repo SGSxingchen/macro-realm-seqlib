@@ -9,6 +9,7 @@ import { Reader } from './components/Reader';
 import { AdminPanel } from './components/Admin';
 import { RecentUpdates } from './components/RecentUpdates';
 import { NormalizationReviewPage } from './components/NormalizationReview';
+import { SessionStats } from './components/SessionStats';
 
 const DEFAULT_FILTERS: SearchFilters = { q: '', category: '', kinds: [], sides: [], authors: [] };
 
@@ -17,7 +18,7 @@ function readUrlState(): { tab: AppTab; filters: SearchFilters; openPath: string
   const sp = url.searchParams;
   const arr = (k: string) => sp.getAll(k).filter(Boolean);
   const rawTab = sp.get('tab');
-  const tab: AppTab = rawTab === 'admin' || rawTab === 'updates' ? rawTab : 'read';
+  const tab: AppTab = rawTab === 'admin' || rawTab === 'updates' || rawTab === 'stats' ? rawTab : 'read';
   return {
     tab,
     filters: {
@@ -185,6 +186,8 @@ function LibraryApp() {
         </div>
       ) : tab === 'updates' ? (
         <RecentUpdates onOpen={async path => { await openResource(path); setTab('read'); }} />
+      ) : tab === 'stats' ? (
+        <SessionStats />
       ) : (
         <AdminPanel
           detail={detail}
