@@ -197,6 +197,39 @@ export type SessionStatsSession = {
   model_name?: string | null;
 };
 
+export type SessionStatsParticipant = {
+  id: string | number;
+  name: string;
+  qq?: string | null;
+  role?: string | null;
+  duration_hours?: number | null;
+  reincarnation_count?: number | null;
+  is_host?: boolean | null;
+};
+
+export type SessionStatsSessionDetail = {
+  id: string | number;
+  month: string;
+  title: string;
+  duration_hours: number;
+  source_filename: string;
+  model_name?: string | null;
+  confidence?: number | null;
+  raw_payload?: unknown;
+  created_at?: string | null;
+  kp?: {
+    id: string | number;
+    name: string;
+    qq?: string | null;
+  } | null;
+  participants: SessionStatsParticipant[];
+};
+
+export type SessionStatsSessionPatchResponse = {
+  ok: true;
+  session: SessionStatsSessionDetail;
+};
+
 export type SessionStatsSessionsResponse = {
   items: SessionStatsSession[];
   count: number;
@@ -208,6 +241,7 @@ export type SessionStatsImportFileResult = {
   source_filename?: string;
   title?: string;
   success?: boolean;
+  skipped?: boolean;
   ok?: boolean;
   error?: string;
   reason?: string;
@@ -220,6 +254,7 @@ export type SessionStatsImportFileResult = {
 export type SessionStatsImportResponse = {
   success_count: number;
   failure_count: number;
+  skip_count?: number;
   items: SessionStatsImportFileResult[];
 };
 
@@ -231,11 +266,21 @@ export type SessionStatsImportJob = {
   processed_count: number;
   success_count: number;
   failure_count: number;
+  skip_count?: number;
+  concurrency?: number;
   current_filename?: string;
   items: SessionStatsImportFileResult[];
   error?: string;
   created_at?: string;
   updated_at?: string;
+};
+
+export type SessionStatsDedupeResponse = {
+  ok?: boolean;
+  month: string;
+  deleted_count: number;
+  kept?: Array<Record<string, unknown>>;
+  deleted?: Array<Record<string, unknown>>;
 };
 
 export type SessionStatsErrorItem = Record<string, unknown>;

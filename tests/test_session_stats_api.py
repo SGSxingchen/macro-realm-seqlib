@@ -78,6 +78,48 @@ class SessionStatsApiTest(unittest.TestCase):
         self.assertEqual(sessions.status_code, 200)
         self.assertEqual(sessions.json()["items"][0]["title"], "测试团")
 
+    def test_session_detail_and_patch_update_basic_fields(self):
+        old_password = os.environ.get("ADMIN_PASSWORD")
+        os.environ["ADMIN_PASSWORD"] = "test-pass"
+        try:
+            imported = main_app.SESSION_STATS_SERVICE.import_text_files(
+                month="2026-05",
+                files=[SessionTextFile(filename="round.txt", content="raw")],
+                extractor=FakeExtractor([
+                    {
+                        "title": "old title",
+                        "duration_hours": 2,
+                        "kp": {"name": "host", "qq": "123456"},
+                        "players": [{"name": "player", "qq": None}],
+                        "confidence": 0.9,
+                        "warnings": [],
+                    }
+                ]),
+                model_name="fake-model",
+            )
+            session_id = imported["items"][0]["session_id"]
+
+            detail = self.client.get(f"/api/session-stats/sessions/{session_id}")
+            self.assertEqual(detail.status_code, 200)
+            self.assertEqual(detail.json()["title"], "old title")
+            self.assertEqual(len(detail.json()["participants"]), 2)
+
+            blocked = self.client.patch(f"/api/session-stats/sessions/{session_id}", json={"title": "new title", "duration_hours": 4})
+            self.assertEqual(blocked.status_code, 401)
+
+            login = self.client.post("/api/admin/login", json={"password": "test-pass"})
+            self.assertEqual(login.status_code, 200)
+            patched = self.client.patch(f"/api/session-stats/sessions/{session_id}", json={"title": "new title", "duration_hours": 4})
+            self.assertEqual(patched.status_code, 200)
+            self.assertEqual(patched.json()["session"]["title"], "new title")
+            self.assertEqual(patched.json()["session"]["duration_hours"], 4)
+            self.assertAlmostEqual(main_app.SESSION_STATS_SERVICE.get_overview("2026-05")["total_game_hours"], 8.0)
+        finally:
+            if old_password is None:
+                os.environ.pop("ADMIN_PASSWORD", None)
+            else:
+                os.environ["ADMIN_PASSWORD"] = old_password
+
     def test_import_requires_admin_configuration(self):
         old_password = os.environ.pop("ADMIN_PASSWORD", None)
         try:
@@ -159,6 +201,125 @@ class SessionStatsApiTest(unittest.TestCase):
             self.assertEqual(final["failure_count"], 0)
             self.assertEqual(len(final["items"]), 2)
             self.assertEqual(main_app.SESSION_STATS_SERVICE.get_overview("2026-05")["session_count"], 2)
+        finally:
+            if old_password is None:
+                os.environ.pop("ADMIN_PASSWORD", None)
+            else:
+                os.environ["ADMIN_PASSWORD"] = old_password
+
+    def test_import_job_accepts_concurrency_limit(self):
+        old_password = os.environ.get("ADMIN_PASSWORD")
+        old_runner = main_app.run_session_import_job
+        calls = []
+
+        def fake_runner(job_id, month, files, model_name, concurrency):
+            calls.append({
+                "job_id": job_id,
+                "month": month,
+                "file_count": len(files),
+                "model_name": model_name,
+                "concurrency": concurrency,
+            })
+            main_app.update_import_job(
+                job_id,
+                status="completed",
+                processed_count=len(files),
+                success_count=0,
+                failure_count=0,
+                current_filename="",
+                items=[],
+                error="",
+            )
+
+        os.environ["ADMIN_PASSWORD"] = "test-pass"
+        main_app.run_session_import_job = fake_runner
+        try:
+            login = self.client.post("/api/admin/login", json={"password": "test-pass"})
+            self.assertEqual(login.status_code, 200)
+
+            response = self.client.post(
+                "/api/session-stats/import-jobs",
+                data={"month": "2026-05", "concurrency": "3"},
+                files=[
+                    ("files", ("one.txt", "one", "text/plain")),
+                    ("files", ("two.txt", "two", "text/plain")),
+                ],
+            )
+
+            self.assertEqual(response.status_code, 200)
+            for _ in range(30):
+                if calls:
+                    break
+                time.sleep(0.05)
+            self.assertEqual(calls[0]["concurrency"], 3)
+            self.assertEqual(calls[0]["file_count"], 2)
+        finally:
+            main_app.run_session_import_job = old_runner
+            if old_password is None:
+                os.environ.pop("ADMIN_PASSWORD", None)
+            else:
+                os.environ["ADMIN_PASSWORD"] = old_password
+
+    def test_dedupe_endpoint_requires_admin_and_deletes_duplicate_content(self):
+        old_password = os.environ.get("ADMIN_PASSWORD")
+        os.environ["ADMIN_PASSWORD"] = "test-pass"
+        try:
+            main_app.SESSION_STATS_SERVICE.import_text_files(
+                month="2026-05",
+                files=[
+                    SessionTextFile(filename="one.txt", content="same content"),
+                    SessionTextFile(filename="two.txt", content="same content"),
+                ],
+                extractor=FakeExtractor([
+                    {
+                        "title": "first",
+                        "duration_hours": 2,
+                        "kp": {"name": "kp", "qq": "111"},
+                        "players": [{"name": "p1", "qq": None}],
+                        "confidence": 0.9,
+                        "warnings": [],
+                    },
+                    {
+                        "title": "second",
+                        "duration_hours": 2,
+                        "kp": {"name": "kp", "qq": "111"},
+                        "players": [{"name": "p1", "qq": None}],
+                        "confidence": 0.9,
+                        "warnings": [],
+                    },
+                ]),
+                model_name="fake-model",
+            )
+            with main_app.SESSION_STATS_SERVICE._connect() as conn:
+                batch_id = main_app.SESSION_STATS_SERVICE._create_batch(conn, "2026-05", "fake-model", 1)
+                main_app.SESSION_STATS_SERVICE._insert_session(
+                    conn,
+                    batch_id=batch_id,
+                    month="2026-05",
+                    file=SessionTextFile(filename="legacy-two.txt", content="same content"),
+                    content_hash=main_app.SESSION_STATS_SERVICE._content_hash("same content"),
+                    payload={
+                        "title": "legacy second",
+                        "duration_hours": 2,
+                        "kp": {"name": "kp", "qq": "111"},
+                        "players": [{"name": "p1", "qq": None}],
+                        "confidence": 0.9,
+                        "warnings": [],
+                    },
+                    model_name="fake-model",
+                )
+            self.assertEqual(main_app.SESSION_STATS_SERVICE.get_overview("2026-05")["session_count"], 2)
+
+            blocked = self.client.post("/api/session-stats/dedupe", params={"month": "2026-05"})
+            self.assertEqual(blocked.status_code, 401)
+
+            login = self.client.post("/api/admin/login", json={"password": "test-pass"})
+            self.assertEqual(login.status_code, 200)
+            response = self.client.post("/api/session-stats/dedupe", params={"month": "2026-05"})
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["deleted_count"], 1)
+            self.assertEqual(main_app.SESSION_STATS_SERVICE.get_overview("2026-05")["session_count"], 1)
         finally:
             if old_password is None:
                 os.environ.pop("ADMIN_PASSWORD", None)

@@ -1,6 +1,7 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, buildQuery, routePath } from '../api';
 import {
+  SessionStatsDedupeResponse,
   SessionStatsErrorItem,
   SessionStatsErrorsResponse,
   SessionStatsImportFileResult,
@@ -8,6 +9,8 @@ import {
   SessionStatsImportResponse,
   SessionStatsOverview,
   SessionStatsPlayerSort,
+  SessionStatsSessionDetail,
+  SessionStatsSessionPatchResponse,
   SessionStatsPlayersResponse,
   SessionStatsSessionsResponse,
 } from '../types';
@@ -40,6 +43,7 @@ function importItemName(item: SessionStatsImportFileResult) {
 }
 
 function importItemStatus(item: SessionStatsImportFileResult) {
+  if (item.skipped) return true;
   if (typeof item.success === 'boolean') return item.success;
   if (typeof item.ok === 'boolean') return item.ok;
   return !item.error;
@@ -55,6 +59,13 @@ function stringifyValue(value: unknown) {
   return JSON.stringify(value);
 }
 
+function rawPayloadSummary(value: unknown) {
+  if (value === null || value === undefined || value === '') return '未记录';
+  const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  if (!text) return '未记录';
+  return text.length > 1200 ? `${text.slice(0, 1200)}\n...` : text;
+}
+
 async function readErrors(month: string): Promise<{ data: SessionStatsErrorsResponse | null; gated: boolean; error: string }> {
   const res = await fetch(`/api/session-stats/errors${buildQuery({ month })}`, { credentials: 'include' });
   if (res.status === 401 || res.status === 503) return { data: null, gated: true, error: '' };
@@ -67,6 +78,7 @@ async function readErrors(month: string): Promise<{ data: SessionStatsErrorsResp
 
 export function SessionStats() {
   const [month, setMonth] = useState(currentMonth);
+  const [concurrency, setConcurrency] = useState(2);
   const [sort, setSort] = useState<SessionStatsPlayerSort>('hours');
   const [overview, setOverview] = useState<SessionStatsOverview>(emptyOverview);
   const [players, setPlayers] = useState<SessionStatsPlayersResponse>({ items: [], count: 0, month: currentMonth() });
@@ -77,9 +89,16 @@ export function SessionStats() {
   const [error, setError] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [importing, setImporting] = useState(false);
+  const [deduping, setDeduping] = useState(false);
   const [importResult, setImportResult] = useState<SessionStatsImportResponse | null>(null);
   const [importJob, setImportJob] = useState<SessionStatsImportJob | null>(null);
   const [importNotice, setImportNotice] = useState('');
+  const [sessionDetail, setSessionDetail] = useState<SessionStatsSessionDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailSaving, setDetailSaving] = useState(false);
+  const [detailError, setDetailError] = useState('');
+  const [editTitle, setEditTitle] = useState('');
+  const [editDuration, setEditDuration] = useState('');
   const reqIdRef = useRef(0);
   const pollRef = useRef<number | undefined>(undefined);
 
@@ -139,6 +158,7 @@ export function SessionStats() {
       setImportResult({
         success_count: job.success_count,
         failure_count: job.failure_count,
+        skip_count: job.skip_count,
         items: job.items || [],
       });
       if (job.status === 'running') {
@@ -154,6 +174,85 @@ export function SessionStats() {
     }
   };
 
+  const startImportFiles = async (targetFiles: File[], mode: 'retry' | 'all' = 'all') => {
+    if (!targetFiles.length) {
+      alert('请先选择 txt 文件。');
+      return;
+    }
+    const fd = new FormData();
+    fd.append('month', month);
+    fd.append('concurrency', String(concurrency));
+    targetFiles.forEach(file => fd.append('files', file));
+    setImporting(true);
+    setImportNotice(mode === 'retry' ? `正在重试 ${targetFiles.length} 个失败文件。` : '');
+    setImportResult(null);
+    setImportJob(null);
+    if (pollRef.current) clearTimeout(pollRef.current);
+    try {
+      const res = await fetch('/api/session-stats/import-jobs', { method: 'POST', credentials: 'include', body: fd });
+      const text = await res.text();
+      let payload: unknown = null;
+      if (text) {
+        try {
+          payload = JSON.parse(text);
+        } catch {
+          setImportNotice(text);
+        }
+      }
+      if (!res.ok) {
+        const detail = payload && typeof payload === 'object' && 'detail' in payload ? String((payload as { detail?: unknown }).detail) : '';
+        setImportNotice(prev => prev || detail || `导入请求失败：HTTP ${res.status}`);
+        setImporting(false);
+        return;
+      }
+      const job = payload as SessionStatsImportJob | null;
+      if (!job?.job_id) {
+        setImportNotice('导入任务创建失败：后端没有返回 job_id');
+        setImporting(false);
+        return;
+      }
+      setImportJob(job);
+      pollImportJob(job.job_id);
+    } catch (e: unknown) {
+      setImportNotice(e instanceof Error ? e.message : String(e));
+      setImporting(false);
+    }
+  };
+
+  const retryFailedFiles = async () => {
+    const failedNames = new Set((importResult?.items || []).filter(item => !importItemStatus(item)).map(importItemName));
+    if (!failedNames.size) {
+      alert('当前没有可重试的失败文件。');
+      return;
+    }
+    const selectedByName = new Map(files.map(file => [file.name, file]));
+    const retryFiles = Array.from(failedNames).map(name => selectedByName.get(name)).filter((file): file is File => !!file);
+    const missingCount = failedNames.size - retryFiles.length;
+    if (!retryFiles.length) {
+      setImportNotice('找不到失败文件的本地选择记录，请重新选择原 TXT 后再重试。');
+      return;
+    }
+    if (missingCount) {
+      setImportNotice(`有 ${missingCount} 个失败文件不在当前选择中，只重试找到的 ${retryFiles.length} 个文件。`);
+    }
+    await startImportFiles(retryFiles, 'retry');
+  };
+
+  const dedupeMonth = async () => {
+    if (!confirm(`确认清理 ${month} 中内容完全相同的重复团记录？每组只保留最早导入的一条。`)) return;
+    setDeduping(true);
+    setImportNotice('');
+    try {
+      const result = await api<SessionStatsDedupeResponse>(`/api/session-stats/dedupe${buildQuery({ month })}`, { method: 'POST' });
+      setImportNotice(result.deleted_count ? `已删除 ${result.deleted_count} 条重复团记录。` : '没有发现内容完全相同的重复团记录。');
+      await loadStats();
+    } catch (e: unknown) {
+      setImportNotice(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeduping(false);
+    }
+  };
+
   const startImport = async () => {
     if (!files.length) {
       alert('请先选择 txt 文件。');
@@ -161,6 +260,7 @@ export function SessionStats() {
     }
     const fd = new FormData();
     fd.append('month', month);
+    fd.append('concurrency', String(concurrency));
     files.forEach(file => fd.append('files', file));
     setImporting(true);
     setImportNotice('');
@@ -201,14 +301,63 @@ export function SessionStats() {
   const importProgress = importJob && importJob.total_count > 0
     ? Math.min(100, Math.round((importJob.processed_count / importJob.total_count) * 100))
     : 0;
+  const visibleImportItems = (importResult?.items || []).filter(item => !item.skipped);
+  const failedImportCount = (importResult?.items || []).filter(item => !importItemStatus(item)).length;
 
   const deleteSession = async (id: string | number) => {
     if (!confirm('确认删除这条结团记录？')) return;
     try {
       await api<{ ok?: boolean }>(`/api/session-stats/sessions/${routePath(String(id))}`, { method: 'DELETE' });
+      if (sessionDetail && String(sessionDetail.id) === String(id)) setSessionDetail(null);
       await loadStats();
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const openSessionDetail = async (id: string | number) => {
+    setDetailLoading(true);
+    setDetailError('');
+    setSessionDetail(null);
+    try {
+      const detail = await api<SessionStatsSessionDetail>(`/api/session-stats/sessions/${routePath(String(id))}`);
+      setSessionDetail(detail);
+      setEditTitle(detail.title || '');
+      setEditDuration(typeof detail.duration_hours === 'number' ? String(detail.duration_hours) : '');
+    } catch (e: unknown) {
+      setDetailError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const closeSessionDetail = () => {
+    setSessionDetail(null);
+    setDetailError('');
+  };
+
+  const saveSessionDetail = async () => {
+    if (!sessionDetail) return;
+    const duration = Number(editDuration);
+    if (!Number.isFinite(duration) || duration < 0) {
+      setDetailError('时长必须是大于等于 0 的数字。');
+      return;
+    }
+    setDetailSaving(true);
+    setDetailError('');
+    try {
+      const result = await api<SessionStatsSessionPatchResponse>(`/api/session-stats/sessions/${routePath(String(sessionDetail.id))}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title: editTitle.trim(), duration_hours: duration }),
+      });
+      setSessionDetail(result.session);
+      setEditTitle(result.session.title || '');
+      setEditDuration(typeof result.session.duration_hours === 'number' ? String(result.session.duration_hours) : '');
+      await loadStats();
+    } catch (e: unknown) {
+      setDetailError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDetailSaving(false);
     }
   };
 
@@ -223,12 +372,22 @@ export function SessionStats() {
           <span>月份</span>
           <input type="month" value={month} onChange={e => setMonth(e.target.value || currentMonth())} />
         </label>
+        <label className="stats-field stats-field-small">
+          <span>并发</span>
+          <select value={concurrency} onChange={e => setConcurrency(Number(e.target.value) || 1)} disabled={importing}>
+            {[1, 2, 3, 4, 5, 6].map(value => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>
         <label className="stats-file">
           <span>{selectedFileText}</span>
           <input type="file" accept=".txt,text/plain" multiple onChange={onPickFiles} />
         </label>
         <button type="button" onClick={startImport} disabled={importing || !files.length}>{importing ? '导入中' : '开始导入'}</button>
         <button type="button" onClick={loadStats} disabled={loading}>{loading ? '刷新中' : '刷新'}</button>
+      </div>
+
+      <div className="stats-action-row">
+        <button type="button" className="danger" onClick={dedupeMonth} disabled={deduping || importing}>{deduping ? '去重中' : '去重'}</button>
       </div>
 
       {error && <div className="notice-line error-box">{error}</div>}
@@ -251,6 +410,8 @@ export function SessionStats() {
             ) : importResult ? (
               <span className="status-badge">{importResult.success_count} 成功 / {importResult.failure_count} 失败</span>
             ) : null}
+            {(importJob || importResult) && <span className="status-badge">{(importJob?.skip_count ?? importResult?.skip_count) || 0} SKIP</span>}
+            <button type="button" onClick={retryFailedFiles} disabled={importing || !failedImportCount}>重试失败</button>
           </div>
           {importJob && (
             <div className="stats-progress">
@@ -263,9 +424,9 @@ export function SessionStats() {
             </div>
           )}
           {importNotice && <p className="stats-muted">{importNotice}</p>}
-          {importResult?.items.length ? (
+          {visibleImportItems.length ? (
             <div className="stats-result-list">
-              {importResult.items.map((item, i) => {
+              {visibleImportItems.map((item, i) => {
                 const ok = importItemStatus(item);
                 return (
                   <div className="stats-result" key={`${importItemName(item)}-${i}`}>
@@ -309,13 +470,13 @@ export function SessionStats() {
             <tbody>
               {players.items.map(player => (
                 <tr key={player.id}>
-                  <td>{player.name || '未命名'}</td>
-                  <td>{player.qq || '未记录'}</td>
-                  <td>{player.game_count}</td>
-                  <td>{formatHours(player.game_hours)}</td>
-                  <td>{player.reincarnation_count}</td>
-                  <td>{player.host_count}</td>
-                  <td>{formatHours(player.host_hours)}</td>
+                  <td data-label="玩家名">{player.name || '未命名'}</td>
+                  <td data-label="QQ">{player.qq || '未记录'}</td>
+                  <td data-label="游戏次数">{player.game_count}</td>
+                  <td data-label="游戏时长">{formatHours(player.game_hours)}</td>
+                  <td data-label="轮回次数">{player.reincarnation_count}</td>
+                  <td data-label="主持次数">{player.host_count}</td>
+                  <td data-label="主持时长">{formatHours(player.host_hours)}</td>
                 </tr>
               ))}
               {!players.items.length && <tr><td colSpan={7}>暂无玩家统计。</td></tr>}
@@ -332,20 +493,92 @@ export function SessionStats() {
         <div className="stats-session-list">
           {sessions.items.map(session => (
             <article className="stats-session" key={session.id}>
-              <div>
+              <div className="stats-session-main">
                 <b>{session.title || '未命名团'}</b>
                 <small>{session.source_filename || '未知来源'}</small>
               </div>
-              <span>{formatHours(session.duration_hours)} 小时</span>
-              <span>{session.kp_name || '未知 KP'}{session.kp_qq ? ` (${session.kp_qq})` : ''}</span>
-              <span>{session.pl_count} PL</span>
-              <span>{formatConfidence(session.confidence)}</span>
-              <button type="button" className="danger" onClick={() => deleteSession(session.id)}>删除</button>
+              <div className="stats-session-meta">
+                <span><b>时长</b>{formatHours(session.duration_hours)} 小时</span>
+                <span><b>KP</b>{session.kp_name || '未知 KP'}{session.kp_qq ? ` (${session.kp_qq})` : ''}</span>
+                <span><b>PL</b>{session.pl_count}</span>
+                <span><b>置信度</b>{formatConfidence(session.confidence)}</span>
+              </div>
+              <div className="stats-session-actions">
+                <button type="button" onClick={() => openSessionDetail(session.id)} disabled={detailLoading}>查看</button>
+                <button type="button" className="danger" onClick={() => deleteSession(session.id)}>删除</button>
+              </div>
             </article>
           ))}
           {!sessions.items.length && <div className="stats-empty">暂无结团记录。</div>}
         </div>
       </section>
+
+      {(sessionDetail || detailLoading || detailError) && (
+        <section className="stats-card stats-detail-panel">
+          <div className="section-head">
+            <h3>团详情 / 编辑基础信息</h3>
+            {sessionDetail && <span className="status-badge">ID {sessionDetail.id}</span>}
+          </div>
+          {detailLoading ? (
+            <div className="stats-empty">正在读取团详情。</div>
+          ) : sessionDetail ? (
+            <>
+              {detailError && <div className="notice-line error-box">{detailError}</div>}
+              <div className="stats-detail-grid">
+                <div className="stats-detail-edit">
+                  <label className="stats-field">
+                    <span>标题</span>
+                    <input value={editTitle} onChange={e => setEditTitle(e.target.value)} />
+                  </label>
+                  <label className="stats-field">
+                    <span>时长（小时）</span>
+                    <input type="number" min="0" step="0.5" value={editDuration} onChange={e => setEditDuration(e.target.value)} />
+                  </label>
+                  <div className="stats-detail-actions">
+                    <button type="button" onClick={saveSessionDetail} disabled={detailSaving}>{detailSaving ? '保存中' : '保存'}</button>
+                    <button type="button" onClick={closeSessionDetail} disabled={detailSaving}>关闭</button>
+                  </div>
+                </div>
+                <div className="stats-detail-meta">
+                  <span><b>文件名</b>{sessionDetail.source_filename || '未知来源'}</span>
+                  <span><b>月份</b>{sessionDetail.month || '未记录'}</span>
+                  <span><b>KP</b>{sessionDetail.kp?.name || '未知 KP'}{sessionDetail.kp?.qq ? ` (${sessionDetail.kp.qq})` : ''}</span>
+                  <span><b>模型</b>{sessionDetail.model_name || '未记录'}</span>
+                  <span><b>置信度</b>{formatConfidence(sessionDetail.confidence)}</span>
+                  <span><b>创建时间</b>{sessionDetail.created_at || '未记录'}</span>
+                </div>
+              </div>
+              <div className="stats-detail-participants">
+                <h4>PL / 参与者</h4>
+                {sessionDetail.participants.length ? (
+                  <div className="stats-participant-list">
+                    {sessionDetail.participants.map(participant => (
+                      <span key={participant.id}>
+                        <b>{participant.name || '未命名'}</b>
+                        <small>
+                          {participant.qq || '未记录 QQ'}
+                          {participant.role ? ` · ${participant.role}` : ''}
+                          {participant.is_host ? ' · KP' : ''}
+                          {` · ${formatHours(participant.duration_hours)} 小时`}
+                          {` · 轮回 ${participant.reincarnation_count ?? 0}`}
+                        </small>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="stats-empty">暂无参与者记录。</div>
+                )}
+              </div>
+              <div className="stats-detail-raw">
+                <h4>raw_payload 简要</h4>
+                <pre>{rawPayloadSummary(sessionDetail.raw_payload)}</pre>
+              </div>
+            </>
+          ) : (
+            <div className="notice-line error-box">{detailError}</div>
+          )}
+        </section>
+      )}
 
       <section className="stats-card">
         <div className="section-head">
