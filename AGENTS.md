@@ -129,3 +129,23 @@ python wiki/sync_to_wiki.py --user BotName --password xxx --filter 职业/战技
 - `chmcmd`（Linux/Free Pascal）编译的 CHM 索引功能不正常（CJK 编码问题），CI 已改用 Windows + hhc.exe
 - `.doc` 格式（非 `.docx`）pandoc 可能无法转换，会生成占位页面
 - ~~GitHub Actions 安装 HTML Help Workshop 可能因下载源不稳定而失败~~（已解决：hhc.exe 内置于 `tools/hhw/`）
+
+## 资源重排工具
+
+下架资源移入 `荣誉室/`、重置资源追加回 `序列库/`、或任何会改变编号顺序的批量操作后，使用 `tools/renumber_resources.py` 统一重排编号。
+
+推荐流程：
+```bash
+# 先试运行，只查看计划，不改文件
+python tools/renumber_resources.py
+
+# 确认计划无误后再落盘
+python tools/renumber_resources.py --apply
+```
+
+工具规则：
+- 默认处理 `序列库/` 与 `荣誉室/`。
+- 每个目录独立排序，编号文件夹与编号文件一起参与排序。
+- `.txt` 文件首行会同步为最终文件名（不含扩展名）。
+- 默认是 dry run，只有加 `--apply` 才会实际改名和更新首行。
+- 详细中文说明见 `docs/renumber_resources.md`。
