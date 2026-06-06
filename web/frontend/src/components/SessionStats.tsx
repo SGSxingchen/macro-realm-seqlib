@@ -1,5 +1,6 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, buildQuery, routePath } from '../api';
+import { Pagination } from './ui/Pagination';
 import {
   SessionStatsDedupeResponse,
   SessionStatsErrorItem,
@@ -27,6 +28,19 @@ function currentMonth() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+/** month 形如 "2026-06"。delta 为 ±1 切上/下月。 */
+function shiftMonth(month: string, delta: number) {
+  const m = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!m) return currentMonth();
+  const date = new Date(Number(m[1]), Number(m[2]) - 1 + delta, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(month: string) {
+  const m = /^(\d{4})-(\d{2})$/.exec(month);
+  return m ? `${m[1]} 年 ${Number(m[2])} 月` : month;
+}
+
 function formatHours(value: number | null | undefined) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '0';
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
@@ -36,6 +50,19 @@ function formatConfidence(value: number | null | undefined) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '未标注';
   const percent = value <= 1 ? value * 100 : value;
   return `${percent.toFixed(0)}%`;
+}
+
+function confidenceTier(value: number | null | undefined): 'good' | 'mid' | 'low' | 'none' {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'none';
+  const percent = value <= 1 ? value * 100 : value;
+  if (percent >= 90) return 'good';
+  if (percent >= 70) return 'mid';
+  return 'low';
+}
+
+function avgHours(total: number, count: number) {
+  if (!count) return '—';
+  return `${(total / count).toFixed(1)}h`;
 }
 
 function importItemName(item: SessionStatsImportFileResult) {
@@ -87,6 +114,10 @@ export function SessionStats() {
   const [errorsGated, setErrorsGated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [prevOverview, setPrevOverview] = useState<SessionStatsOverview | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [playersPage, setPlayersPage] = useState(1);
+  const [sessionsPage, setSessionsPage] = useState(1);
   const [files, setFiles] = useState<File[]>([]);
   const [importing, setImporting] = useState(false);
   const [deduping, setDeduping] = useState(false);
@@ -110,13 +141,16 @@ export function SessionStats() {
     const playersReq = api<SessionStatsPlayersResponse>(`/api/session-stats/players${buildQuery({ month, sort })}`);
     const sessionsReq = api<SessionStatsSessionsResponse>(`/api/session-stats/sessions${buildQuery({ month })}`);
     const errorsReq = readErrors(month);
+    const prevOverviewReq = api<SessionStatsOverview>(`/api/session-stats/overview${buildQuery({ month: shiftMonth(month, -1) })}`);
 
-    const [overviewRes, playersRes, sessionsRes, errorsRes] = await Promise.allSettled([overviewReq, playersReq, sessionsReq, errorsReq]);
+    const [overviewRes, playersRes, sessionsRes, errorsRes, prevOverviewRes] = await Promise.allSettled([overviewReq, playersReq, sessionsReq, errorsReq, prevOverviewReq]);
     if (reqId !== reqIdRef.current) return;
 
     const messages: string[] = [];
     if (overviewRes.status === 'fulfilled') setOverview(overviewRes.value);
     else messages.push(`概览读取失败：${overviewRes.reason instanceof Error ? overviewRes.reason.message : String(overviewRes.reason)}`);
+
+    setPrevOverview(prevOverviewRes.status === 'fulfilled' ? prevOverviewRes.value : null);
 
     if (playersRes.status === 'fulfilled') setPlayers(playersRes.value);
     else messages.push(`玩家表读取失败：${playersRes.reason instanceof Error ? playersRes.reason.message : String(playersRes.reason)}`);
@@ -139,6 +173,8 @@ export function SessionStats() {
   }, [month, sort]);
 
   useEffect(() => { loadStats().catch(e => setError(e instanceof Error ? e.message : String(e))); }, [loadStats]);
+  useEffect(() => { setPlayersPage(1); setSessionsPage(1); }, [month]);
+  useEffect(() => { setPlayersPage(1); }, [sort]);
   useEffect(() => () => { if (pollRef.current) clearTimeout(pollRef.current); }, []);
 
   const selectedFileText = useMemo(() => {
@@ -253,56 +289,19 @@ export function SessionStats() {
     }
   };
 
-  const startImport = async () => {
-    if (!files.length) {
-      alert('请先选择 txt 文件。');
-      return;
-    }
-    const fd = new FormData();
-    fd.append('month', month);
-    fd.append('concurrency', String(concurrency));
-    files.forEach(file => fd.append('files', file));
-    setImporting(true);
-    setImportNotice('');
-    setImportResult(null);
-    setImportJob(null);
-    if (pollRef.current) clearTimeout(pollRef.current);
-    try {
-      const res = await fetch('/api/session-stats/import-jobs', { method: 'POST', credentials: 'include', body: fd });
-      const text = await res.text();
-      let payload: unknown = null;
-      if (text) {
-        try {
-          payload = JSON.parse(text);
-        } catch {
-          setImportNotice(text);
-        }
-      }
-      if (!res.ok) {
-        const detail = payload && typeof payload === 'object' && 'detail' in payload ? String((payload as { detail?: unknown }).detail) : '';
-        setImportNotice(prev => prev || detail || `导入请求失败：HTTP ${res.status}`);
-        setImporting(false);
-        return;
-      }
-      const job = payload as SessionStatsImportJob | null;
-      if (!job?.job_id) {
-        setImportNotice('导入任务创建失败：后端没有返回 job_id');
-        setImporting(false);
-        return;
-      }
-      setImportJob(job);
-      pollImportJob(job.job_id);
-    } catch (e: unknown) {
-      setImportNotice(e instanceof Error ? e.message : String(e));
-      setImporting(false);
-    }
-  };
-
   const importProgress = importJob && importJob.total_count > 0
     ? Math.min(100, Math.round((importJob.processed_count / importJob.total_count) * 100))
     : 0;
   const visibleImportItems = (importResult?.items || []).filter(item => !item.skipped);
   const failedImportCount = (importResult?.items || []).filter(item => !importItemStatus(item)).length;
+
+  const PAGE_SIZE = 20;
+  const playersPageCount = Math.max(1, Math.ceil(players.items.length / PAGE_SIZE));
+  const pagedPlayers = players.items.slice((playersPage - 1) * PAGE_SIZE, playersPage * PAGE_SIZE);
+  const sessionsPageCount = Math.max(1, Math.ceil(sessions.items.length / PAGE_SIZE));
+  const pagedSessions = sessions.items.slice((sessionsPage - 1) * PAGE_SIZE, sessionsPage * PAGE_SIZE);
+  // 时长条比例尺:全月最大游戏时长(跨页一致)
+  const maxGameHours = players.items.reduce((max, p) => Math.max(max, p.game_hours || 0), 0);
 
   const deleteSession = async (id: string | number) => {
     if (!confirm('确认删除这条结团记录？')) return;
@@ -382,7 +381,7 @@ export function SessionStats() {
           <span>{selectedFileText}</span>
           <input type="file" accept=".txt,text/plain" multiple onChange={onPickFiles} />
         </label>
-        <button type="button" onClick={startImport} disabled={importing || !files.length}>{importing ? '导入中' : '开始导入'}</button>
+        <button type="button" onClick={() => startImportFiles(files)} disabled={importing || !files.length}>{importing ? '导入中' : '开始导入'}</button>
         <button type="button" onClick={loadStats} disabled={loading}>{loading ? '刷新中' : '刷新'}</button>
       </div>
 
