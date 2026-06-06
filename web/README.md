@@ -37,6 +37,15 @@ export ADMIN_SECRET='long-random-secret'
 export WIKI_USER='BotName'
 export WIKI_PASSWORD='...'
 
+# 结团统计导入必需：战报 TXT 由 LLM 解析，走 OpenAI 兼容接口
+export OPENAI_API_KEY='sk-...'                       # 或 THIRD_PARTY_API_KEY
+export OPENAI_BASE_URL='https://api.deepseek.com/v1' # 默认 https://api.openai.com/v1
+export OPENAI_MODEL='deepseek-v4-pro'                # 默认 deepseek-v4-pro
+# 可选：
+# export OPENAI_API_MODE='chat'            # chat | responses | auto（默认 auto，deepseek 开头自动走 chat/completions）
+# export OPENAI_TIMEOUT_SECONDS='180'      # 单次请求超时，默认 180 秒
+# export OPENAI_REQUEST_RETRIES='1'        # 超时重试次数，默认 1
+
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -69,6 +78,23 @@ npm run dev
 ```
 
 列表字段包含：相对路径、文件名、标题、根目录类型、分类路径、mtime、size、侧向、资源类型、作者、评分和片段。默认不返回全文；需要全文时传 `include_content=true`。
+
+### 结团统计
+
+前台「结团统计」页签：按月统计跑团数据。战报 TXT 由 LLM（OpenAI 兼容接口）解析入库，数据存 `web/data/session_stats.sqlite`。
+
+- `GET /api/session-stats/overview?month=2026-06`：月度概览（团数/玩家人次/总游戏小时/主持小时）。
+- `GET /api/session-stats/players?month=&sort=hours|games|hosts|name`：玩家统计（全量返回，前端翻页）。
+- `GET /api/session-stats/sessions?month=`：团列表。
+- `GET /api/session-stats/sessions/{id}`：团详情（参与者、raw_payload）。
+- `PATCH /api/session-stats/sessions/{id}`：编辑标题/时长。
+- `DELETE /api/session-stats/sessions/{id}`：删除团记录。
+- `POST /api/session-stats/import-jobs`：上传 TXT 创建异步导入任务（multipart：month/concurrency/files）。
+- `GET /api/session-stats/import-jobs/{job_id}`：轮询导入进度。
+- `POST /api/session-stats/dedupe?month=`：清理内容完全相同的重复团记录。
+- `GET /api/session-stats/errors?month=`：导入异常列表（需后台登录）。
+
+导入需要配置 `OPENAI_API_KEY`（或 `THIRD_PARTY_API_KEY`），见上方「启动后端」。同一文件内容（content_hash）重复导入会自动跳过（SKIP）。
 
 ### 规范化审核
 
