@@ -1853,7 +1853,7 @@ label, .current-file span {
   font-size: 12.5px;
   font-variant-numeric: tabular-nums;
 }
-.pager button.active {
+.pager button.on {
   background: var(--btn-bg-active);
   border-color: var(--accent-strong);
   color: var(--accent);

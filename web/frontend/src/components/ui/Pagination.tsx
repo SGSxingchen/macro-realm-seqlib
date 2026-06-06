@@ -27,7 +27,7 @@ export function Pagination({ page, pageCount, onChange }: {
           <button
             key={p}
             type="button"
-            className={p === page ? 'active' : ''}
+            className={p === page ? 'on' : ''}
             onClick={() => onChange(p)}
           >{p}</button>
         ))}
