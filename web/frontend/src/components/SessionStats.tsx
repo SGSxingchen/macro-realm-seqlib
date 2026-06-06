@@ -540,29 +540,33 @@ export function SessionStats() {
       <section className="stats-card">
         <div className="section-head">
           <h3>团列表</h3>
-          <span className="status-badge">{sessions.count} 条</span>
+          <span className="stats-count">{sessions.count} 条</span>
         </div>
-        <div className="stats-session-list">
-          {sessions.items.map(session => (
-            <article className="stats-session" key={session.id}>
-              <div className="stats-session-main">
-                <b>{session.title || '未命名团'}</b>
-                <small>{session.source_filename || '未知来源'}</small>
-              </div>
-              <div className="stats-session-meta">
-                <span><b>时长</b>{formatHours(session.duration_hours)} 小时</span>
-                <span><b>KP</b>{session.kp_name || '未知 KP'}{session.kp_qq ? ` (${session.kp_qq})` : ''}</span>
-                <span><b>PL</b>{session.pl_count}</span>
-                <span><b>置信度</b>{formatConfidence(session.confidence)}</span>
-              </div>
-              <div className="stats-session-actions">
-                <button type="button" onClick={() => openSessionDetail(session.id)} disabled={detailLoading}>查看</button>
-                <button type="button" className="danger" onClick={() => deleteSession(session.id)}>删除</button>
-              </div>
-            </article>
-          ))}
-          {!sessions.items.length && <div className="stats-empty">暂无结团记录。</div>}
-        </div>
+        {sessions.items.length ? (
+          <>
+            <div className="session-rows">
+              {pagedSessions.map(session => (
+                <article className="session-row" key={session.id}>
+                  <b className="session-title" title={session.title || undefined}>{session.title || '未命名团'}</b>
+                  <span className="session-kv">KP <b>{session.kp_name || '未知'}</b></span>
+                  <span className="session-kv">PL <b>×{session.pl_count}</b></span>
+                  <span className={`conf-badge ${confidenceTier(session.confidence)}`}>{formatConfidence(session.confidence)}</span>
+                  <span className="session-dur">{formatHours(session.duration_hours)}h</span>
+                  <span className="session-ops">
+                    <button type="button" onClick={() => openSessionDetail(session.id)} disabled={detailLoading}>查看</button>
+                    <button type="button" className="danger" onClick={() => deleteSession(session.id)}>删除</button>
+                  </span>
+                </article>
+              ))}
+            </div>
+            <Pagination page={sessionsPage} pageCount={sessionsPageCount} onChange={setSessionsPage} />
+          </>
+        ) : (
+          <div className="stats-empty">
+            <span className="stats-empty-icon">🎲</span>
+            <p>暂无结团记录,导入战报后这里会列出每一团</p>
+          </div>
+        )}
       </section>
 
       {(sessionDetail || detailLoading || detailError) && (
