@@ -448,11 +448,27 @@ export function SessionStats() {
 
       {error && <div className="notice-line error-box">{error}</div>}
 
-      <div className="stats-overview">
-        <span><b>{overview.session_count}</b>本月团数</span>
-        <span><b>{overview.participant_count}</b>玩家人次</span>
-        <span><b>{formatHours(overview.total_game_hours)}</b>总游戏小时</span>
-        <span><b>{formatHours(overview.total_host_hours)}</b>主持小时</span>
+      <div className="stats-kpis">
+        <div className="kpi">
+          <span className="kpi-label">本月团数</span>
+          <b className="kpi-num">{overview.session_count}</b>
+          <span className="kpi-sub">{prevOverview ? `上月 ${prevOverview.session_count}` : '—'}</span>
+        </div>
+        <div className="kpi">
+          <span className="kpi-label">玩家人次</span>
+          <b className="kpi-num">{overview.participant_count}</b>
+          <span className="kpi-sub">去重后 {players.count} 人</span>
+        </div>
+        <div className="kpi">
+          <span className="kpi-label">总游戏小时</span>
+          <b className="kpi-num">{formatHours(overview.total_game_hours)}<small>h</small></b>
+          <span className="kpi-sub">场均 {avgHours(overview.total_game_hours, overview.session_count)}</span>
+        </div>
+        <div className="kpi kpi-gold">
+          <span className="kpi-label">主持小时</span>
+          <b className="kpi-num">{formatHours(overview.total_host_hours)}<small>h</small></b>
+          <span className="kpi-sub">{prevOverview ? `上月 ${formatHours(prevOverview.total_host_hours)}h` : '—'}</span>
+        </div>
       </div>
 
       <section className="stats-card">
