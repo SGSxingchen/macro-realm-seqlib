@@ -19,6 +19,7 @@ export function Header({ recordCount, tab, onTab }: Props) {
         <ThemeToggle />
         <button type="button" className={tab === 'read' ? 'active' : ''} onClick={() => onTab('read')}>查阅</button>
         <button type="button" className={tab === 'updates' ? 'active' : ''} onClick={() => onTab('updates')}>最近更新</button>
+        <button type="button" className={tab === 'stats' ? 'active' : ''} onClick={() => onTab('stats')}>结团统计</button>
         <button type="button" className={tab === 'admin' ? 'active admin-entry' : 'admin-entry'} onClick={() => onTab('admin')}>后台</button>
       </nav>
     </header>

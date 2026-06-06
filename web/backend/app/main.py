@@ -12,16 +12,19 @@ import secrets
 import shutil
 import sys
 import subprocess
+import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Annotated, Iterable, Literal
 
-from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Query, Response, UploadFile
+from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from .search import SearchIndex
+from .session_stats import SessionStatsService, SessionTextFile
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ALLOWED_ROOTS = ("序列库", "荣誉室")
@@ -31,6 +34,11 @@ PROCESS_ENCODINGS = tuple(dict.fromkeys(("utf-8", locale.getpreferredencoding(Fa
 SESSION_COOKIE = "seqlib_admin"
 NORMALIZATION_REVIEW_DIR = REPO_ROOT / "web" / "normalization_reviews"
 NORMALIZATION_SIGNATURES_REQUIRED = 1
+SESSION_STATS_DB = REPO_ROOT / "web" / "data" / "session_stats.sqlite"
+SESSION_STATS_SERVICE: SessionStatsService | None = None
+SESSION_STATS_EXTRACTOR = None
+SESSION_IMPORT_JOBS: dict[str, dict] = {}
+SESSION_IMPORT_JOBS_LOCK = threading.Lock()
 
 app = FastAPI(title="宏观界域强化序列库 Web API", version="0.2.0")
 app.add_middleware(
@@ -181,6 +189,105 @@ def require_admin(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)
         raise HTTPException(401, "需要管理员登录")
 
 
+def session_stats_service() -> SessionStatsService:
+    global SESSION_STATS_SERVICE
+    if SESSION_STATS_SERVICE is None:
+        SESSION_STATS_SERVICE = SessionStatsService(SESSION_STATS_DB)
+    return SESSION_STATS_SERVICE
+
+
+def validate_stats_month(month: str) -> str:
+    value = month.strip()
+    if not re.fullmatch(r"\d{4}-\d{2}", value):
+        raise HTTPException(400, "月份格式必须为 YYYY-MM")
+    mm = int(value[-2:])
+    if mm < 1 or mm > 12:
+        raise HTTPException(400, "月份必须在 01 到 12 之间")
+    return value
+
+
+def validate_import_concurrency(concurrency: int) -> int:
+    if concurrency < 1:
+        return 1
+    if concurrency > 6:
+        return 6
+    return concurrency
+
+
+def decode_uploaded_txt(data: bytes) -> tuple[str, str]:
+    for enc in TEXT_ENCODINGS:
+        try:
+            return data.decode(enc), enc
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace"), "utf-8-replace"
+
+
+def session_stats_extractor():
+    return SESSION_STATS_EXTRACTOR
+
+
+def import_job_snapshot(job_id: str) -> dict:
+    with SESSION_IMPORT_JOBS_LOCK:
+        job = SESSION_IMPORT_JOBS.get(job_id)
+        if not job:
+            raise HTTPException(404, "导入任务不存在")
+        return dict(job)
+
+
+def update_import_job(job_id: str, **updates) -> None:
+    with SESSION_IMPORT_JOBS_LOCK:
+        job = SESSION_IMPORT_JOBS.get(job_id)
+        if not job:
+            return
+        job.update(updates)
+        job["updated_at"] = now_iso()
+
+
+def run_session_import_job(job_id: str, month: str, files: list[SessionTextFile], model_name: str, concurrency: int) -> None:
+    update_import_job(job_id, status="running", current_filename="")
+
+    def on_progress(item: dict, processed_count: int, success_count: int, failure_count: int) -> None:
+        current = str(item.get("filename") or "")
+        with SESSION_IMPORT_JOBS_LOCK:
+            job = SESSION_IMPORT_JOBS.get(job_id)
+            if not job:
+                return
+            job["processed_count"] = processed_count
+            job["success_count"] = success_count
+            job["failure_count"] = failure_count
+            if item.get("skipped") is True:
+                job["skip_count"] = int(job.get("skip_count") or 0) + 1
+            job["current_filename"] = current
+            job.setdefault("items", []).append(item)
+            job["updated_at"] = now_iso()
+
+    try:
+        result = session_stats_service().import_text_files(
+            month,
+            files,
+            extractor=session_stats_extractor(),
+            model_name=model_name,
+            concurrency=concurrency,
+            progress_callback=on_progress,
+        )
+    except Exception as exc:
+        update_import_job(job_id, status="failed", error=str(exc) or exc.__class__.__name__, current_filename="")
+        return
+
+    update_import_job(
+        job_id,
+        status="completed",
+        processed_count=len(files),
+        success_count=result["success_count"],
+        failure_count=result["failure_count"],
+        skip_count=result.get("skip_count", 0),
+        items=result["items"],
+        current_filename="",
+        error="",
+    )
+
+
 def run_cmd(args: list[str], timeout: int = 120) -> dict:
     started = time.time()
     try:
@@ -286,6 +393,11 @@ class MoveToHonorRequest(BaseModel):
     overwrite: bool = False
 
 
+class SessionStatsSessionUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=200)
+    duration_hours: float | None = Field(default=None, gt=0)
+
+
 class PublishRequest(BaseModel):
     version: str = Field(pattern=r"^v?\d+(?:\.\d+)*(?:[-\w.]*)?$")
     message: str = "更新序列库 latest"
@@ -348,6 +460,156 @@ def review_summary(review: dict) -> dict:
 @app.get("/api/health")
 def health():
     return {"ok": True, "repo": str(REPO_ROOT), "admin_configured": bool(admin_password()), "wiki_configured": wiki_credentials_configured()}
+
+
+@app.get("/api/session-stats/overview")
+def session_stats_overview(month: str):
+    month = validate_stats_month(month)
+    return session_stats_service().get_overview(month)
+
+
+@app.get("/api/session-stats/players")
+def session_stats_players(month: str, sort: Literal["games", "hours", "hosts", "name"] = "hours"):
+    month = validate_stats_month(month)
+    items = session_stats_service().list_players(month)
+    if sort == "games":
+        items.sort(key=lambda x: (-x["game_count"], -x["game_hours"], x["name"]))
+    elif sort == "hosts":
+        items.sort(key=lambda x: (-x["host_count"], -x["host_hours"], x["name"]))
+    elif sort == "name":
+        items.sort(key=lambda x: x["name"])
+    else:
+        items.sort(key=lambda x: (-x["game_hours"], -x["game_count"], x["name"]))
+    return {"items": items, "count": len(items), "month": month}
+
+
+@app.get("/api/session-stats/sessions")
+def session_stats_sessions(month: str):
+    month = validate_stats_month(month)
+    items = session_stats_service().list_sessions(month)
+    return {"items": items, "count": len(items), "month": month}
+
+
+@app.get("/api/session-stats/errors")
+def session_stats_errors(month: str, _admin: None = Depends(require_admin)):
+    month = validate_stats_month(month)
+    items = session_stats_service().list_errors(month)
+    return {"items": items, "count": len(items), "month": month}
+
+
+@app.post("/api/session-stats/import")
+async def session_stats_import(
+    month: str = Form(...),
+    files: list[UploadFile] = File(...),
+    _admin: None = Depends(require_admin),
+):
+    month = validate_stats_month(month)
+    text_files: list[SessionTextFile] = []
+    for file in files:
+        filename = file.filename or "未命名.txt"
+        if not filename.lower().endswith(".txt"):
+            raise HTTPException(400, f"只支持上传 .txt：{filename}")
+        data = await file.read()
+        if len(data) > 2_000_000:
+            raise HTTPException(413, f"TXT 过大：{filename}")
+        content, _encoding = decode_uploaded_txt(data)
+        text_files.append(SessionTextFile(filename=filename, content=content))
+    model_name = os.getenv("OPENAI_MODEL", "deepseek-v4-pro")
+    return session_stats_service().import_text_files(month, text_files, extractor=session_stats_extractor(), model_name=model_name)
+
+
+@app.post("/api/session-stats/import-jobs")
+async def session_stats_import_job_create(
+    month: str = Form(...),
+    concurrency: int = Form(1),
+    files: list[UploadFile] = File(...),
+    _admin: None = Depends(require_admin),
+):
+    month = validate_stats_month(month)
+    concurrency = validate_import_concurrency(concurrency)
+    text_files: list[SessionTextFile] = []
+    for file in files:
+        filename = file.filename or "未命名.txt"
+        if not filename.lower().endswith(".txt"):
+            raise HTTPException(400, f"只支持上传 .txt：{filename}")
+        data = await file.read()
+        if len(data) > 2_000_000:
+            raise HTTPException(413, f"TXT 过大：{filename}")
+        content, _encoding = decode_uploaded_txt(data)
+        text_files.append(SessionTextFile(filename=filename, content=content))
+    if not text_files:
+        raise HTTPException(400, "至少需要上传一个 TXT 文件")
+
+    job_id = uuid.uuid4().hex
+    now = now_iso()
+    job = {
+        "job_id": job_id,
+        "status": "running",
+        "month": month,
+        "total_count": len(text_files),
+        "processed_count": 0,
+        "success_count": 0,
+        "failure_count": 0,
+        "skip_count": 0,
+        "concurrency": concurrency,
+        "current_filename": "",
+        "items": [],
+        "error": "",
+        "created_at": now,
+        "updated_at": now,
+    }
+    with SESSION_IMPORT_JOBS_LOCK:
+        SESSION_IMPORT_JOBS[job_id] = job
+
+    model_name = os.getenv("OPENAI_MODEL", "deepseek-v4-pro")
+    thread = threading.Thread(
+        target=run_session_import_job,
+        args=(job_id, month, text_files, model_name, concurrency),
+        daemon=True,
+    )
+    thread.start()
+    return import_job_snapshot(job_id)
+
+
+@app.get("/api/session-stats/import-jobs/{job_id}")
+def session_stats_import_job_get(job_id: str, _admin: None = Depends(require_admin)):
+    return import_job_snapshot(job_id)
+
+
+@app.post("/api/session-stats/dedupe")
+def session_stats_dedupe(month: str, _admin: None = Depends(require_admin)):
+    month = validate_stats_month(month)
+    result = session_stats_service().cleanup_exact_duplicate_sessions_for_month(month)
+    return {"ok": True, "month": month, **result}
+
+
+@app.get("/api/session-stats/sessions/{session_id}")
+def session_stats_session_detail(session_id: int):
+    detail = session_stats_service().get_session_detail(session_id)
+    if not detail:
+        raise HTTPException(404, "团记录不存在")
+    return detail
+
+
+@app.patch("/api/session-stats/sessions/{session_id}")
+def session_stats_update_session(session_id: int, body: SessionStatsSessionUpdateRequest, _admin: None = Depends(require_admin)):
+    if body.title is None and body.duration_hours is None:
+        raise HTTPException(400, "没有可更新字段")
+    try:
+        detail = session_stats_service().update_session(session_id, title=body.title, duration_hours=body.duration_hours)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not detail:
+        raise HTTPException(404, "团记录不存在")
+    return {"ok": True, "session": detail}
+
+
+@app.delete("/api/session-stats/sessions/{session_id}")
+def session_stats_delete_session(session_id: int, _admin: None = Depends(require_admin)):
+    deleted = session_stats_service().delete_session(session_id)
+    if not deleted:
+        raise HTTPException(404, "团记录不存在")
+    return {"ok": True, "session_id": session_id}
 
 
 @app.get("/api/normalization/reviews")

@@ -15,7 +15,7 @@ export type Resource = {
 
 export type Detail = Resource & { content: string; encoding: string };
 
-export type AppTab = 'read' | 'updates' | 'admin';
+export type AppTab = 'read' | 'updates' | 'stats' | 'admin';
 
 export type TreeNode = { name: string; path: string; count: number; children: TreeNode[] };
 
@@ -156,4 +156,136 @@ export type SearchFilters = {
   kinds: string[];
   sides: string[];
   authors: string[];
+};
+
+export type SessionStatsOverview = {
+  session_count: number;
+  participant_count: number;
+  total_game_hours: number;
+  total_host_hours: number;
+};
+
+export type SessionStatsPlayerSort = 'hours' | 'games' | 'hosts' | 'name';
+
+export type SessionStatsPlayer = {
+  id: string | number;
+  name: string;
+  qq?: string | null;
+  game_count: number;
+  game_hours: number;
+  reincarnation_count: number;
+  host_count: number;
+  host_hours: number;
+};
+
+export type SessionStatsPlayersResponse = {
+  items: SessionStatsPlayer[];
+  count: number;
+  month: string;
+};
+
+export type SessionStatsSession = {
+  id: string | number;
+  title: string;
+  duration_hours: number;
+  source_filename: string;
+  kp_name?: string | null;
+  kp_qq?: string | null;
+  pl_count: number;
+  created_at?: string | null;
+  confidence?: number | null;
+  model_name?: string | null;
+};
+
+export type SessionStatsParticipant = {
+  id: string | number;
+  name: string;
+  qq?: string | null;
+  role?: string | null;
+  duration_hours?: number | null;
+  reincarnation_count?: number | null;
+  is_host?: boolean | null;
+};
+
+export type SessionStatsSessionDetail = {
+  id: string | number;
+  month: string;
+  title: string;
+  duration_hours: number;
+  source_filename: string;
+  model_name?: string | null;
+  confidence?: number | null;
+  raw_payload?: unknown;
+  created_at?: string | null;
+  kp?: {
+    id: string | number;
+    name: string;
+    qq?: string | null;
+  } | null;
+  participants: SessionStatsParticipant[];
+};
+
+export type SessionStatsSessionPatchResponse = {
+  ok: true;
+  session: SessionStatsSessionDetail;
+};
+
+export type SessionStatsSessionsResponse = {
+  items: SessionStatsSession[];
+  count: number;
+  month: string;
+};
+
+export type SessionStatsImportFileResult = {
+  filename?: string;
+  source_filename?: string;
+  title?: string;
+  success?: boolean;
+  skipped?: boolean;
+  ok?: boolean;
+  error?: string;
+  reason?: string;
+  detail?: string;
+  message?: string;
+  session_id?: string | number;
+  [key: string]: unknown;
+};
+
+export type SessionStatsImportResponse = {
+  success_count: number;
+  failure_count: number;
+  skip_count?: number;
+  items: SessionStatsImportFileResult[];
+};
+
+export type SessionStatsImportJob = {
+  job_id: string;
+  status: 'running' | 'completed' | 'failed';
+  month: string;
+  total_count: number;
+  processed_count: number;
+  success_count: number;
+  failure_count: number;
+  skip_count?: number;
+  concurrency?: number;
+  current_filename?: string;
+  items: SessionStatsImportFileResult[];
+  error?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type SessionStatsDedupeResponse = {
+  ok?: boolean;
+  month: string;
+  deleted_count: number;
+  kept?: Array<Record<string, unknown>>;
+  deleted?: Array<Record<string, unknown>>;
+};
+
+export type SessionStatsErrorItem = Record<string, unknown>;
+export type SessionStatsErrorsResponse = {
+  items: SessionStatsErrorItem[];
+  count: number;
+  month: string;
 };
