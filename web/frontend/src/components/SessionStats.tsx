@@ -303,6 +303,10 @@ export function SessionStats() {
   // 时长条比例尺:全月最大游戏时长(跨页一致)
   const maxGameHours = players.items.reduce((max, p) => Math.max(max, p.game_hours || 0), 0);
 
+  // 数据变化(如删除末页最后一条)后把页码夹回有效范围
+  useEffect(() => { if (playersPage > playersPageCount) setPlayersPage(playersPageCount); }, [playersPage, playersPageCount]);
+  useEffect(() => { if (sessionsPage > sessionsPageCount) setSessionsPage(sessionsPageCount); }, [sessionsPage, sessionsPageCount]);
+
   const deleteSession = async (id: string | number) => {
     if (!confirm('确认删除这条结团记录？')) return;
     try {
