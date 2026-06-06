@@ -455,48 +455,6 @@ export function SessionStats() {
         <span><b>{formatHours(overview.total_host_hours)}</b>主持小时</span>
       </div>
 
-      {(importJob || importResult || importNotice) && (
-        <section className="stats-card">
-          <div className="section-head">
-            <h3>导入结果</h3>
-            {importJob ? (
-              <span className="status-badge">
-                {importJob.processed_count}/{importJob.total_count} 已处理 · {importJob.success_count} 成功 / {importJob.failure_count} 失败
-              </span>
-            ) : importResult ? (
-              <span className="status-badge">{importResult.success_count} 成功 / {importResult.failure_count} 失败</span>
-            ) : null}
-            {(importJob || importResult) && <span className="status-badge">{(importJob?.skip_count ?? importResult?.skip_count) || 0} SKIP</span>}
-            <button type="button" onClick={retryFailedFiles} disabled={importing || !failedImportCount}>重试失败</button>
-          </div>
-          {importJob && (
-            <div className="stats-progress">
-              <div className="stats-progress-bar"><span style={{ width: `${importProgress}%` }} /></div>
-              <div className="stats-progress-meta">
-                <span>{importJob.status === 'running' ? '正在解析' : importJob.status === 'completed' ? '导入完成' : '导入失败'}</span>
-                <span>{importProgress}%</span>
-                {importJob.current_filename && <span>{importJob.current_filename}</span>}
-              </div>
-            </div>
-          )}
-          {importNotice && <p className="stats-muted">{importNotice}</p>}
-          {visibleImportItems.length ? (
-            <div className="stats-result-list">
-              {visibleImportItems.map((item, i) => {
-                const ok = importItemStatus(item);
-                return (
-                  <div className="stats-result" key={`${importItemName(item)}-${i}`}>
-                    <span className={`status-badge ${ok ? 'ok' : 'bad'}`}>{ok ? '成功' : '失败'}</span>
-                    <b>{importItemName(item)}</b>
-                    <small>{importItemMessage(item)}</small>
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-        </section>
-      )}
-
       <section className="stats-card">
         <div className="section-head">
           <h3>玩家统计</h3>
