@@ -475,11 +475,13 @@ export function SessionStats() {
         <div className="section-head">
           <h3>玩家统计</h3>
           <span className="stats-count">{players.count} 人</span>
-          <div className="sort-chips" role="tablist" aria-label="排序">
+          <div className="sort-chips" role="radiogroup" aria-label="排序">
             {([['hours', '游戏时长'], ['games', '游戏次数'], ['hosts', '主持次数'], ['name', '玩家名']] as const).map(([value, label]) => (
               <button
                 key={value}
                 type="button"
+                role="radio"
+                aria-checked={sort === value}
                 className={sort === value ? 'on' : ''}
                 onClick={() => setSort(value)}
               >{label}</button>
