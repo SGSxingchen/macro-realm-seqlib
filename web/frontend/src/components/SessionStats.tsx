@@ -474,45 +474,65 @@ export function SessionStats() {
       <section className="stats-card">
         <div className="section-head">
           <h3>玩家统计</h3>
-          <label className="stats-sort">
-            <span>排序</span>
-            <select value={sort} onChange={e => setSort(e.target.value as SessionStatsPlayerSort)}>
-              <option value="hours">游戏时长</option>
-              <option value="games">游戏次数</option>
-              <option value="hosts">主持次数</option>
-              <option value="name">玩家名</option>
-            </select>
-          </label>
+          <span className="stats-count">{players.count} 人</span>
+          <div className="sort-chips" role="tablist" aria-label="排序">
+            {([['hours', '游戏时长'], ['games', '游戏次数'], ['hosts', '主持次数'], ['name', '玩家名']] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={sort === value ? 'on' : ''}
+                onClick={() => setSort(value)}
+              >{label}</button>
+            ))}
+          </div>
         </div>
-        <div className="stats-table-wrap terminal-scroll">
-          <table className="stats-table">
-            <thead>
-              <tr>
-                <th>玩家名</th>
-                <th>QQ</th>
-                <th>游戏次数</th>
-                <th>游戏时长</th>
-                <th>轮回次数</th>
-                <th>主持次数</th>
-                <th>主持时长</th>
-              </tr>
-            </thead>
-            <tbody>
-              {players.items.map(player => (
-                <tr key={player.id}>
-                  <td data-label="玩家名">{player.name || '未命名'}</td>
-                  <td data-label="QQ">{player.qq || '未记录'}</td>
-                  <td data-label="游戏次数">{player.game_count}</td>
-                  <td data-label="游戏时长">{formatHours(player.game_hours)}</td>
-                  <td data-label="轮回次数">{player.reincarnation_count}</td>
-                  <td data-label="主持次数">{player.host_count}</td>
-                  <td data-label="主持时长">{formatHours(player.host_hours)}</td>
-                </tr>
-              ))}
-              {!players.items.length && <tr><td colSpan={7}>暂无玩家统计。</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        {players.items.length ? (
+          <>
+            <div className="stats-table-wrap terminal-scroll">
+              <table className="stats-table">
+                <thead>
+                  <tr>
+                    <th className="col-rank">#</th>
+                    <th>玩家</th>
+                    <th>QQ</th>
+                    <th className="col-num">次数</th>
+                    <th className="col-hours">游戏时长</th>
+                    <th className="col-num">轮回</th>
+                    <th className="col-num">主持</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedPlayers.map((player, i) => {
+                    const rank = (playersPage - 1) * PAGE_SIZE + i + 1;
+                    const topRank = sort !== 'name' && rank <= 3;
+                    return (
+                      <tr key={player.id}>
+                        <td className={topRank ? 'col-rank top' : 'col-rank'}>{rank}</td>
+                        <td className="col-name">{player.name || '未命名'}</td>
+                        <td className="col-qq">{player.qq || '—'}</td>
+                        <td className="col-num">{player.game_count}</td>
+                        <td className="col-hours">
+                          <span className="hbar">
+                            <span className="hbar-track"><i style={{ width: `${maxGameHours ? Math.round((player.game_hours / maxGameHours) * 100) : 0}%` }} /></span>
+                            <b>{formatHours(player.game_hours)}h</b>
+                          </span>
+                        </td>
+                        <td className="col-num">{player.reincarnation_count}</td>
+                        <td className="col-num">{player.host_count}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <Pagination page={playersPage} pageCount={playersPageCount} onChange={setPlayersPage} />
+          </>
+        ) : (
+          <div className="stats-empty">
+            <span className="stats-empty-icon">📊</span>
+            <p>本月还没有数据,导入战报后这里会出现统计</p>
+          </div>
+        )}
       </section>
 
       <section className="stats-card">
