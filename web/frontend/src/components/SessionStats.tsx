@@ -362,32 +362,89 @@ export function SessionStats() {
 
   return (
     <section className="stats-view terminal-scroll">
-      <div className="stats-toolbar">
-        <div>
-          <p className="eyebrow">结团统计</p>
-          <h2>{month} 结团数据</h2>
+      <div className="stats-main">
+      <div className="stats-head">
+        <h2>结团统计</h2>
+        <div className="month-switch">
+          <button type="button" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="上一月">‹</button>
+          <label>
+            <b>{monthLabel(month)}</b>
+            <input type="month" value={month} onChange={e => setMonth(e.target.value || currentMonth())} />
+          </label>
+          <button type="button" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="下一月">›</button>
         </div>
-        <label className="stats-field">
-          <span>月份</span>
-          <input type="month" value={month} onChange={e => setMonth(e.target.value || currentMonth())} />
-        </label>
-        <label className="stats-field stats-field-small">
-          <span>并发</span>
-          <select value={concurrency} onChange={e => setConcurrency(Number(e.target.value) || 1)} disabled={importing}>
-            {[1, 2, 3, 4, 5, 6].map(value => <option key={value} value={value}>{value}</option>)}
-          </select>
-        </label>
-        <label className="stats-file">
-          <span>{selectedFileText}</span>
-          <input type="file" accept=".txt,text/plain" multiple onChange={onPickFiles} />
-        </label>
-        <button type="button" onClick={() => startImportFiles(files)} disabled={importing || !files.length}>{importing ? '导入中' : '开始导入'}</button>
-        <button type="button" onClick={loadStats} disabled={loading}>{loading ? '刷新中' : '刷新'}</button>
+        <span className="stats-head-spacer" />
+        <button
+          type="button"
+          className={importing || importOpen ? 'import-toggle active' : 'import-toggle'}
+          onClick={() => setImportOpen(open => importing ? true : !open)}
+        >
+          {importing ? `导入中 ${importProgress}%` : '⬆ 导入战报'}
+        </button>
+        <button type="button" className="icon-btn" onClick={loadStats} disabled={loading} aria-label="刷新">↻</button>
       </div>
 
-      <div className="stats-action-row">
-        <button type="button" className="danger" onClick={dedupeMonth} disabled={deduping || importing}>{deduping ? '去重中' : '去重'}</button>
-      </div>
+      {(importOpen || importing) && (
+        <section className="stats-card import-panel">
+          <div className="section-head">
+            <h3>导入战报</h3>
+            <label className="stats-sort">
+              <span>并发</span>
+              <select value={concurrency} onChange={e => setConcurrency(Number(e.target.value) || 1)} disabled={importing}>
+                {[1, 2, 3, 4, 5, 6].map(value => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+            <button type="button" className="danger" onClick={dedupeMonth} disabled={deduping || importing}>{deduping ? '去重中' : '去重'}</button>
+            <button type="button" className="icon-btn" onClick={() => !importing && setImportOpen(false)} disabled={importing} aria-label="收起">×</button>
+          </div>
+          <label
+            className="import-drop"
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => {
+              e.preventDefault();
+              const dropped = Array.from(e.dataTransfer.files || []).filter(f => f.name.toLowerCase().endsWith('.txt'));
+              if (dropped.length) setFiles(dropped);
+            }}
+          >
+            <span className="import-drop-icon">⬆</span>
+            <span>{files.length ? selectedFileText : '拖入 TXT 战报,或点击选择文件'}</span>
+            <input type="file" accept=".txt,text/plain" multiple onChange={onPickFiles} />
+          </label>
+          <div className="import-actions">
+            <button type="button" className="primary" onClick={() => startImportFiles(files)} disabled={importing || !files.length}>
+              {importing ? '导入中' : `开始导入${files.length ? `（${files.length} 个文件）` : ''}`}
+            </button>
+            {failedImportCount > 0 && (
+              <button type="button" onClick={retryFailedFiles} disabled={importing}>重试失败（{failedImportCount}）</button>
+            )}
+          </div>
+          {importJob && (
+            <div className="stats-progress">
+              <div className="stats-progress-bar"><span style={{ width: `${importProgress}%` }} /></div>
+              <div className="stats-progress-meta">
+                <span>{importJob.status === 'running' ? '正在解析' : importJob.status === 'completed' ? '导入完成' : '导入失败'}</span>
+                <span>{importJob.processed_count}/{importJob.total_count} · 成功 {importJob.success_count} / 失败 {importJob.failure_count} / 跳过 {importJob.skip_count}</span>
+                {importJob.current_filename && <span className="mono-ellipsis">{importJob.current_filename}</span>}
+              </div>
+            </div>
+          )}
+          {importNotice && <p className="stats-muted">{importNotice}</p>}
+          {visibleImportItems.length ? (
+            <div className="stats-result-list">
+              {visibleImportItems.map((item, i) => {
+                const ok = importItemStatus(item);
+                return (
+                  <div className="stats-result" key={`${importItemName(item)}-${i}`}>
+                    <span className={`status-badge ${ok ? 'ok' : 'bad'}`}>{ok ? '成功' : '失败'}</span>
+                    <b>{importItemName(item)}</b>
+                    <small>{importItemMessage(item)}</small>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </section>
+      )}
 
       {error && <div className="notice-line error-box">{error}</div>}
 
@@ -600,6 +657,7 @@ export function SessionStats() {
           <div className="stats-empty">暂无异常。</div>
         )}
       </section>
+      </div>
     </section>
   );
 }
