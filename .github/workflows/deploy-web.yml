@@ -94,7 +94,18 @@ jobs:
           npm run build
 
           sudo systemctl restart "$DEPLOY_SERVICE"
-          sleep 2
           sudo systemctl is-active --quiet "$DEPLOY_SERVICE"
-          curl -fsS "$HEALTH_URL" >/dev/null
+
+          for i in $(seq 1 30); do
+            if curl -fsS "$HEALTH_URL" >/dev/null; then
+              echo "health check ok"
+              exit 0
+            fi
+            echo "waiting for health check... ${i}/30"
+            sleep 2
+          done
+
+          echo "health check failed after waiting"
+          sudo systemctl status "$DEPLOY_SERVICE" --no-pager -l || true
+          exit 1
           REMOTE
