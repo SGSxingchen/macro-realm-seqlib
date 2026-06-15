@@ -46,8 +46,10 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s
-' '${{ secrets.DEPLOY_SSH_KEY }}' > ~/.ssh/deploy_key
+          cat > ~/.ssh/deploy_key <<'KEY'
+          ${{ secrets.DEPLOY_SSH_KEY }}
+          KEY
+          sed -i 's/^          //' ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
           HOST="$DEPLOY_HOST"
