@@ -46,17 +46,27 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          cat > ~/.ssh/deploy_key <<'KEY'
-          ${{ secrets.DEPLOY_SSH_KEY }}
-          KEY
-          sed -i 's/^          //' ~/.ssh/deploy_key
+          printf '%s
+' '${{ secrets.DEPLOY_SSH_KEY }}' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p "${DEPLOY_PORT:-22}" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+          HOST="$DEPLOY_HOST"
+          HOST="${HOST#http://}"
+          HOST="${HOST#https://}"
+          HOST="${HOST%%/*}"
+          PORT="${DEPLOY_PORT:-22}"
+          echo "ssh target: ${HOST}:${PORT}"
+          ssh-keygen -y -f ~/.ssh/deploy_key >/dev/null
+          ssh-keyscan -T 15 -p "$PORT" -H "$HOST" >> ~/.ssh/known_hosts
 
       - name: 线上拉取、构建、重启
         shell: bash
         run: |
-          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST" \
+          HOST="$DEPLOY_HOST"
+          HOST="${HOST#http://}"
+          HOST="${HOST#https://}"
+          HOST="${HOST%%/*}"
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$HOST" \
             "DEPLOY_PATH='${DEPLOY_PATH:-/root/AstrBot/data/workspaces/macro-realm-seqlib}' DEPLOY_SERVICE='${DEPLOY_SERVICE:-macro-realm-seqlib.service}' HEALTH_URL='${HEALTH_URL:-https://trpg.chordvers.org/api/health}' bash -s" <<'REMOTE'
           set -euo pipefail
 
