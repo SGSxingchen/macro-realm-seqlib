@@ -1,0 +1,81 @@
+name: 部署 trpg.chordvers.org
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "web/**"
+      - "序列库/**"
+      - "荣誉室/**"
+      - "wiki/**"
+      - "*.txt"
+      - "README.md"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-trpg-web
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: 拉取并重启线上服务
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      DEPLOY_SERVICE: ${{ vars.DEPLOY_SERVICE }}
+      HEALTH_URL: ${{ vars.HEALTH_URL }}
+
+    steps:
+      - name: 检查部署密钥配置
+        shell: bash
+        run: |
+          test -n "$DEPLOY_HOST" || { echo "缺少 GitHub Secret: DEPLOY_HOST"; exit 1; }
+          test -n "$DEPLOY_USER" || { echo "缺少 GitHub Secret: DEPLOY_USER"; exit 1; }
+          test -n "${{ secrets.DEPLOY_SSH_KEY }}" || { echo "缺少 GitHub Secret: DEPLOY_SSH_KEY"; exit 1; }
+
+      - name: 配置 SSH
+        shell: bash
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          cat > ~/.ssh/deploy_key <<'KEY'
+          ${{ secrets.DEPLOY_SSH_KEY }}
+          KEY
+          sed -i 's/^          //' ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${DEPLOY_PORT:-22}" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: 线上拉取、构建、重启
+        shell: bash
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "DEPLOY_PATH='${DEPLOY_PATH:-/root/AstrBot/data/workspaces/macro-realm-seqlib}' DEPLOY_SERVICE='${DEPLOY_SERVICE:-macro-realm-seqlib.service}' HEALTH_URL='${HEALTH_URL:-https://trpg.chordvers.org/api/health}' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          cd "$DEPLOY_PATH"
+          git pull --ff-only origin main
+
+          cd "$DEPLOY_PATH/web/backend"
+          if [ ! -x .venv/bin/python ]; then
+            python3 -m venv .venv
+          fi
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements.txt
+
+          cd "$DEPLOY_PATH/web/frontend"
+          npm ci
+          npm run build
+
+          sudo systemctl restart "$DEPLOY_SERVICE"
+          sleep 2
+          sudo systemctl is-active --quiet "$DEPLOY_SERVICE"
+          curl -fsS "$HEALTH_URL" >/dev/null
+          REMOTE
