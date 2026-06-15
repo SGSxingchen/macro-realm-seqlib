@@ -56,7 +56,10 @@ jobs:
           HOST="${HOST#http://}"
           HOST="${HOST#https://}"
           HOST="${HOST%%/*}"
-          PORT="${DEPLOY_PORT:-22}"
+          PORT="$(printf '%s' "${DEPLOY_PORT:-61149}" | tr -cd '0-9')"
+          if [ -z "$PORT" ] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+            PORT=61149
+          fi
           echo "ssh target: ${HOST}:${PORT}"
           ssh-keygen -y -f ~/.ssh/deploy_key >/dev/null
           ssh-keyscan -T 15 -p "$PORT" -H "$HOST" >> ~/.ssh/known_hosts
@@ -68,7 +71,11 @@ jobs:
           HOST="${HOST#http://}"
           HOST="${HOST#https://}"
           HOST="${HOST%%/*}"
-          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$HOST" \
+          PORT="$(printf '%s' "${DEPLOY_PORT:-61149}" | tr -cd '0-9')"
+          if [ -z "$PORT" ] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+            PORT=61149
+          fi
+          ssh -i ~/.ssh/deploy_key -p "$PORT" "$DEPLOY_USER@$HOST" \
             "DEPLOY_PATH='${DEPLOY_PATH:-/root/AstrBot/data/workspaces/macro-realm-seqlib}' DEPLOY_SERVICE='${DEPLOY_SERVICE:-macro-realm-seqlib.service}' HEALTH_URL='${HEALTH_URL:-https://trpg.chordvers.org/api/health}' bash -s" <<'REMOTE'
           set -euo pipefail
 
