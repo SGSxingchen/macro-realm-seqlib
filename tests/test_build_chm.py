@@ -1,7 +1,7 @@
 from pathlib import Path
 import zipfile
 
-from build_chm import configured_root_files, create_zip, should_include_root_file
+from build_chm import configured_root_files, create_zip, load_build_config, should_include_root_file
 
 
 def touch(tmp_path: Path, name: str) -> Path:
@@ -74,3 +74,19 @@ def test_create_zip_uses_configured_root_files(tmp_path: Path):
     assert "6.4序列库编者注.txt" not in names
     assert "第八批下架名单.txt" not in names
     assert "序列库/001】示例.txt" in names
+
+
+def test_repository_has_independent_v66_release_files():
+    repo_root = Path(__file__).resolve().parents[1]
+    config = load_build_config(repo_root)
+    root_files_config = configured_root_files(config, "v6.6")
+
+    assert root_files_config == {
+        "6.6序列库编者注.txt",
+        "V6.6序列库更新日志.txt",
+        "第十批下架名单.txt",
+        "第十一批下架名单.txt",
+        "资源标准模板.txt",
+    }
+    assert all((repo_root / name).is_file() for name in root_files_config)
+    assert "V6.5序列库更新日志.txt" not in root_files_config

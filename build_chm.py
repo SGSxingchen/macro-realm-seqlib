@@ -724,6 +724,8 @@ def main():
     create_index_page(build_dir, title, display_version)
     print()
 
+    chm_succeeded = True
+
     # --- 4 & 5. CHM ---
     if not args.skip_chm:
         print("[4/6] 生成 CHM 项目文件（GBK 编码）...")
@@ -743,8 +745,10 @@ def main():
                 print(f"      输出: {chm_dst} ({size_mb:.1f} MB)\n")
             else:
                 print("      [!] CHM 文件未生成\n")
+                chm_succeeded = False
         else:
             print("      CHM 编译失败\n")
+            chm_succeeded = False
     else:
         print("[4/6] 跳过 CHM\n[5/6] 跳过 CHM\n")
 
@@ -765,6 +769,9 @@ def main():
     # 清理
     if build_dir.exists():
         shutil.rmtree(build_dir)
+
+    if not chm_succeeded:
+        raise SystemExit("CHM 编译失败或产物缺失，终止发布构建")
 
     print("=" * 50)
     print("  构建完成!")

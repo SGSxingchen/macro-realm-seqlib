@@ -11,16 +11,17 @@ TRPG（桌面角色扮演游戏）"宏观界域"的强化序列资料库。包�
 ├── .github/workflows/    # GitHub Actions 自动发布
 │   └── release.yml
 ├── tools/hhw/            # 内置的 HTML Help Workshop（hhc.exe + 依赖 DLL）
-├── 序列库/               # 当前版本在用的资源（~820个文件）
+├── 序列库/               # 当前版本在用的资源（725个文件）
 │   ├── 公共建筑/
 │   ├── 技能表/
 │   ├── 能量池/
 │   ├── 特质改造/
 │   └── 职业/
-├── 荣誉室/               # 已下架/归档的历史资源（~240个文件）
-├── 6.2序列库编者注.txt
-├── V6.2序列库更新日志.docx
-└── 第六批下架名单.txt
+├── 荣誉室/               # 已下架/归档的历史资源（325个文件）
+├── 6.6序列库编者注.txt
+├── V6.6序列库更新日志.txt
+├── 第十批下架名单.txt
+└── 第十一批下架名单.txt
 ```
 
 ## 构建系统
@@ -28,18 +29,18 @@ TRPG（桌面角色扮演游戏）"宏观界域"的强化序列资料库。包�
 ### 构建命令
 ```bash
 # 完整构建（CHM + ZIP）
-python build_chm.py --version v6.2
+python build_chm.py --version v6.6
 
 # 只构建 ZIP
-python build_chm.py --version v6.2 --skip-chm
+python build_chm.py --version v6.6 --skip-chm
 
 # 只构建 CHM
-python build_chm.py --version v6.2 --skip-zip
+python build_chm.py --version v6.6 --skip-zip
 ```
 
 ### 输出文件命名格式
 `宏观界域强化序列库V{版本号}.chm` / `.zip`
-例：`宏观界域强化序列库V6.2.chm`
+例：`宏观界域强化序列库V6.6.chm`
 
 ### 构建依赖
 - **Python 3**
@@ -71,8 +72,9 @@ CHM 格式不支持 UTF-8，全程统一使用 GBK 编码：
 ```bash
 git add .
 git commit -m "更新内容"
-git tag v6.2
-git push origin main --tags
+git tag -a v6.6 -m "发布 V6.6 序列库更新"
+git push origin main
+git push origin v6.6
 # GitHub Actions 自动构建并创建 Release
 ```
 

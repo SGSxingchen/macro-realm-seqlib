@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "版本号（如 v6.2）"
+        description: "版本号（如 v6.6）"
         required: true
         default: "dev"
 
@@ -62,6 +62,29 @@ jobs:
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Nls\CodePage' -Name 'OEMCP' -Value '936'
           Write-Host "ACP/OEMCP 已设置为 936 (GBK)"
 
+      - name: 校验版本发布配置
+        shell: bash
+        run: |
+          python - "${{ steps.version.outputs.version }}" <<'PY'
+          import sys
+          from pathlib import Path
+          from build_chm import configured_root_files, load_build_config
+
+          version = sys.argv[1]
+          root_files = configured_root_files(load_build_config(Path('.')), version)
+          if root_files is None:
+              if version.lower() == "dev":
+                  print("dev 试构建未绑定版本根文件白名单，继续使用通用筛选规则")
+                  raise SystemExit(0)
+              raise SystemExit(f"未找到 {version} 对应的 root_files 发布配置")
+          missing = sorted(name for name in root_files if not Path(name).is_file())
+          if missing:
+              raise SystemExit("发布配置缺少文件：" + "、".join(missing))
+          print(f"{version} 根目录发布文件：")
+          for name in sorted(root_files):
+              print(f"- {name}")
+          PY
+
       - name: 构建 CHM 和 ZIP
         shell: cmd
         run: |
@@ -70,7 +93,34 @@ jobs:
 
       - name: 列出产物
         shell: bash
-        run: ls -lh dist/
+        run: |
+          ls -lh dist/
+          python - "${{ steps.version.outputs.version }}" <<'PY'
+          import shutil
+          import sys
+          from pathlib import Path
+          from build_chm import configured_root_files, load_build_config
+
+          version = sys.argv[1].lstrip('vV')
+          expected = [
+              Path('dist') / f'宏观界域强化序列库V{version}.chm',
+              Path('dist') / f'宏观界域强化序列库V{version}.zip',
+          ]
+          invalid = [str(path) for path in expected if not path.is_file() or path.stat().st_size == 0]
+          if invalid:
+              raise SystemExit('发布产物缺失或为空：' + '、'.join(invalid))
+
+          if version.lower() == 'dev':
+              print('dev 试构建不生成 Release 正文文件')
+              raise SystemExit(0)
+
+          root_files = configured_root_files(load_build_config(Path('.')), version)
+          changelogs = sorted(name for name in (root_files or set()) if name.startswith('V') and '序列库更新日志' in name)
+          if len(changelogs) != 1:
+              raise SystemExit(f'{version} 必须配置且只能配置一份版本更新日志，当前为：{changelogs}')
+          shutil.copyfile(changelogs[0], Path('dist') / 'release-notes.txt')
+          print(f'Release 正文来源：{changelogs[0]}')
+          PY
 
       # tag 推送时：创建 GitHub Release
       - name: 创建 Release
@@ -81,7 +131,8 @@ jobs:
           files: |
             dist/*.chm
             dist/*.zip
-          generate_release_notes: true
+          body_path: dist/release-notes.txt
+          fail_on_unmatched_files: true
 
       # 手动触发时：上传为 Artifact
       - name: 上传构建产物
@@ -90,3 +141,4 @@ jobs:
         with:
           name: "序列库-${{ steps.version.outputs.version }}"
           path: dist/*
+          if-no-files-found: error
