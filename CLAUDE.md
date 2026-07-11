@@ -29,18 +29,18 @@ TRPG（桌面角色扮演游戏）"宏观界域"的强化序列资料库。包�
 ### 构建命令
 ```bash
 # 完整构建（CHM + ZIP）
-python build_chm.py --version v6.6
+python build_chm.py --version v6.6.1
 
 # 只构建 ZIP
-python build_chm.py --version v6.6 --skip-chm
+python build_chm.py --version v6.6.1 --skip-chm
 
 # 只构建 CHM
-python build_chm.py --version v6.6 --skip-zip
+python build_chm.py --version v6.6.1 --skip-zip
 ```
 
 ### 输出文件命名格式
 `宏观界域强化序列库V{版本号}.chm` / `.zip`
-例：`宏观界域强化序列库V6.6.chm`
+例：`宏观界域强化序列库V6.6.1.chm`
 
 ### 构建依赖
 - **Python 3**
@@ -72,9 +72,9 @@ CHM 格式不支持 UTF-8，全程统一使用 GBK 编码：
 ```bash
 git add .
 git commit -m "更新内容"
-git tag -a v6.6 -m "发布 V6.6 序列库更新"
+git tag -a v6.6.1 -m "发布 V6.6.1 序列库补丁"
 git push origin main
-git push origin v6.6
+git push origin v6.6.1
 # GitHub Actions 自动构建并创建 Release
 ```
 
