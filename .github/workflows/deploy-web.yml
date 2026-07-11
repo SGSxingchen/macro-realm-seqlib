@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
     paths:
       - "web/**"
       - "序列库/**"
@@ -80,6 +82,7 @@ jobs:
           set -euo pipefail
 
           cd "$DEPLOY_PATH"
+          git fetch --force --tags origin
           git pull --ff-only origin main
 
           cd "$DEPLOY_PATH/web/backend"
