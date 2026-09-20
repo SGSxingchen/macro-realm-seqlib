@@ -48,4 +48,4 @@ python tools/renumber_resources.py --skip-title-update
 
 ## 编码说明
 
-源资源 `.txt` 按投稿规范保持 UTF-8。工具读取时会兼容尝试 UTF-8、UTF-8-SIG、GBK、GB2312、Big5；写回时统一保存为 UTF-8。
+源资源 `.txt` 按投稿规范保持 UTF-8。工具通过统一解码入口兼容 UTF-8、UTF-8-SIG、UTF-16、GBK、GB2312、Big5；写回时统一保存为 UTF-8。

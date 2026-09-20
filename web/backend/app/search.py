@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
+from text_encoding import read_text as read_decoded_text
+
 try:
     from pypinyin import lazy_pinyin, Style  # type: ignore
     _PINYIN_OK = True
@@ -58,17 +60,11 @@ AUTHOR_ROLE_PATTERN = "|".join(map(re.escape, AUTHOR_ROLES))
 AUTHOR_LINE_RE = re.compile(
     rf"[（(]\s*(?:{AUTHOR_ROLE_PATTERN})\s*[：:]\s*(.*?)\s*[)）](?=\s*(?:[（(]\s*(?:{AUTHOR_ROLE_PATTERN})\s*[：:]|$))"
 )
-TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "gbk", "gb2312", "big5")
 SIDE_NAMES = ("战技侧", "神秘侧", "科技侧", "特殊侧")
 
 
 def _read_text(path: Path) -> str:
-    for enc in TEXT_ENCODINGS:
-        try:
-            return path.read_text(encoding=enc)
-        except (UnicodeDecodeError, UnicodeError):
-            continue
-    return path.read_text(encoding="utf-8", errors="replace")
+    return read_decoded_text(path)[0]
 
 
 def normalize(text: str) -> str:

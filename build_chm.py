@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Optional
 
 from xlsx_to_chm_html import convert_xlsx_to_html_document
+from text_encoding import read_text as read_decoded_text
 
 # ============================================================
 # 配置
@@ -101,12 +102,7 @@ def sort_key(name: str):
 
 def read_text_file(path: Path) -> str:
     """读取文本文件，自动检测编码"""
-    for enc in ("utf-8", "utf-8-sig", "gbk", "gb2312", "big5"):
-        try:
-            return path.read_text(encoding=enc)
-        except (UnicodeDecodeError, UnicodeError):
-            continue
-    return path.read_text(encoding="utf-8", errors="replace")
+    return read_decoded_text(path)[0]
 
 
 def gbk_safe(text: str) -> str:
