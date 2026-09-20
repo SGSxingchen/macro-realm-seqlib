@@ -7,7 +7,7 @@
 .realm-library .workbench-topline .workbench-tab-strip { flex: 1 1 0; min-width: 0; padding: 0; align-items: center; }
 .realm-library .workbench-topline .workbench-controls { flex: 0 0 auto; flex-wrap: nowrap; border: 0; padding: 0; background: transparent; gap: 5px; }
 .realm-library .workbench-topline .workbench-controls button { white-space: nowrap; min-height: 34px; }
-.realm-library .workbench-topline .workbench-swap { width: 34px; padding: 0; font-size: 19px; }
+.realm-library .workbench-topline .workbench-controls .workbench-swap { width: 34px; height: 34px; padding: 0; font-size: 19px; line-height: 1; }
 .realm-library .workbench-reference-settings { position: relative; }
 .realm-library .workbench-reference-settings > summary { list-style: none; cursor: pointer; border: 1px solid var(--r-line); border-radius: 7px; background: var(--r-raised); color: var(--r-warm); padding: 7px 9px; min-height: 34px; font-size: 11px; white-space: nowrap; }
 .realm-library .workbench-reference-settings > summary::-webkit-details-marker { display: none; }
@@ -48,14 +48,14 @@
   .realm-library .workbench-topline .workbench-tab-strip, .realm-library .realm-workspace.results-hidden .workbench-tab-strip { flex-basis: 100%; }
   .realm-library .workbench-topline .workbench-controls { margin: 0; width: 100%; justify-content: flex-end; gap: 5px; }
   .realm-library .workbench-topline .workbench-controls button, .realm-library .workbench-reference-settings > summary { min-height: 40px; padding: 9px 10px; }
-  .realm-library .workbench-topline .workbench-swap { width: 40px; padding: 0; }
+  .realm-library .workbench-topline .workbench-controls .workbench-swap { width: 40px; height: 40px; padding: 0; line-height: 1; }
   .realm-library .workbench-reference-settings { position: static; }
   .realm-library .workbench-reference-popover { left: 0; right: 0; width: auto; max-width: 100%; }
   .realm-library .compact-phone-panes { flex: 0 0 auto; margin: 0 0 6px; padding: 0; gap: 5px; }
   .realm-library .compact-phone-panes button { padding: 6px 10px; min-height: 38px; }
   .realm-library .split .realm-reader-toolbar::before { display: none; }
   .realm-library .realm-reader-toolbar { padding: 5px 8px; }
-  .realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-topbar { flex-wrap: nowrap; padding: 5px 8px; gap: 6px; }
+  .realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-topbar { flex-wrap: nowrap; padding: 4px 8px; gap: 6px; }
   .realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-brand > span:not(.realm-brand-mark) { display: none; }
   .realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-topbar nav { width: auto; min-width: 0; flex: 1; justify-content: flex-end; gap: 2px; }
   .realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-topbar nav button { min-height: 36px; padding-inline: 5px; font-size: 11px; }
