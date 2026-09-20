@@ -1,0 +1,62 @@
+/* Compact reading chrome. Content font sizes and source rendering are unchanged.
+   Scoped to the library so stats, admin and normalization views are unaffected. */
+.realm-library .realm-layout-controls { padding: 6px 12px; gap: 6px; border-bottom: 1px solid var(--r-soft-line); }
+.realm-library .realm-layout-controls > .realm-overline { display: none; }
+.realm-library .realm-workspace { padding-top: 8px; }
+.realm-library .workbench-topline { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; min-width: 0; position: relative; z-index: 8; padding: 0 0 8px; }
+.realm-library .workbench-topline .workbench-tab-strip { flex: 1 1 0; min-width: 0; padding: 0; align-items: center; }
+.realm-library .workbench-topline .workbench-controls { flex: 0 0 auto; flex-wrap: nowrap; border: 0; padding: 0; background: transparent; gap: 5px; }
+.realm-library .workbench-topline .workbench-controls button { white-space: nowrap; min-height: 34px; }
+.realm-library .workbench-topline .workbench-controls .workbench-swap { width: 34px; height: 34px; padding: 0; font-size: 19px; line-height: 1; }
+.realm-library .workbench-reference-settings { position: relative; }
+.realm-library .workbench-reference-settings > summary { list-style: none; cursor: pointer; border: 1px solid var(--r-line); border-radius: 7px; background: var(--r-raised); color: var(--r-warm); padding: 7px 9px; min-height: 34px; font-size: 11px; white-space: nowrap; }
+.realm-library .workbench-reference-settings > summary::-webkit-details-marker { display: none; }
+.realm-library .workbench-reference-settings[open] > summary { border-color: var(--r-accent); }
+.realm-library .workbench-reference-popover { position: absolute; right: 0; top: calc(100% + 8px); width: 330px; max-width: calc(100vw - 32px); padding: 14px; border: 1px solid var(--r-line); border-radius: 10px; box-shadow: 0 10px 32px #0004; background: var(--r-panel); color: var(--r-text); }
+.realm-library .workbench-reference-popover label { font-size: 12px; color: var(--r-muted); text-transform: none; letter-spacing: 0; }
+.realm-library .workbench-reference-popover select { margin-top: 8px; font-size: 13px; background: var(--r-raised); color: var(--r-text); border-color: var(--r-line); min-width: 0; }
+.realm-library .workbench-reference-popover p { margin: 10px 0 0; font-size: 12px; line-height: 1.8; color: var(--r-muted); }
+.realm-library .realm-reader-toolbar { padding: 6px 10px; gap: 5px; }
+.realm-library .split .workbench-primary .realm-reader-toolbar::before { content: '主'; font-size: 11px; color: var(--r-accent); padding-right: 6px; border-right: 1px solid var(--r-line); }
+.realm-library .split .workbench-reference .realm-reader-toolbar::before { content: '参照'; font-size: 11px; color: var(--r-warm); padding-right: 6px; border-right: 1px solid var(--r-line); }
+.realm-library .workbench-primary > .realm-reader, .realm-library .workbench-reference > .realm-reader { border-top-left-radius: 9px; border-top-right-radius: 9px; }
+/* Focus mode still offers every navigation and exit control. It loses branding
+   ornament and redundant row spacing, not controls or readable text size. */
+.realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-topbar { min-height: 44px; padding: 5px 12px; gap: 10px; }
+.realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-brand-mark { width: 28px; height: 28px; font-size: 23px; border-radius: 7px 2px; }
+.realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-brand { gap: 9px; }
+.realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-brand small,
+.realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-brand strong span,
+.realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-library-count { display: none; }
+.realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-brand strong { font-size: 16px; }
+.realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-topbar nav { margin-left: auto; }
+.realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-topbar nav button { padding-block: 5px; min-height: 32px; }
+.realm-library:has(.realm-focus-toggle[aria-pressed="true"]) .realm-document-heading { padding-top: 18px; padding-bottom: 14px; }
+.realm-library:has(.realm-focus-toggle[aria-pressed="true"]) .realm-document-heading > .realm-overline { display: none; }
+.realm-library:has(.realm-focus-toggle[aria-pressed="true"]) .realm-reading-note { margin-bottom: 16px; }
+@media (max-width: 1180px) {
+  .realm-library .workbench-topline { flex-wrap: wrap; }
+  .realm-library .workbench-topline .workbench-tab-strip { flex-basis: 100%; }
+  .realm-library .workbench-topline .workbench-controls { margin-left: auto; }
+  /* When panels are gone, there is room for one shared tab/action row. */
+  .realm-library .realm-workspace.results-hidden .workbench-topline { flex-wrap: nowrap; }
+  .realm-library .realm-workspace.results-hidden .workbench-tab-strip { flex-basis: 0; }
+}
+@media (max-width: 820px) {
+  .realm-library .realm-layout-controls { padding: 4px 8px; }
+  .realm-library .workbench-topline, .realm-library .realm-workspace.results-hidden .workbench-topline { flex-wrap: wrap; gap: 4px; padding-bottom: 6px; }
+  .realm-library .workbench-topline .workbench-tab-strip, .realm-library .realm-workspace.results-hidden .workbench-tab-strip { flex-basis: 100%; }
+  .realm-library .workbench-topline .workbench-controls { margin: 0; width: 100%; justify-content: flex-end; gap: 5px; }
+  .realm-library .workbench-topline .workbench-controls button, .realm-library .workbench-reference-settings > summary { min-height: 40px; padding: 9px 10px; }
+  .realm-library .workbench-topline .workbench-controls .workbench-swap { width: 40px; height: 40px; padding: 0; line-height: 1; }
+  .realm-library .workbench-reference-settings { position: static; }
+  .realm-library .workbench-reference-popover { left: 0; right: 0; width: auto; max-width: 100%; }
+  .realm-library .compact-phone-panes { flex: 0 0 auto; margin: 0 0 6px; padding: 0; gap: 5px; }
+  .realm-library .compact-phone-panes button { padding: 6px 10px; min-height: 38px; }
+  .realm-library .split .realm-reader-toolbar::before { display: none; }
+  .realm-library .realm-reader-toolbar { padding: 5px 8px; }
+  .realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-topbar { flex-wrap: nowrap; padding: 4px 8px; gap: 6px; }
+  .realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-brand > span:not(.realm-brand-mark) { display: none; }
+  .realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-topbar nav { width: auto; min-width: 0; flex: 1; justify-content: flex-end; gap: 2px; }
+  .realm-library:is(:has(.realm-focus-toggle[aria-pressed="true"]), :has(.realm-workspace.index-hidden.results-hidden)) .realm-topbar nav button { min-height: 36px; padding-inline: 5px; font-size: 11px; }
+}
