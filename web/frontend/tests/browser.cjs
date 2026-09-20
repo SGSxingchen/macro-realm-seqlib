@@ -65,7 +65,7 @@ async function noOverflow(page) {
   if (size.readerWidth) assert.ok(size.readerScroll <= size.readerWidth + 1, JSON.stringify(size));
   assert.equal(size.overlap, false, 'Virtualized cards overlap');
 }
-async function shot(page, name) { await page.screenshot({ path: path.join(out, name + '.png'), fullPage: true }); }
+async function shot(page, name) { await page.screenshot({ path: path.join(out, name + '.png'), fullPage: true, animations: 'disabled' }); }
 
 (async () => {
   const browser = await chromium.launch({ headless: true });
@@ -108,6 +108,8 @@ async function shot(page, name) { await page.screenshot({ path: path.join(out, n
     await page.getByRole('button', { name: '自适应', exact: true }).click();
     await noOverflow(page);
     await shot(page, 'desktop-dark-reader');
+    await page.evaluate(() => { document.querySelector('.realm-reader-scroll').scrollTop = 0; });
+    await shot(page, 'desktop-dark-reader-top');
     await page.getByRole('button', { name: '切换主题' }).click();
     await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
     await shot(page, 'desktop-light-reader');

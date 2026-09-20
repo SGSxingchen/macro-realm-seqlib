@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, buildQuery, routePath } from './api';
 import type { Detail, ResourceListResponse, SearchFilters, TreeNode } from './types';
 import { Header } from './components/Header';
@@ -12,7 +12,6 @@ import { NormalizationReviewPage } from './components/NormalizationReview';
 import { SessionStats } from './components/SessionStats';
 import { emptyFilters, loadSaved, locationUrl, readLocation, saveResources } from './library-state';
 import type { LocationState } from './library-state';
-import './realm.css';
 
 export function App() {
   return window.location.pathname === '/normalize-review' ? <NormalizationReviewPage /> : <LibraryApp />;
@@ -37,6 +36,7 @@ function LibraryApp() {
   const filterButton = useRef<HTMLButtonElement>(null);
   const listRequest = useRef<AbortController | null>(null);
   const pending = useRef(false);
+  const focusSearchAfterNavigation = useRef(false);
   const nextOffset = useRef(0);
   const detailCache = useRef(new Map<string, Detail>());
   const key = JSON.stringify(nav.filters);
@@ -131,12 +131,21 @@ function LibraryApp() {
     return () => mq.removeEventListener('change', resize);
   }, []);
 
+  // Focus after React has made the mobile result panel visible, not in a
+  // requestAnimationFrame that can run before a concurrent navigation commits.
+  useLayoutEffect(() => {
+    if (focusSearchAfterNavigation.current && nav.tab === 'read' && !nav.openPath) {
+      focusSearchAfterNavigation.current = false;
+      document.querySelector<HTMLInputElement>('#realm-query')?.focus();
+    }
+  }, [nav.openPath, nav.tab]);
+
   useEffect(() => {
     const searchShortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && navRef.current.tab === 'read' && navRef.current.openPath && window.matchMedia('(max-width: 820px)').matches) {
         event.preventDefault();
+        focusSearchAfterNavigation.current = true;
         navigate({ openPath: '', anchor: '' }, true);
-        requestAnimationFrame(() => document.querySelector<HTMLInputElement>('#realm-query')?.focus());
       }
     };
     window.addEventListener('keydown', searchShortcut);
