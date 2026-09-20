@@ -1,32 +1,15 @@
-import { Resource } from '../types';
-import { kb, highlight } from '../utils';
+import type { Resource } from '../types';
+import { highlight } from '../utils';
+import { resourceLink } from './Reader/adaptive';
 
-type Props = {
-  item: Resource;
-  active: boolean;
-  onOpen: () => void;
-  highlightTokens: string[];
-};
-
-export function ResourceCard({ item, active, onOpen, highlightTokens }: Props) {
-  const titleParts = highlight(item.title, highlightTokens);
-  return (
-    <button type="button" className={active ? 'res-card active' : 'res-card'} onClick={onOpen}>
-      <div className="res-card-row">
-        {item.side && <span className="res-tag tag-side">{item.side}</span>}
-        {item.top_kind && item.top_kind !== item.side && <span className="res-tag tag-kind">{item.top_kind}</span>}
-      </div>
-      <b>{titleParts.map((p, i) => p.mark ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>)}</b>
-      {item.snippet && (
-        <small className="res-snippet">
-          {highlight(item.snippet, highlightTokens).map((p, i) => p.mark ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>)}
-        </small>
-      )}
-      <small className="res-path">{item.path}</small>
-      <span className="card-meta">
-        <em>{item.category || '根目录'}</em>
-        <em>{kb(item.size)}</em>
-      </span>
-    </button>
-  );
+type Props = { item: Resource; active: boolean; onOpen: () => void; highlightTokens: string[]; index?: number };
+export function ResourceCard({ item, active, onOpen, highlightTokens, index }: Props) {
+  const marked = (text: string) => highlight(text, highlightTokens).map((part, i) => part.mark ? <mark key={i}>{part.text}</mark> : <span key={i}>{part.text}</span>);
+  return <a href={resourceLink(item.path)} className={`realm-resource-card${active ? ' selected' : ''}`} data-resource-index={index} aria-current={active ? 'true' : undefined} onClick={event => {
+    if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); onOpen(); }
+  }}>
+    <div className="realm-resource-tags">{item.top_kind && <span>{item.top_kind}</span>}{item.side && item.side !== item.top_kind && <span>{item.side}</span>}<span className="resource-open-mark" aria-hidden="true">↗</span></div>
+    <strong title={item.title}>{marked(item.title)}</strong>
+    <div className="realm-resource-snippet">{marked(item.snippet || item.category || '打开查看完整档案')}</div>
+  </a>;
 }
