@@ -23,13 +23,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from text_encoding import decode_text_bytes, read_text as read_decoded_text
 from .search import SearchIndex
 from .session_stats import SessionStatsService, SessionTextFile
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
 ALLOWED_ROOTS = ("序列库", "荣誉室")
 PUBLIC_ROOTS = ("序列库",)
-TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "gbk", "gb2312", "big5")
 PROCESS_ENCODINGS = tuple(dict.fromkeys(("utf-8", locale.getpreferredencoding(False), sys.getfilesystemencoding(), "gbk", "gb2312")))
 SESSION_COOKIE = "seqlib_admin"
 NORMALIZATION_REVIEW_DIR = REPO_ROOT / "web" / "normalization_reviews"
@@ -63,12 +66,7 @@ def _warm_index() -> None:
 
 
 def read_text(path: Path) -> tuple[str, str]:
-    for enc in TEXT_ENCODINGS:
-        try:
-            return path.read_text(encoding=enc), enc
-        except (UnicodeDecodeError, UnicodeError):
-            continue
-    return path.read_text(encoding="utf-8", errors="replace"), "utf-8-replace"
+    return read_decoded_text(path)
 
 
 def write_text_utf8(path: Path, content: str) -> None:
@@ -215,12 +213,7 @@ def validate_import_concurrency(concurrency: int) -> int:
 
 
 def decode_uploaded_txt(data: bytes) -> tuple[str, str]:
-    for enc in TEXT_ENCODINGS:
-        try:
-            return data.decode(enc), enc
-        except UnicodeDecodeError:
-            continue
-    return data.decode("utf-8", errors="replace"), "utf-8-replace"
+    return decode_text_bytes(data)
 
 
 def session_stats_extractor():
@@ -884,18 +877,7 @@ async def upload_txt(path: str, file: UploadFile = File(...), _admin: None = Dep
     data = await file.read()
     if len(data) > 2_000_000:
         raise HTTPException(413, "TXT 过大")
-    text = None
-    used = ""
-    for enc in TEXT_ENCODINGS:
-        try:
-            text = data.decode(enc)
-            used = enc
-            break
-        except UnicodeDecodeError:
-            continue
-    if text is None:
-        text = data.decode("utf-8", errors="replace")
-        used = "utf-8-replace"
+    text, used = decode_text_bytes(data)
     before = git("status", "--short", "--", path)
     write_text_utf8(full, text)
     SEARCH_INDEX.invalidate(path)
@@ -1229,12 +1211,7 @@ def safe_git_path(rel_path: str, *, allowed_roots: tuple[str, ...]) -> str:
 
 
 def decode_blob(data: bytes) -> tuple[str, str]:
-    for enc in TEXT_ENCODINGS:
-        try:
-            return data.decode(enc), enc
-        except UnicodeDecodeError:
-            continue
-    return data.decode("utf-8", errors="replace"), "utf-8-replace"
+    return decode_text_bytes(data)
 
 
 def git_text_at(ref: str, rel_path: str) -> tuple[str, str, bool]:

@@ -9,9 +9,17 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from text_encoding import read_text as read_decoded_text
 
 
 NUMBERED_NAME_RE = re.compile(r"^(?P<number>\d+)】(?P<title>.+)$")
@@ -95,12 +103,7 @@ def final_path_for(path: Path, renames: list[RenameItem]) -> Path:
 
 
 def read_text_file(path: Path) -> str:
-    for encoding in ("utf-8", "utf-8-sig", "gbk", "gb2312", "big5"):
-        try:
-            return path.read_text(encoding=encoding)
-        except UnicodeDecodeError:
-            continue
-    return path.read_text(encoding="utf-8", errors="replace")
+    return read_decoded_text(path)[0]
 
 
 def text_first_line(text: str) -> str:

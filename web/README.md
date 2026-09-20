@@ -68,7 +68,7 @@ npm run dev
 - `GET /api/health`：健康检查与后台是否配置。
 - `GET /api/tree`：公开前台分类树，仅包含 `序列库/`。
 - `GET /api/resources?q=&root=&category=&kinds=&sides=&authors=&limit=200&offset=0&include_content=false`：资源列表/智能搜索。
-- `GET /api/resources/{path}`：资源详情，自动兼容 `utf-8/utf-8-sig/gbk/gb2312/big5`。
+- `GET /api/resources/{path}`：资源详情，统一解码入口兼容 `utf-8/utf-8-sig/utf-16/gbk/gb2312/big5`；正式资源写回统一保存为 UTF-8。
 - `GET /api/raw/{path}`：纯文本内容。
 
 `kinds`、`sides`、`authors` 是可重复 query 参数，例如：

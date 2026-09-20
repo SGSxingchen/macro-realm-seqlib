@@ -39,6 +39,12 @@ import sys
 import time
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from text_encoding import read_text as read_decoded_text
+
 try:
     import mwclient
 except ImportError:
@@ -85,12 +91,7 @@ RATE_LIMIT_RETRIES = 3  # 最大重试次数
 
 def read_text_file(path: Path) -> str:
     """读取文本文件，自动检测编码（与 build_chm.py 逻辑一致）"""
-    for enc in ("utf-8", "utf-8-sig", "gbk", "gb2312", "big5"):
-        try:
-            return path.read_text(encoding=enc)
-        except (UnicodeDecodeError, UnicodeError):
-            continue
-    return path.read_text(encoding="utf-8", errors="replace")
+    return read_decoded_text(path)[0]
 
 
 def sort_key(name: str):
