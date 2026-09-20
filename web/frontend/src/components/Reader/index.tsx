@@ -7,12 +7,15 @@ import { AdaptiveSection } from './AdaptiveDocument';
 type Props = {
   detail: Detail | null; loading?: boolean; error?: string; anchor?: string; query?: string; saved?: boolean;
   onBack?: () => void; onRetry?: () => void; onAnchor?: (id: string) => void; onBrowse?: () => void; onSave?: () => boolean | undefined;
+  instance?: string; idPrefix?: string;
 };
+type ReadingPreferences = { mode: 'adaptive' | 'raw'; find: string; findOpen: boolean; initialQuery: string };
 const positions = new Map<string, number>();
+const preferences = new Map<string, ReadingPreferences>();
 
 export function Reader(props: Props) {
-  if (props.error) return <article className="realm-reader"><button className="realm-back" onClick={props.onBack}>← 返回结果</button><div className="realm-reader-state" role="alert"><h2>暂时无法打开这份档案</h2><p>资源可能已改名、下架，或网络暂不可用。不会自动替换成同名条目。</p><button onClick={props.onRetry}>重新加载</button><details><summary>错误详情</summary><pre>{props.error}</pre></details></div></article>;
-  if (props.loading) return <article className="realm-reader" aria-busy="true"><button className="realm-back" onClick={props.onBack}>← 返回结果</button><div className="realm-reader-state"><p role="status">正在展开档案…</p><div className="realm-skeleton"><div /><div /><div /></div></div></article>;
+  if (props.error) return <article className="realm-reader">{props.onBack && <button className="realm-back" onClick={props.onBack}>← 返回结果</button>}<div className="realm-reader-state" role="alert"><h2>暂时无法打开这份档案</h2><p>资源可能已改名、下架，或网络暂不可用。不会自动替换成同名条目。</p><button onClick={props.onRetry}>重新加载</button><details><summary>错误详情</summary><pre>{props.error}</pre></details></div></article>;
+  if (props.loading) return <article className="realm-reader" aria-busy="true">{props.onBack && <button className="realm-back" onClick={props.onBack}>← 返回结果</button>}<div className="realm-reader-state"><p role="status">正在展开档案…</p><div className="realm-skeleton"><div /><div /><div /></div></div></article>;
   if (!props.detail) return <article className="realm-reader realm-welcome">
     <div className="realm-overline">BETWEEN WORLDS · BEYOND LIMITS</div>
     <div className="realm-gate" aria-hidden="true"><i /><i /><span>∞</span></div>
@@ -22,14 +25,17 @@ export function Reader(props: Props) {
     <button className="realm-primary" onClick={props.onBrowse}>开始检索 <span aria-hidden="true">↗</span></button>
     <div className="realm-welcome-notes"><span><kbd>Ctrl / ⌘ K</kbd> 快速搜索</span><span>多词检索 · 拼音能力以搜索框提示为准</span><span>原文保留 · 规则不作改写</span></div>
   </article>;
-  return <ReaderContent key={props.detail.path} {...props} detail={props.detail} />;
+  return <ReaderContent key={`${props.instance || 'primary'}:${props.detail.path}`} {...props} detail={props.detail} />;
 }
 
-function ReaderContent({ detail, anchor = '', query = '', saved, onBack, onAnchor, onSave }: Props & { detail: Detail }) {
+function ReaderContent({ detail, anchor = '', query = '', saved, onBack, onAnchor, onSave, instance = 'primary', idPrefix = '' }: Props & { detail: Detail }) {
   const sections = useMemo(() => buildDocument(detail.content), [detail.content]);
-  const [mode, setMode] = useState<'adaptive' | 'raw'>('adaptive');
-  const [findOpen, setFindOpen] = useState(Boolean(query));
-  const [find, setFind] = useState(query);
+  const identity = `${instance}:${detail.path}`;
+  const remembered = useRef(preferences.get(identity));
+  const [mode, setMode] = useState<'adaptive' | 'raw'>(remembered.current?.mode || 'adaptive');
+  const sameQuery = remembered.current?.initialQuery === query;
+  const [findOpen, setFindOpen] = useState(sameQuery ? remembered.current!.findOpen : Boolean(query));
+  const [find, setFind] = useState(sameQuery ? remembered.current!.find : query);
   const [matchCount, setMatchCount] = useState(0);
   const [matchIndex, setMatchIndex] = useState(0);
   const [notice, setNotice] = useState('');
@@ -38,17 +44,19 @@ function ReaderContent({ detail, anchor = '', query = '', saved, onBack, onAncho
   const toc = useRef<HTMLDetailsElement>(null);
   const findInput = useRef<HTMLInputElement>(null);
   const matches = useRef<HTMLElement[]>([]);
-  const previousQuery = useRef<string | null>(null);
-  const timer = useRef<number | undefined>(undefined);
   const activeQuery = findOpen ? find : '';
+  const previousQuery = useRef<string | null>(remembered.current ? activeQuery : null);
+  const initialSearchQuery = useRef(query);
+  const timer = useRef<number | undefined>(undefined);
 
   const reveal = (element: HTMLElement) => {
     const node = scroll.current;
     if (!node) return;
     node.scrollTop += element.getBoundingClientRect().top - node.getBoundingClientRect().top - 20;
   };
+  const getSection = (id: string) => scroll.current?.querySelector<HTMLElement>(`#${CSS.escape(idPrefix + id)}`);
   const jump = (id: string) => {
-    const target = scroll.current?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+    const target = getSection(id);
     if (target) reveal(target);
     if (toc.current) toc.current.open = false;
     onAnchor?.(id);
@@ -56,21 +64,30 @@ function ReaderContent({ detail, anchor = '', query = '', saved, onBack, onAncho
   useLayoutEffect(() => {
     const node = scroll.current;
     if (!node) return;
-    const key = `${detail.path}:${mode}`;
-    const target = anchor ? node.querySelector<HTMLElement>(`#${CSS.escape(anchor)}`) : null;
+    const key = `${identity}:${mode}`;
+    const target = anchor ? getSection(anchor) : null;
     if (target) reveal(target); else node.scrollTop = positions.get(key) || 0;
-    return () => { if (positions.size > 60) positions.delete(positions.keys().next().value!); positions.set(key, node.scrollTop); };
-  }, [detail.path, mode]);
+    return () => { if (positions.size > 100) positions.delete(positions.keys().next().value!); positions.set(key, node.scrollTop); };
+  }, [identity, mode]);
   useEffect(() => {
     if (!anchor) return;
-    const target = scroll.current?.querySelector<HTMLElement>(`#${CSS.escape(anchor)}`);
+    const target = getSection(anchor);
     if (target) reveal(target);
   }, [anchor]);
   useEffect(() => {
-    if (window.matchMedia('(max-width: 820px)').matches) title.current?.focus({ preventScroll: true });
+    if (instance === 'primary' && window.matchMedia('(max-width: 820px)').matches) title.current?.focus({ preventScroll: true });
     return () => clearTimeout(timer.current);
-  }, [detail.path]);
-  useEffect(() => { setFind(query); if (query) setFindOpen(true); }, [query]);
+  }, [detail.path, instance]);
+  useEffect(() => {
+    if (query !== initialSearchQuery.current) {
+      initialSearchQuery.current = query;
+      setFind(query); if (query) setFindOpen(true);
+    }
+  }, [query]);
+  useEffect(() => {
+    if (preferences.size > 60) preferences.delete(preferences.keys().next().value!);
+    preferences.set(identity, { mode, find, findOpen, initialQuery: query });
+  }, [identity, mode, find, findOpen, query]);
   useEffect(() => {
     matches.current = Array.from(scroll.current?.querySelectorAll<HTMLElement>('[data-reader-match]') || []);
     matches.current.forEach(node => node.removeAttribute('data-current'));
@@ -99,11 +116,11 @@ function ReaderContent({ detail, anchor = '', query = '', saved, onBack, onAncho
 
   return <article className="realm-reader">
     <div className="realm-reader-toolbar">
-      <button className="realm-back" onClick={onBack}>← 结果</button>
+      {onBack && <button className="realm-back" onClick={onBack}>← 结果</button>}
       <details ref={toc} className="realm-toc"><summary>目录 <span>{sections.length}</span></summary><nav aria-label="文档目录">{sections.map(section => <button key={section.id} onClick={() => jump(section.id)}>{section.title}</button>)}</nav></details>
       <button aria-expanded={findOpen} onClick={() => { setFindOpen(v => !v); requestAnimationFrame(() => findInput.current?.focus()); }}>文内查找</button>
       <div className="realm-mode" role="group" aria-label="阅读方式"><button aria-pressed={mode === 'adaptive'} onClick={() => setMode('adaptive')}>自适应</button><button aria-pressed={mode === 'raw'} onClick={() => setMode('raw')}>原文</button></div>
-      <button aria-pressed={!!saved} onClick={() => { const ok = onSave?.(); notify(ok === false ? '浏览器未能持久保存，本次更改仅在当前页面有效。' : saved ? '已取消收藏' : '已加入随行档案，仅保存在此浏览器'); }}>{saved ? '★ 已收藏' : '☆ 收藏'}</button>
+      {onSave && <button aria-pressed={!!saved} onClick={() => { const ok = onSave(); notify(ok === false ? '浏览器未能持久保存，本次更改仅在当前页面有效。' : saved ? '已取消收藏' : '已加入随行档案，仅保存在此浏览器'); }}>{saved ? '★ 已收藏' : '☆ 收藏'}</button>}
     </div>
     {findOpen && <div className="realm-find"><input ref={findInput} type="search" aria-label="文内精确查找" placeholder="在当前正文精确查找…" value={find} onChange={e => setFind(e.target.value)} onKeyDown={e => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); nextMatch(e.shiftKey ? -1 : 1); } if (e.key === 'Escape') setFindOpen(false); }} /><span role="status">{matchCount ? `${matchIndex + 1} / ${matchCount}` : find ? '无精确匹配' : '输入关键词'}</span><button disabled={!matchCount} aria-label="上一个匹配" onClick={() => nextMatch(-1)}>↑</button><button disabled={!matchCount} aria-label="下一个匹配" onClick={() => nextMatch(1)}>↓</button><button aria-label="关闭文内查找" onClick={() => setFindOpen(false)}>×</button></div>}
     <div ref={scroll} className="realm-reader-scroll">
@@ -113,7 +130,7 @@ function ReaderContent({ detail, anchor = '', query = '', saved, onBack, onAncho
       </header>
       <div className="realm-reading-note">{mode === 'adaptive' ? '按明确字段辅助排版；非标准内容按原有顺序保留。规则以原文为准。' : '原文视图：保留完整内容、换行与顺序。'}</div>
       <div className={`realm-document-content${mode === 'raw' ? ' is-raw' : ''}`}>
-        {sections.length ? sections.map(section => <AdaptiveSection key={section.id} section={section} rawMode={mode === 'raw'} query={activeQuery} onCopy={text => copy(text)} onShare={id => copy(resourceLink(detail.path, id), '已复制条目定位链接')} />) : <p>这份档案暂无正文。</p>}
+        {sections.length ? sections.map(section => <AdaptiveSection key={section.id} section={section} idPrefix={idPrefix} rawMode={mode === 'raw'} query={activeQuery} onCopy={text => copy(text)} onShare={id => copy(resourceLink(detail.path, id), '已复制条目定位链接')} />) : <p>这份档案暂无正文。</p>}
       </div>
       <footer className="realm-document-footer">END OF ARCHIVE <span>宏观界域 · 强化序列库</span><button onClick={() => { if (scroll.current) scroll.current.scrollTop = 0; onAnchor?.(''); }}>回到顶部 ↑</button></footer>
     </div>

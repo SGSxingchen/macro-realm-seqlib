@@ -18,13 +18,13 @@ export function MarkedText({ text, query }: { text: string; query: string }) {
   return <>{nodes}</>;
 }
 
-export function AdaptiveSection({ section, query, rawMode, onCopy, onShare }: {
-  section: Section; query: string; rawMode: boolean;
+export function AdaptiveSection({ section, query, rawMode, onCopy, onShare, idPrefix = '' }: {
+  section: Section; query: string; rawMode: boolean; idPrefix?: string;
   onCopy: (raw: string) => void; onShare: (id: string) => void;
 }) {
   const [showSource, setShowSource] = useState(false);
   return (
-    <section id={section.id} className={`archive-section archive-${section.kind}${rawMode ? ' archive-raw' : ''}`} aria-label={section.title}>
+    <section id={idPrefix + section.id} data-section-id={section.id} className={`archive-section archive-${section.kind}${rawMode ? ' archive-raw' : ''}`} aria-label={section.title}>
       {!rawMode && section.kind !== 'intro' && (
         <header className="archive-section-bar">
           <span>{section.kind === 'entry' ? '能力 / 条目' : '章节 / 记录'}</span>

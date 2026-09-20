@@ -26,8 +26,8 @@ jobs:
           cache-dependency-path: web/frontend/package-lock.json
       - run: npm ci
       - run: npm run build
-      - name: Lossless presentation and full source-corpus tests
-        run: node --test tests/archive.test.cjs
+      - name: Lossless presentation and workbench state tests
+        run: node --test tests/*.test.cjs
       - name: Install isolated browser-test tooling (no application dependencies changed)
         run: |
           npm install --prefix "$RUNNER_TEMP/realm-browser" --no-package-lock --no-audit --no-fund playwright@1.51.1
@@ -45,6 +45,7 @@ jobs:
             sleep 1
           done
           node tests/browser.cjs
+          node tests/workbench-browser.cjs
       - name: Upload UI screenshots and failure evidence
         if: always()
         uses: actions/upload-artifact@v4
