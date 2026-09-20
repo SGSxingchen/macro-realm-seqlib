@@ -1,0 +1,35 @@
+name: Tactical tabletop checks
+on:
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'tests/**'
+      - '.github/workflows/tabletop-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve canvas dependencies in isolated checkout
+        run: |
+          cd web/frontend
+          npm ci
+          npm install --save-exact react-konva@19 konva@10
+          npm run build
+      - name: Export source and dependency snapshot for offline implementation
+        run: |
+          tar --exclude='web/data' --exclude='*.sqlite*' --exclude='*.env' --exclude='**/.venv' -czf /tmp/tabletop-dev-snapshot.tgz AGENTS.md web/backend web/frontend tests .github
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tabletop-dev-snapshot
+          path: /tmp/tabletop-dev-snapshot.tgz
+          retention-days: 1
