@@ -1,0 +1,55 @@
+name: Frontend archive checks
+on:
+  pull_request:
+    paths:
+      - 'web/frontend/**'
+      - '.github/workflows/frontend-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frontend-archive-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Lossless presentation and full source-corpus tests
+        run: node --test tests/archive.test.cjs
+      - name: Install isolated browser-test tooling (no application dependencies changed)
+        run: |
+          npm install --prefix "$RUNNER_TEMP/realm-browser" --no-package-lock --no-audit --no-fund playwright@1.51.1
+          "$RUNNER_TEMP/realm-browser/node_modules/.bin/playwright" install --with-deps chromium
+          sudo apt-get install -y fonts-noto-cjk
+      - name: Desktop/mobile browser regressions against deterministic mock API
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/realm-browser/node_modules/playwright
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/realm-preview.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then break; fi
+            sleep 1
+          done
+          node tests/browser.cjs
+      - name: Upload UI screenshots and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: realm-archive-ui
+          path: web/frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
