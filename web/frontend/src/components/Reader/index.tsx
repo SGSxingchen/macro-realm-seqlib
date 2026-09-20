@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { Detail } from '../../types';
 import { copyText } from '../../library-state';
 import { buildDocument, resourceLink } from './adaptive';
@@ -7,15 +8,15 @@ import { AdaptiveSection } from './AdaptiveDocument';
 type Props = {
   detail: Detail | null; loading?: boolean; error?: string; anchor?: string; query?: string; saved?: boolean;
   onBack?: () => void; onRetry?: () => void; onAnchor?: (id: string) => void; onBrowse?: () => void; onSave?: () => boolean | undefined;
-  instance?: string; idPrefix?: string;
+  instance?: string; idPrefix?: string; toolbarLead?: ReactNode;
 };
 type ReadingPreferences = { mode: 'adaptive' | 'raw'; find: string; findOpen: boolean; initialQuery: string };
 const positions = new Map<string, number>();
 const preferences = new Map<string, ReadingPreferences>();
 
 export function Reader(props: Props) {
-  if (props.error) return <article className="realm-reader">{props.onBack && <button className="realm-back" onClick={props.onBack}>← 返回结果</button>}<div className="realm-reader-state" role="alert"><h2>暂时无法打开这份档案</h2><p>资源可能已改名、下架，或网络暂不可用。不会自动替换成同名条目。</p><button onClick={props.onRetry}>重新加载</button><details><summary>错误详情</summary><pre>{props.error}</pre></details></div></article>;
-  if (props.loading) return <article className="realm-reader" aria-busy="true">{props.onBack && <button className="realm-back" onClick={props.onBack}>← 返回结果</button>}<div className="realm-reader-state"><p role="status">正在展开档案…</p><div className="realm-skeleton"><div /><div /><div /></div></div></article>;
+  if (props.error) return <article className="realm-reader">{props.toolbarLead && <div className="realm-reader-toolbar">{props.toolbarLead}</div>}{props.onBack && <button className="realm-back" onClick={props.onBack}>← 返回结果</button>}<div className="realm-reader-state" role="alert"><h2>暂时无法打开这份档案</h2><p>资源可能已改名、下架，或网络暂不可用。不会自动替换成同名条目。</p><button onClick={props.onRetry}>重新加载</button><details><summary>错误详情</summary><pre>{props.error}</pre></details></div></article>;
+  if (props.loading) return <article className="realm-reader" aria-busy="true">{props.toolbarLead && <div className="realm-reader-toolbar">{props.toolbarLead}</div>}{props.onBack && <button className="realm-back" onClick={props.onBack}>← 返回结果</button>}<div className="realm-reader-state"><p role="status">正在展开档案…</p><div className="realm-skeleton"><div /><div /><div /></div></div></article>;
   if (!props.detail) return <article className="realm-reader realm-welcome">
     <div className="realm-overline">BETWEEN WORLDS · BEYOND LIMITS</div>
     <div className="realm-gate" aria-hidden="true"><i /><i /><span>∞</span></div>
@@ -28,7 +29,7 @@ export function Reader(props: Props) {
   return <ReaderContent key={`${props.instance || 'primary'}:${props.detail.path}`} {...props} detail={props.detail} />;
 }
 
-function ReaderContent({ detail, anchor = '', query = '', saved, onBack, onAnchor, onSave, instance = 'primary', idPrefix = '' }: Props & { detail: Detail }) {
+function ReaderContent({ detail, anchor = '', query = '', saved, onBack, onAnchor, onSave, instance = 'primary', idPrefix = '', toolbarLead }: Props & { detail: Detail }) {
   const sections = useMemo(() => buildDocument(detail.content), [detail.content]);
   const identity = `${instance}:${detail.path}`;
   const remembered = useRef(preferences.get(identity));
@@ -48,6 +49,7 @@ function ReaderContent({ detail, anchor = '', query = '', saved, onBack, onAncho
   const previousQuery = useRef<string | null>(remembered.current ? activeQuery : null);
   const initialSearchQuery = useRef(query);
   const timer = useRef<number | undefined>(undefined);
+  const readingNote = mode === 'adaptive' ? '按明确字段辅助排版；非标准内容按原有顺序保留。规则以原文为准。' : '原文视图：保留完整内容、换行与顺序。';
 
   const reveal = (element: HTMLElement) => {
     const node = scroll.current;
@@ -116,19 +118,20 @@ function ReaderContent({ detail, anchor = '', query = '', saved, onBack, onAncho
 
   return <article className="realm-reader">
     <div className="realm-reader-toolbar">
-      {onBack && <button className="realm-back" onClick={onBack}>← 结果</button>}
+      {onBack && <button className="realm-back" aria-label="返回结果" onClick={onBack}>←<span className="reader-back-text"> 结果</span></button>}
+      {toolbarLead}
       <details ref={toc} className="realm-toc"><summary>目录 <span>{sections.length}</span></summary><nav aria-label="文档目录">{sections.map(section => <button key={section.id} onClick={() => jump(section.id)}>{section.title}</button>)}</nav></details>
       <button aria-expanded={findOpen} onClick={() => { setFindOpen(v => !v); requestAnimationFrame(() => findInput.current?.focus()); }}>文内查找</button>
       <div className="realm-mode" role="group" aria-label="阅读方式"><button aria-pressed={mode === 'adaptive'} onClick={() => setMode('adaptive')}>自适应</button><button aria-pressed={mode === 'raw'} onClick={() => setMode('raw')}>原文</button></div>
-      {onSave && <button aria-pressed={!!saved} onClick={() => { const ok = onSave(); notify(ok === false ? '浏览器未能持久保存，本次更改仅在当前页面有效。' : saved ? '已取消收藏' : '已加入随行档案，仅保存在此浏览器'); }}>{saved ? '★ 已收藏' : '☆ 收藏'}</button>}
+      {onSave && <button className="reader-bookmark" aria-label={saved ? '★ 已收藏' : '☆ 收藏'} title={saved ? '取消收藏' : '收藏此档案'} aria-pressed={!!saved} onClick={() => { const ok = onSave(); notify(ok === false ? '浏览器未能持久保存，本次更改仅在当前页面有效。' : saved ? '已取消收藏' : '已加入随行档案，仅保存在此浏览器'); }}><span aria-hidden="true">{saved ? '★' : '☆'}</span><span className="reader-bookmark-text">{saved ? ' 已收藏' : ' 收藏'}</span></button>}
     </div>
     {findOpen && <div className="realm-find"><input ref={findInput} type="search" aria-label="文内精确查找" placeholder="在当前正文精确查找…" value={find} onChange={e => setFind(e.target.value)} onKeyDown={e => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); nextMatch(e.shiftKey ? -1 : 1); } if (e.key === 'Escape') setFindOpen(false); }} /><span role="status">{matchCount ? `${matchIndex + 1} / ${matchCount}` : find ? '无精确匹配' : '输入关键词'}</span><button disabled={!matchCount} aria-label="上一个匹配" onClick={() => nextMatch(-1)}>↑</button><button disabled={!matchCount} aria-label="下一个匹配" onClick={() => nextMatch(1)}>↓</button><button aria-label="关闭文内查找" onClick={() => setFindOpen(false)}>×</button></div>}
     <div ref={scroll} className="realm-reader-scroll">
       <header className="realm-document-heading"><div className="realm-overline">RESOURCE ARCHIVE / {detail.top_kind || '序列档案'}</div><h1 ref={title} tabIndex={-1}>{detail.title}</h1>
         <div className="realm-document-meta">{detail.side && <span>{detail.side}</span>}<span>{detail.category}</span>{detail.authors?.length ? <span>{detail.authors.join(' / ')}</span> : null}</div>
-        <div className="realm-document-actions"><button onClick={() => copy(detail.content, '已复制完整原文')}>复制全文</button><button onClick={() => copy(resourceLink(detail.path), '已复制档案链接')}>分享档案</button><details><summary>档案信息</summary><div><p>{detail.path}</p><p>{detail.encoding} · {detail.size} 字节</p><button onClick={() => copy(detail.path, '已复制文件路径')}>复制路径</button></div></details></div>
+        <div className="realm-document-actions"><button onClick={() => copy(detail.content, '已复制完整原文')}>复制全文</button><button onClick={() => copy(resourceLink(detail.path), '已复制档案链接')}>分享档案</button><details><summary>档案信息</summary><div><p>{detail.path}</p><p>{detail.encoding} · {detail.size} 字节</p><p className="reader-info-note">{readingNote}</p><button onClick={() => copy(detail.path, '已复制文件路径')}>复制路径</button></div></details></div>
       </header>
-      <div className="realm-reading-note">{mode === 'adaptive' ? '按明确字段辅助排版；非标准内容按原有顺序保留。规则以原文为准。' : '原文视图：保留完整内容、换行与顺序。'}</div>
+      <div className="realm-reading-note">{readingNote}</div>
       <div className={`realm-document-content${mode === 'raw' ? ' is-raw' : ''}`}>
         {sections.length ? sections.map(section => <AdaptiveSection key={section.id} section={section} idPrefix={idPrefix} rawMode={mode === 'raw'} query={activeQuery} onCopy={text => copy(text)} onShare={id => copy(resourceLink(detail.path, id), '已复制条目定位链接')} />) : <p>这份档案暂无正文。</p>}
       </div>

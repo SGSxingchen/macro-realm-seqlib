@@ -1,0 +1,101 @@
+/* Reading-first layout. Uses the existing focus state; no second layout state
+   machine, no document remounting, and no changes to source-text typography. */
+
+/* Tabs + document-level actions share a row; neither count nor helper copy
+   reserves a separate row. Tabs overflow horizontally instead of wrapping. */
+.workbench-command-bar {
+  display: flex; align-items: center; gap: 8px; min-width: 0; flex: 0 0 auto;
+  padding: 4px 6px; margin-bottom: 6px; border: 1px solid var(--r-line);
+  border-radius: 9px; background: var(--r-panel);
+}
+.workbench-command-bar .workbench-tab-strip { flex: 1 1 0; padding: 0; gap: 4px; }
+.workbench-command-bar .workbench-tab { border-radius: 6px; max-width: 220px; }
+.workbench-command-bar .workbench-tab button { min-height: 34px; }
+.workbench-command-bar .workbench-controls {
+  flex: 0 0 auto; padding: 0 0 0 6px; border: 0; border-left: 1px solid var(--r-line);
+  border-radius: 0; gap: 5px; flex-wrap: nowrap; min-width: 0;
+}
+.workbench-command-bar .workbench-controls button { white-space: nowrap; }
+.workbench-command-bar .workbench-swap { width: 34px; padding: 0; font-size: 19px; }
+.workbench-primary > .realm-reader, .workbench-reference > .realm-reader { border-radius: 10px; }
+
+/* Focus is already represented by the permanent layout button's aria-pressed.
+   The open-resource guard keeps the full navigation available on an empty desk.
+   Old engines without :has simply retain the full header rather than lose UI. */
+.realm-library:has(.realm-focus-toggle[aria-pressed="true"]):has(.realm-workspace.has-resource) > .realm-topbar { display: none; }
+.realm-library:has(.realm-focus-toggle[aria-pressed="true"]):has(.realm-workspace.has-resource) .realm-layout-controls {
+  padding: 6px 12px; gap: 6px; border-bottom: 1px solid var(--r-line); background: var(--r-panel);
+}
+.realm-library:has(.realm-focus-toggle[aria-pressed="true"]):has(.realm-workspace.has-resource) .realm-layout-controls > .realm-overline { display: none; }
+.realm-library:has(.realm-focus-toggle[aria-pressed="true"]):has(.realm-workspace.has-resource) .realm-focus-toggle { order: -1; }
+.realm-library:has(.realm-focus-toggle[aria-pressed="true"]):has(.realm-workspace.has-resource) .realm-workspace { padding: 6px 10px 10px; gap: 10px; }
+
+/* One toolbar per pane. Context is local to that toolbar, not a second label
+   row. Only the explicit chooser opens a panel; it never pushes the text down. */
+.workbench-primary > .realm-reader, .workbench-reference > .realm-reader { container: reading-pane / inline-size; }
+.realm-reader-toolbar { min-width: 0; gap: 6px; padding: 6px 10px; }
+.reader-pane-badge { font-size: 11px; color: var(--r-accent); white-space: nowrap; padding-right: 3px; }
+.reader-reference-picker { position: relative; min-width: 0; flex: 0 1 auto; }
+.reader-reference-picker > summary {
+  display: flex; align-items: center; gap: 6px; list-style: none; cursor: pointer;
+  min-height: 34px; max-width: 210px; padding: 5px 7px; font-size: 11px;
+  border: 1px solid var(--r-line); border-radius: 7px; background: var(--r-raised);
+}
+.reader-reference-picker > summary::-webkit-details-marker { display: none; }
+.reader-reference-badge { color: var(--r-warm); white-space: nowrap; }
+.reader-reference-title { color: var(--r-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reader-reference-popover {
+  position: absolute; top: calc(100% + 7px); left: 0; z-index: 10;
+  width: min(310px, calc(100vw - 56px)); padding: 14px; background: var(--r-panel);
+  border: 1px solid var(--r-line); border-radius: 9px; box-shadow: 0 12px 36px #0004;
+}
+.reader-reference-popover label { margin: 0; font-size: 12px; color: var(--r-warm); }
+.reader-reference-popover select { margin-top: 8px; width: 100%; font-size: 13px; background: var(--r-raised); border-color: var(--r-line); }
+.reader-reference-popover p { margin: 12px 0; font-size: 12px; line-height: 1.8; color: var(--r-muted); }
+.reader-reference-popover button { width: 100%; }
+.realm-reader-toolbar .reader-bookmark { flex: 0 0 auto; }
+
+/* Reduce app-generated title furniture, never the original title/credits/rules
+   inside document-content. Copy, share and archive info remain available. */
+.realm-library:has(.realm-focus-toggle[aria-pressed="true"]):has(.realm-workspace.has-resource) .realm-document-heading { padding: 14px 24px 12px; }
+.realm-library:has(.realm-focus-toggle[aria-pressed="true"]):has(.realm-workspace.has-resource) .realm-document-heading > .realm-overline { display: none; }
+.realm-library:has(.realm-focus-toggle[aria-pressed="true"]):has(.realm-workspace.has-resource) .realm-document-heading h1 { margin: 0 0 6px; font-size: 24px; line-height: 1.5; }
+.realm-library:has(.realm-focus-toggle[aria-pressed="true"]):has(.realm-workspace.has-resource) .realm-document-actions { margin-top: 8px; }
+.realm-library:has(.realm-focus-toggle[aria-pressed="true"]):has(.realm-workspace.has-resource) .realm-reading-note { display: none; }
+.reader-info-note { font-size: 12px; color: var(--r-muted); line-height: 1.8; }
+
+/* Adapt to each pane's actual width, including narrow desktop side-by-side
+   panes. Do not shrink every button or make the original document text tiny. */
+@container reading-pane (max-width: 620px) {
+  .reader-reference-title { display: none; }
+  .reader-pane-badge { font-size: 10px; }
+  .realm-reader-toolbar { padding: 6px; gap: 4px; }
+  .realm-reader-toolbar button { padding: 5px 6px; }
+  .realm-reader-toolbar .reader-bookmark { min-width: 32px; }
+  .reader-bookmark .reader-bookmark-text { display: none; }
+  .realm-toc > summary { padding-inline: 7px; }
+}
+@container reading-pane (max-width: 420px) {
+  .reader-pane-badge { display: none; }
+  .realm-reader-toolbar .realm-back { width: 30px; padding-inline: 0; flex: 0 0 auto; }
+  .realm-back .reader-back-text { display: none; }
+  .realm-reader-toolbar .realm-mode { margin-left: auto; }
+  .realm-reader-toolbar button, .realm-toc > summary { font-size: 11px; }
+}
+@media (max-width: 820px) {
+  /* A touch-friendly tab row and a single operation row, not six stacked bars. */
+  .workbench-command-bar { flex-direction: column; align-items: stretch; gap: 4px; padding: 4px; }
+  .workbench-command-bar .workbench-tab-strip { flex: 0 0 auto; }
+  .workbench-command-bar .workbench-tab button { min-height: 40px; }
+  .workbench-command-bar .workbench-controls { padding: 3px 0 0; border-left: 0; border-top: 1px solid var(--r-soft-line); gap: 4px; justify-content: flex-end; }
+  .workbench-command-bar .workbench-controls button { min-height: 40px; padding-inline: 6px; font-size: 11px; }
+  .workbench-command-bar .workbench-phone-panes { display: flex; flex: 1 1 auto; min-width: 0; gap: 3px; margin-right: auto; }
+  .workbench-command-bar .workbench-phone-panes button { flex: 0 1 auto; }
+  .workbench-command-bar .workbench-swap { flex: 0 0 30px; width: 30px; }
+  .realm-library:has(.realm-focus-toggle[aria-pressed="true"]):has(.realm-workspace.has-resource) .realm-layout-controls { padding: 4px 8px; }
+  .realm-library:has(.realm-focus-toggle[aria-pressed="true"]):has(.realm-workspace.has-resource) .realm-focus-toggle { display: inline-flex; }
+  .realm-library:has(.realm-focus-toggle[aria-pressed="true"]):has(.realm-workspace.has-resource) .realm-workspace { padding: 5px 6px 6px; }
+  .realm-library:has(.realm-focus-toggle[aria-pressed="true"]):has(.realm-workspace.has-resource) .realm-document-heading { padding: 12px 16px; }
+  .realm-reader-toolbar .realm-mode { margin-left: auto; }
+  .reader-reference-picker > summary { min-height: 38px; }
+}

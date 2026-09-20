@@ -19,6 +19,8 @@ jobs:
         working-directory: web/frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -33,19 +35,39 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/realm-browser" --no-package-lock --no-audit --no-fund playwright@1.51.1
           "$RUNNER_TEMP/realm-browser/node_modules/.bin/playwright" install --with-deps chromium
           sudo apt-get install -y fonts-noto-cjk
+      - name: Prepare base revision for identical-viewport before/after measurements
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/realm-baseline"
+          git -C "$GITHUB_WORKSPACE" archive "$BASE_SHA" web/frontend | tar -x -C "$RUNNER_TEMP/realm-baseline"
+          npm --prefix "$RUNNER_TEMP/realm-baseline/web/frontend" ci
+          npm --prefix "$RUNNER_TEMP/realm-baseline/web/frontend" run build
       - name: Desktop/mobile browser regressions against deterministic mock API
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/realm-browser/node_modules/playwright
         run: |
           npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/realm-preview.log 2>&1 &
           SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          BASE_PID=''
+          trap 'kill "$SERVER_PID" ${BASE_PID:+"$BASE_PID"} 2>/dev/null || true' EXIT
           for i in $(seq 1 60); do
             if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then break; fi
             sleep 1
           done
+          if [ -d "$RUNNER_TEMP/realm-baseline/web/frontend/dist" ]; then
+            npm --prefix "$RUNNER_TEMP/realm-baseline/web/frontend" run preview -- --host 127.0.0.1 --port 4174 > /tmp/realm-baseline.log 2>&1 &
+            BASE_PID=$!
+            for i in $(seq 1 60); do
+              if curl --fail --silent http://127.0.0.1:4174/ > /dev/null; then break; fi
+              sleep 1
+            done
+            TEST_BASE_URL=http://127.0.0.1:4174 node tests/focus-layout-browser.cjs --baseline
+          fi
           node tests/browser.cjs
           node tests/workbench-browser.cjs
+          node tests/focus-layout-browser.cjs
       - name: Upload UI screenshots and failure evidence
         if: always()
         uses: actions/upload-artifact@v4
