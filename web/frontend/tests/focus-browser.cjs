@@ -20,7 +20,8 @@ async function measure(page, mode) {
     width: innerWidth, height: innerHeight,
     chrome: document.querySelector('.workbench-chrome').getBoundingClientRect().height,
     panes: Array.from(document.querySelectorAll('.realm-reader-scroll')).filter(node => node.clientHeight && node.clientWidth).map(node => ({ top: node.getBoundingClientRect().top, height: node.clientHeight, width: node.clientWidth })),
-    bodyFont: getComputedStyle(document.querySelector('.archive-field-value') || document.querySelector('.archive-prose')).fontSize,
+    // Ability names intentionally remain larger; measure actual rule text.
+    bodyFont: getComputedStyle(document.querySelector('.archive-field:not(.is-name) .archive-field-value') || document.querySelector('.archive-prose')).fontSize,
     visibleGeneratedHeadings: Array.from(document.querySelectorAll('.realm-document-heading')).filter(node => node.getClientRects().length).length,
   }));
   metrics.push({ mode, ...result });
@@ -42,6 +43,10 @@ async function currentAnchor(page) {
 async function sameAnchor(page, anchor) {
   const offset = await primary(page).locator('.realm-reader-scroll').evaluate((node, target) => node.querySelector('#' + CSS.escape(target.id)).getBoundingClientRect().top - node.getBoundingClientRect().top, anchor);
   assert.ok(Math.abs(offset - anchor.offset) <= 5, `Visible source jumped on density toggle: ${anchor.offset} -> ${offset}`);
+}
+async function fits(page, dialog, width, height) {
+  const rect = await dialog.boundingBox();
+  assert.ok(rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= width + 1 && rect.y + rect.height <= height + 1, 'Popover must fit within the viewport');
 }
 
 (async () => {
@@ -83,14 +88,12 @@ async function sameAnchor(page, anchor) {
       await titleIs(page, 4, '.workbench-reference');
       const comparison = await measure(page, 'compare');
       assert.equal(await page.locator('.workbench-controls').count(), 1);
-      // Configuration is an overlay: it cannot push the readers down.
       await button(page, '对照设置').click();
       const config = page.getByRole('dialog', { name: '对照设置', exact: true });
       await config.waitFor();
       const during = await primary(page).locator('.realm-reader-scroll').boundingBox();
-      assert.ok(Math.abs(during.y - comparison.panes[0].top) < 1);
-      const rect = await config.boundingBox();
-      assert.ok(rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= width + 1 && rect.y + rect.height <= height + 1, 'Settings must fit within the viewport');
+      assert.ok(Math.abs(during.y - comparison.panes[0].top) < 1, 'Settings cannot push the reader down');
+      await fits(page, config, width, height);
       await page.keyboard.press('Tab');
       assert.equal(await page.evaluate(() => !!document.activeElement.closest('dialog[open]')), true);
       await page.keyboard.press('Escape');
@@ -108,6 +111,14 @@ async function sameAnchor(page, anchor) {
         await measure(page, 'reference-mobile');
         await button(page, '主档案').click();
       }
+      // Directory must also escape the narrow pane's overflow clipping.
+      await primary(page).getByRole('button', { name: '文档目录', exact: true }).click();
+      const directory = page.getByRole('dialog', { name: '文档目录', exact: true });
+      await directory.waitFor();
+      await fits(page, directory, width, height);
+      await directory.locator('.reader-directory button').nth(4).click();
+      assert.equal(await directory.isVisible(), false);
+      assert.ok(await primary(page).locator('.realm-reader-scroll').evaluate(node => node.scrollTop > 0));
       await primary(page).getByRole('button', { name: '阅读工具', exact: true }).click();
       const tools = page.getByRole('dialog', { name: '阅读工具', exact: true });
       await tools.getByRole('button', { name: '原文', exact: true }).click();
@@ -140,7 +151,6 @@ async function sameAnchor(page, anchor) {
       }
       await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
       await snapshot(page, `${width}-compare-dark`);
-      // Search remains reachable even when every browsing control is hidden.
       await page.keyboard.press('Control+k');
       await page.waitForFunction(() => document.activeElement.id === 'realm-query');
       assert.equal(await page.locator('.realm-topbar').isVisible(), true);
@@ -148,7 +158,7 @@ async function sameAnchor(page, anchor) {
       assert.deepEqual(run.errors, []);
       await context.close();
     }
-    fs.writeFileSync(path.join(out, 'focus-summary.txt'), 'PASS: compact fixed-chrome geometry, six/long tabs, no shrinking of rule text, preserved source anchor across focus changes, overlay settings without layout shift, focus return, accessible raw/copy tools, reference selection/swap, responsive pane switching, synchronized theme and search recovery. Fixtures use simulated read-only APIs.\n');
+    fs.writeFileSync(path.join(out, 'focus-summary.txt'), 'PASS: compact fixed-chrome geometry, six/long tabs, unchanged rule text size, source anchor restoration, top-layer directory/settings without layout shift, focus return, raw/copy tools, reference selection/swap, responsive pane switching, synchronized theme and search recovery. Fixtures use simulated read-only APIs.\n');
     console.log('Focused-reading browser regressions passed.');
   } catch (error) {
     fs.writeFileSync(path.join(out, 'focus-failure.txt'), error.stack || String(error));

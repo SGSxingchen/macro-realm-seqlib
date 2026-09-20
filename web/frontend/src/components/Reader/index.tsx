@@ -147,7 +147,9 @@ function ReaderContent({ detail, anchor = '', query = '', saved, onBack, onAncho
     <div className="realm-reader-toolbar">
       {onBack && <button className="realm-back" aria-label="返回结果" onClick={onBack}>{compact ? '←' : '← 结果'}</button>}
       {compact && <div className="reader-identity">{paneLabel && <span className="reader-pane-badge">{paneLabel}</span>}<h1 ref={title} className="reader-current-title" tabIndex={-1} title={detail.title}>{detail.title}</h1></div>}
-      <details ref={toc} className="realm-toc"><summary>目录 <span>{sections.length}</span></summary><nav aria-label="文档目录">{sections.map(section => <button key={section.id} onClick={() => jump(section.id)}>{section.title}</button>)}</nav></details>
+      {compact ? <ActionPopover label="文档目录" trigger={<>目录 <span>{sections.length}</span></>}>
+        <nav className="reader-directory" aria-label="文档目录" style={{ display: 'grid', gap: 4 }}>{sections.map(section => <button data-close-popover key={section.id} style={{ textAlign: 'left', whiteSpace: 'normal', overflowWrap: 'anywhere' }} onClick={() => jump(section.id)}>{section.title}</button>)}</nav>
+      </ActionPopover> : <details ref={toc} className="realm-toc"><summary>目录 <span>{sections.length}</span></summary><nav aria-label="文档目录">{sections.map(section => <button key={section.id} onClick={() => jump(section.id)}>{section.title}</button>)}</nav></details>}
       <button aria-label="文内查找" aria-expanded={findOpen} onClick={() => setFindOpen(value => !value)}>{compact ? '查找' : '文内查找'}</button>
       {compact ? <ActionPopover label="阅读工具" trigger="更多">
         <p className="reader-tools-title">{detail.title}</p>
