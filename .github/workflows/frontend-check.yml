@@ -44,8 +44,11 @@ jobs:
             if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then break; fi
             sleep 1
           done
-          node tests/browser.cjs
-          node tests/workbench-browser.cjs
+          STATUS=0
+          node tests/browser.cjs || STATUS=1
+          node tests/workbench-browser.cjs || STATUS=1
+          node tests/focus-browser.cjs || STATUS=1
+          exit "$STATUS"
       - name: Upload UI screenshots and failure evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -53,4 +56,10 @@ jobs:
           name: realm-archive-ui
           path: web/frontend/test-results/
           if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload built frontend for isolated preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: realm-focus-preview
+          path: web/frontend/dist/
           retention-days: 14

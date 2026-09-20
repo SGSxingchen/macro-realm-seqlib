@@ -1,15 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { api, routePath } from '../../api';
 import type { Detail } from '../../types';
 import { closeTab, readOpenTabs, rememberTab, storeOpenTabs } from '../../workbench-state';
+import { ActionPopover } from '../ui/ActionPopover';
 import { Reader } from './index';
 import { HistoryCompare } from './HistoryCompare';
 
-type Props = ComponentProps<typeof Reader> & { openPath: string; onOpen: (path: string) => void; onFocusMode: (value: boolean) => void; revision: number };
+type Props = ComponentProps<typeof Reader> & {
+  openPath: string; onOpen: (path: string) => void;
+  onFocusMode: (value: boolean) => void; revision: number; layoutActions?: ReactNode;
+};
 type Mode = 'read' | 'compare' | 'history';
 
-export function ReaderWorkbench({ openPath, onOpen, onFocusMode, revision, ...readerProps }: Props) {
+export function ReaderWorkbench({ openPath, onOpen, onFocusMode, revision, layoutActions, compact = false, ...readerProps }: Props) {
   const [tabs, setTabs] = useState(() => rememberTab(readOpenTabs(), openPath, readerProps.detail?.title));
   const [mode, setMode] = useState<Mode>('read');
   const [referencePath, setReferencePath] = useState('');
@@ -41,7 +45,7 @@ export function ReaderWorkbench({ openPath, onOpen, onFocusMode, revision, ...re
       if (left < strip.scrollLeft) strip.scrollLeft = left;
       else if (left + active.offsetWidth > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = left + active.offsetWidth - strip.clientWidth;
     }
-  }, [openPath, tabs.length]);
+  }, [openPath, tabs.length, compact, mode]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -69,33 +73,36 @@ export function ReaderWorkbench({ openPath, onOpen, onFocusMode, revision, ...re
   const peers = tabs.filter(tab => tab.path !== openPath);
   const isSplit = mode === 'compare' && !!referencePath && referencePath !== openPath;
 
-  return <section className="realm-reader realm-reader-workbench" aria-label="多资源阅读工作台">
-    {tabs.length > 0 && <div className="workbench-tab-strip" ref={tabStrip} aria-label="已打开的档案">
-      {tabs.map(tab => <div className={`workbench-tab${tab.path === openPath ? ' active' : ''}`} key={tab.path}>
-        <button className="workbench-tab-title" data-resource-tab={tab.path} aria-current={tab.path === openPath ? 'page' : undefined} title={tab.title} onClick={() => onOpen(tab.path)}>{tab.title}</button>
-        <button className="workbench-tab-close" aria-label={`关闭档案：${tab.title}`} onClick={() => remove(tab.path)}>×</button>
-      </div>)}
-    </div>}
-    {openPath && <div className="workbench-controls">
-      <span>已打开 {tabs.length} 份</span>
-      <button aria-pressed={mode === 'compare'} disabled={!peers.length && mode !== 'compare'} title={!peers.length ? '先打开另一份资源，它会保留在上方标签中' : '固定一份参照档案，同时切换主档案'} onClick={compare}>{mode === 'compare' ? '退出并排' : '并排对照'}</button>
-      <button aria-pressed={mode === 'history'} onClick={() => setMode(current => current === 'history' ? 'read' : 'history')}>{mode === 'history' ? '返回正文' : '历史版本'}</button>
-      {!peers.length && <small>再打开一份档案，即可并排对照</small>}
-    </div>}
-    {isSplit && <div className="workbench-compare-controls">
-      <label>固定参照<select aria-label="选择参照档案" value={referencePath} onChange={e => setReferencePath(e.target.value)}>{peers.map(tab => <option key={tab.path} value={tab.path}>{tab.title}</option>)}</select></label>
-      <button onClick={() => { const old = openPath; onOpen(referencePath); setReferencePath(old); }}>交换主 / 参照</button>
-      <span>独立滚动 · 不强行对齐不同模板</span>
-      <div className="workbench-phone-panes" role="group" aria-label="切换对照窗格"><button aria-pressed={phonePane === 'primary'} onClick={() => setPhonePane('primary')}>主档案</button><button aria-pressed={phonePane === 'reference'} onClick={() => setPhonePane('reference')}>参照档案</button></div>
+  return <section className={`realm-reader realm-reader-workbench${compact ? ' compact-workbench' : ''}`} aria-label="多资源阅读工作台">
+    {(tabs.length > 0 || openPath || layoutActions) && <div className="workbench-chrome">
+      <div className="workbench-tab-strip" ref={tabStrip} aria-label={`已打开的档案，共 ${tabs.length} 份`}>
+        {tabs.map(tab => <div className={`workbench-tab${tab.path === openPath ? ' active' : ''}`} key={tab.path}>
+          <button className="workbench-tab-title" data-resource-tab={tab.path} aria-current={tab.path === openPath ? 'page' : undefined} title={tab.title} onClick={() => onOpen(tab.path)}>{tab.title}</button>
+          <button className="workbench-tab-close" aria-label={`关闭档案：${tab.title}`} onClick={() => remove(tab.path)}>×</button>
+        </div>)}
+      </div>
+      <div className="workbench-controls">
+        {openPath && <>
+          <button aria-label={mode === 'compare' ? '退出并排' : '并排对照'} aria-pressed={mode === 'compare'} disabled={!peers.length && mode !== 'compare'} title={!peers.length ? '先打开另一份资源，它会保留在标签中' : '固定参照，切换主档案'} onClick={compare}>{mode === 'compare' ? '退出并排' : '并排对照'}</button>
+          {isSplit && <ActionPopover label="对照设置" trigger="参照设置">
+            <div className="workbench-compare-controls">
+              <label>固定参照<select aria-label="选择参照档案" value={referencePath} onChange={event => setReferencePath(event.target.value)}>{peers.map(tab => <option key={tab.path} value={tab.path}>{tab.title}</option>)}</select></label>
+              <button data-close-popover onClick={() => { const old = openPath; onOpen(referencePath); setReferencePath(old); }}>交换主 / 参照</button>
+              <p>主档案跟随上方标签；参照保持固定。两侧独立滚动，不强行对齐不同模板。</p>
+            </div>
+          </ActionPopover>}
+          <button aria-label={mode === 'history' ? '返回正文' : '历史版本'} aria-pressed={mode === 'history'} onClick={() => setMode(current => current === 'history' ? 'read' : 'history')}>{mode === 'history' ? '返回正文' : '历史版本'}</button>
+        </>}
+        {layoutActions}
+      </div>
+      {isSplit && <div className="workbench-phone-panes" role="group" aria-label="切换对照窗格"><button aria-pressed={phonePane === 'primary'} onClick={() => setPhonePane('primary')}>主档案</button><button aria-pressed={phonePane === 'reference'} onClick={() => setPhonePane('reference')}>参照档案</button></div>}
     </div>}
     <div className={`workbench-reading-panes ${isSplit ? 'split' : ''} phone-${phonePane}`} hidden={mode === 'history'}>
       <div className="workbench-primary">
-        {isSplit && <div className="workbench-pane-label">主档案 · 切换上方标签可更换</div>}
-        <Reader {...readerProps} instance="primary" />
+        <Reader {...readerProps} compact={compact || isSplit} paneLabel={isSplit ? '主' : undefined} instance="primary" />
       </div>
       {isSplit && <div className="workbench-reference">
-        <div className="workbench-pane-label">参照档案 · 保持固定</div>
-        <Reader detail={reference} loading={referenceLoading || (!reference && !referenceError)} error={referenceError} onRetry={() => setReferenceRetry(value => value + 1)} anchor={referenceAnchor} onAnchor={setReferenceAnchor} instance="reference" idPrefix="reference-" />
+        <Reader detail={reference} loading={referenceLoading || (!reference && !referenceError)} error={referenceError} onRetry={() => setReferenceRetry(value => value + 1)} anchor={referenceAnchor} onAnchor={setReferenceAnchor} instance="reference" idPrefix="reference-" compact paneLabel="参照" />
       </div>}
     </div>
     {mode === 'history' && openPath && <HistoryCompare key={openPath} path={openPath} title={readerProps.detail?.title || tabs.find(tab => tab.path === openPath)?.title || openPath} />}
