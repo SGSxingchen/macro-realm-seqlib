@@ -6,6 +6,8 @@ import { SearchBar } from './components/SearchBar';
 import { FilterRail } from './components/FilterRail';
 import { ResourceList } from './components/ResourceList';
 import { ReaderWorkbench } from './components/Reader/Workbench';
+import { ActionPopover } from './components/ui/ActionPopover';
+import { ThemeToggle } from './components/ThemeToggle';
 import { AdminPanel } from './components/Admin';
 import { RecentUpdates } from './components/RecentUpdates';
 import { NormalizationReviewPage } from './components/NormalizationReview';
@@ -36,8 +38,10 @@ function LibraryApp() {
   const [panes, setPanes] = useState(readPanePreferences);
   const [focus, setFocus] = useState(false);
   const [compareFocus, setCompareFocus] = useState(false);
+  const [phone, setPhone] = useState(() => window.matchMedia('(max-width: 820px)').matches);
   const [searchFocusTick, setSearchFocusTick] = useState(0);
   const focused = focus || compareFocus;
+  const compact = nav.tab === 'read' && Boolean(nav.openPath) && (focused || phone);
   const showIndex = panes.index && !focused;
   const showResults = panes.results && !focused;
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -45,6 +49,7 @@ function LibraryApp() {
   const listRequest = useRef<AbortController | null>(null);
   const pending = useRef(false);
   const focusSearchAfterNavigation = useRef(false);
+  const restoreLayoutFocus = useRef(false);
   const nextOffset = useRef(0);
   const detailCache = useRef(new Map<string, Detail>());
   const key = JSON.stringify(nav.filters);
@@ -64,6 +69,12 @@ function LibraryApp() {
   }, []);
 
   useEffect(() => { storePanePreferences(panes); }, [panes]);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 820px)');
+    const update = () => setPhone(mq.matches);
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
   useEffect(() => {
     const restore = () => { const next = readLocation(); navRef.current = next; setNav(next); setDrawer(false); };
     window.addEventListener('popstate', restore);
@@ -150,6 +161,11 @@ function LibraryApp() {
       document.querySelector<HTMLInputElement>('#realm-query')?.focus();
     }
   }, [nav.openPath, nav.tab, showResults, searchFocusTick]);
+  useLayoutEffect(() => {
+    if (!restoreLayoutFocus.current) return;
+    restoreLayoutFocus.current = false;
+    Array.from(document.querySelectorAll<HTMLButtonElement>('.realm-focus-toggle')).find(button => button.getClientRects().length)?.focus({ preventScroll: true });
+  }, [compact]);
   useEffect(() => {
     const searchShortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && navRef.current.tab === 'read') {
@@ -167,7 +183,6 @@ function LibraryApp() {
   };
   const openResource = (path: string) => { navigate({ tab: 'read', openPath: path, anchor: '' }); setDrawer(false); };
   const changeFilters = (filters: SearchFilters) => {
-    const phone = window.matchMedia('(max-width: 820px)').matches;
     navigate({ filters, ...(phone ? { openPath: '', anchor: '' } : {}) }, true);
   };
   const toggleFacet = (group: 'kinds' | 'sides' | 'authors', name: string) => {
@@ -188,17 +203,30 @@ function LibraryApp() {
     setFocus(false); setCompareFocus(false);
     setPanes(value => ({ ...value, [pane]: !shown }));
   };
+  const toggleFocus = () => {
+    restoreLayoutFocus.current = true;
+    if (focused) { setFocus(false); setCompareFocus(false); } else setFocus(true);
+  };
+  const paneControls = <>
+    <button data-close-popover className="realm-index-toggle" aria-expanded={showIndex} aria-controls="realm-index-panel" onClick={() => togglePane('index')}>{showIndex ? '收起索引' : '展开索引'}</button>
+    <button data-close-popover className="realm-global-filter" aria-haspopup="dialog" onClick={event => openFilters(event.currentTarget)}>索引 / 收藏</button>
+    <button data-close-popover className="realm-results-toggle" aria-expanded={showResults} aria-controls="realm-results-panel" onClick={() => togglePane('results')}>{showResults ? '收起结果' : '展开结果'}</button>
+  </>;
+  const focusControl = <button className="realm-focus-toggle" disabled={!nav.openPath} aria-pressed={focused} onClick={toggleFocus}>{focused ? '退出专注' : '专注阅读'}</button>;
+  const compactActions = <div className="workbench-layout-actions">
+    <ActionPopover label="阅读布局" trigger={<><span aria-hidden="true">∞</span> 布局</>}>
+      <p className="reader-tools-title">宏观界域 · 阅读布局</p><div className="reader-layout-options">{paneControls}</div>
+      <div className="reader-tools-row"><span>深浅主题</span><ThemeToggle /></div>
+    </ActionPopover>
+    <button className="realm-search-toggle" aria-label="搜索档案" title="搜索档案 · Ctrl / ⌘ K" onClick={revealSearch}>搜索</button>
+    {focusControl}
+  </div>;
 
-  return <main className={`app realm-app ${nav.tab === 'read' ? 'realm-library' : nav.tab === 'admin' ? 'admin-mode' : ''}`}>
+  return <main className={`app realm-app ${nav.tab === 'read' ? 'realm-library' : nav.tab === 'admin' ? 'admin-mode' : ''}${compact ? ' realm-reading-compact' : ''}`}>
     <Header recordCount={tree.reduce((sum, node) => sum + node.count, 0)} tab={nav.tab} onTab={tab => { setDrawer(false); navigate({ tab }); }} />
     {nav.tab === 'read' ? <div className="realm-reading-shell">
-      <div className="realm-layout-controls" aria-label="阅读布局">
-        <span className="realm-overline">READING DESK</span>
-        <button className="realm-index-toggle" aria-expanded={showIndex} aria-controls="realm-index-panel" onClick={() => togglePane('index')}>{showIndex ? '收起索引' : '展开索引'}</button>
-        <button className="realm-global-filter" aria-haspopup="dialog" onClick={event => openFilters(event.currentTarget)}>索引 / 收藏</button>
-        <button className="realm-results-toggle" aria-expanded={showResults} aria-controls="realm-results-panel" onClick={() => togglePane('results')}>{showResults ? '收起结果' : '展开结果'}</button>
-        <button className="realm-focus-toggle" aria-pressed={focused} onClick={() => { if (focused) { setFocus(false); setCompareFocus(false); } else setFocus(true); }}>{focused ? '退出专注' : '专注阅读'}</button>
-        <button className="realm-search-toggle" onClick={revealSearch}>搜索档案 <kbd>⌘ / Ctrl K</kbd></button>
+      <div className="realm-layout-controls" aria-label="阅读布局" hidden={compact}>
+        {paneControls}{focusControl}<button className="realm-search-toggle" onClick={revealSearch}>搜索档案 <kbd>⌘ / Ctrl K</kbd></button>
       </div>
       <div className={`realm-workspace ${nav.openPath ? 'has-resource' : ''} ${showIndex ? '' : 'index-hidden'} ${showResults ? '' : 'results-hidden'}`}>
         <aside id="realm-index-panel" className="realm-navigation" aria-label="档案筛选">
@@ -225,7 +253,7 @@ function LibraryApp() {
           <ResourceList key={key} items={items} activePath={nav.openPath} onOpen={openResource} highlightTokens={response?.tokens || []} loading={searching && !listError} scrollKey={key} error={!!listError} />
           {response && nextOffset.current < response.total && <button className="realm-load-more" disabled={loading} onClick={() => { if (!pending.current) loadPage(nextOffset.current, true); }}>{loading ? '加载中…' : `加载更多 · 已显示 ${items.length} / ${response.total}`}</button>}
         </section>
-        <ReaderWorkbench openPath={nav.openPath} onOpen={openResource} onFocusMode={setCompareFocus} revision={refresh}
+        <ReaderWorkbench openPath={nav.openPath} onOpen={openResource} onFocusMode={setCompareFocus} revision={refresh} compact={compact} layoutActions={compact ? compactActions : undefined}
           detail={currentDetail} loading={Boolean(nav.openPath && (detailLoading || (!currentDetail && !currentError)))} error={currentError}
           anchor={nav.anchor} query={nav.filters.q} onBack={backToResults} onRetry={reload} onAnchor={anchor => navigate({ anchor }, true)} onBrowse={revealSearch}
           saved={saved.some(item => item.path === nav.openPath)} onSave={() => {
@@ -233,9 +261,9 @@ function LibraryApp() {
             const next = saved.some(item => item.path === currentDetail.path) ? saved.filter(item => item.path !== currentDetail.path) : [...saved.slice(-99), { path: currentDetail.path, title: currentDetail.title }];
             setSaved(next); const ok = saveResources(next); setStorageNotice(ok ? '' : '收藏未能保存，关闭页面后可能丢失。'); return ok;
           }} />
-        <dialog ref={dialogRef} className="realm-filter-dialog" aria-labelledby="realm-filter-title" onCancel={e => { e.preventDefault(); setDrawer(false); }} onClose={() => setDrawer(false)} onClick={e => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          if (e.target === e.currentTarget && (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom)) setDrawer(false);
+        <dialog ref={dialogRef} className="realm-filter-dialog" aria-labelledby="realm-filter-title" onCancel={event => { event.preventDefault(); setDrawer(false); }} onClose={() => setDrawer(false)} onClick={event => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          if (event.target === event.currentTarget && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) setDrawer(false);
         }}>
           <header><h2 id="realm-filter-title">筛选档案</h2><button autoFocus onClick={() => setDrawer(false)} aria-label="关闭筛选">×</button></header>
           {treeError && <p role="alert">分类暂不可用 <button onClick={reload}>重试</button></p>}{filterRail}

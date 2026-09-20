@@ -21,8 +21,8 @@ async function setup(browser, width) {
     const url = new URL(route.request().url());
     calls.push(url);
     let data, status = 200;
-    if (url.pathname === '/api/tree') data = { items: [{ path: '序列库', name: '序列库', count: 3, children: [] }] };
-    else if (url.pathname === '/api/resources') data = { items: resources, count: 3, total: 3, offset: 0, limit: 100, tokens: [], facets: { kinds: [], sides: [], authors: [] } };
+    if (url.pathname === '/api/tree') data = { items: [{ path: '序列库', name: '序列库', count: resources.length, children: [] }] };
+    else if (url.pathname === '/api/resources') data = { items: resources, count: resources.length, total: resources.length, offset: 0, limit: 100, tokens: [], facets: { kinds: [], sides: [], authors: [] } };
     else if (url.pathname.startsWith('/api/resources/')) {
       data = resources.find(item => item.path === decodeURIComponent(url.pathname.slice('/api/resources/'.length)));
       if (!data) { status = 404; data = { detail: 'missing' }; }
@@ -58,8 +58,9 @@ async function noOverflow(page) {
   const values = await page.locator('.realm-reader-scroll').evaluateAll(nodes => nodes.filter(node => node.clientWidth).map(node => node.scrollWidth <= node.clientWidth + 1));
   assert.ok(values.every(Boolean));
 }
+module.exports = { setup, resources, oldPath, titleIs, noOverflow, primary, reference, tab };
 
-(async () => {
+if (require.main === module) (async () => {
   const browser = await chromium.launch();
   let active;
   try {
@@ -97,6 +98,7 @@ async function noOverflow(page) {
     await titleIs(page, 2, '.workbench-reference');
     assert.ok(await reference(page).locator('.realm-reader-scroll').evaluate(node => node.scrollTop >= 490), 'Pinned pane must not jump when primary tab changes');
     assert.equal(await page.evaluate(() => { const ids = Array.from(document.querySelectorAll('[id]')).map(node => node.id); return new Set(ids).size === ids.length; }), true, 'Comparison must not duplicate anchor IDs');
+    await page.getByRole('button', { name: '对照设置', exact: true }).click();
     await page.getByRole('button', { name: '交换主 / 参照', exact: true }).click();
     await titleIs(page, 2); await titleIs(page, 1, '.workbench-reference');
     await noOverflow(page); await shot(page, 'desktop-compare');
