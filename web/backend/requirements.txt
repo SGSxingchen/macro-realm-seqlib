@@ -7,3 +7,6 @@ mwclient>=0.10.1
 # 智能搜索可选依赖；缺失时拼音/繁简归一会自动降级
 pypinyin>=0.51
 opencc-python-reimplemented>=0.1.7
+
+# Decode/re-encode tabletop raster assets; no SVG/remote image fetches.
+Pillow>=10.4

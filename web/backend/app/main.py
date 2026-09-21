@@ -1446,3 +1446,8 @@ def publish(req: PublishRequest, _admin: None = Depends(require_admin)):
     if req.push:
         steps.append(git("push", "origin", req.branch, "--tags"))
     return {"ok": all(s["returncode"] == 0 for s in steps[1:]), "version": version, "steps": steps}
+
+
+# Independent tactical desk; does not modify the archive data model.
+from .tabletop import router as tabletop_router
+app.include_router(tabletop_router)
