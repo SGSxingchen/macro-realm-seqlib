@@ -1,0 +1,14 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const Module=require('node:module');
+const ts=require('typescript');
+const file=path.resolve(__dirname,'../src/tabletop/model.ts');
+const mod=new Module(file,module);mod.filename=file;mod.paths=Module._nodeModulePaths(path.dirname(file));
+mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2021}}).outputText,file);
+const {distance,pathLength,positionOf,snapPoint,newPiece,rawPiece}=mod.exports;
+test('world distance and polyline length do not depend on camera zoom',()=>{assert.equal(distance({x:0,y:0},{x:3,y:4}),5);assert.equal(pathLength([{x:0,y:0},{x:3,y:4},{x:6,y:8}]),10);});
+test('aura uses explicit offset and follows its current anchor only',()=>{assert.deepEqual(positionOf({x:2,y:-1,follow:'a'},{a:{x:8,y:4}}),{x:10,y:3});assert.deepEqual(positionOf({x:2,y:3,follow:''},{}),{x:2,y:3,follow:''});});
+test('grid drawing and snapping are independent, with free negative coordinates',()=>{assert.deepEqual(snapPoint({x:-2.4,y:3.2},{snap:false,grid_size:2}),{x:-2.4,y:3.2});assert.deepEqual(snapPoint({x:-2.4,y:3.2},{snap:true,grid_size:2}),{x:-2,y:4});});
+test('new tokens do not manufacture stats and client presentation flags are not submitted',()=>{const p=newPiece('token',{x:1,y:2},'member');assert.deepEqual(p.counters,[]);assert.deepEqual(p.owners,['member']);assert.equal(p.visibility,'all');assert.equal('editable' in rawPiece({...p,editable:true}),false);});
