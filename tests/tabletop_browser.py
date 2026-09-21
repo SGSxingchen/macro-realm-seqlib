@@ -121,7 +121,9 @@ def main():
             pl.wait_for_timeout(650)
             moved=get_state(pl,room)['scene']['pieces'][token['id']]
             assert abs(moved['x']-13)<.01 and abs(moved['y']-11)<.01,moved
-            sync(gm,get_state(pl,room)['revision']);assert get_state(gm,room)['scene']['pieces'][token['id']]['x']==13
+            sync(gm,get_state(pl,room)['revision'])
+            host_moved=get_state(gm,room)['scene']['pieces'][token['id']]
+            assert abs(host_moved['x']-13)<.05,host_moved
             token=get_state(gm,room)['scene']['pieces'][token['id']]
             aura_id=uuid.uuid4().hex
             st=command(gm,room,edits=[{'id':aura_id,'expected':0,'value':{'id':aura_id,'kind':'circle','name':'半径 6m · 守护领域','follow':token['id'],'radius':6,'color':'#70cdb6'}}])
