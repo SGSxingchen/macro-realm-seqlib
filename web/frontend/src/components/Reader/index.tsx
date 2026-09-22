@@ -3,6 +3,7 @@ import type { Detail } from '../../types';
 import { copyText } from '../../library-state';
 import { buildDocument, resourceLink } from './adaptive';
 import { AdaptiveSection } from './AdaptiveDocument';
+import { ResponsiveMenu } from '../ResponsiveMenu';
 
 type Props = {
   detail: Detail | null; loading?: boolean; error?: string; anchor?: string; query?: string; saved?: boolean;
@@ -79,6 +80,13 @@ function ReaderContent({ detail, anchor = '', query = '', saved, onBack, onAncho
     return () => clearTimeout(timer.current);
   }, [detail.path, instance]);
   useEffect(() => {
+    const dismiss = (event: PointerEvent) => {
+      if (toc.current?.open && !toc.current.contains(event.target as Node)) toc.current.open = false;
+    };
+    document.addEventListener('pointerdown', dismiss);
+    return () => document.removeEventListener('pointerdown', dismiss);
+  }, []);
+  useEffect(() => {
     if (query !== initialSearchQuery.current) {
       initialSearchQuery.current = query;
       setFind(query); if (query) setFindOpen(true);
@@ -117,12 +125,14 @@ function ReaderContent({ detail, anchor = '', query = '', saved, onBack, onAncho
   return <article className="realm-reader">
     <div className="realm-reader-toolbar">
       {onBack && <button className="realm-back" onClick={onBack}>← 结果</button>}
-      <details ref={toc} className="realm-toc"><summary>目录 <span>{sections.length}</span></summary><nav aria-label="文档目录">{sections.map(section => <button key={section.id} onClick={() => jump(section.id)}>{section.title}</button>)}</nav></details>
+      <details ref={toc} className="realm-toc" onKeyDown={event => { if (event.key === 'Escape' && event.currentTarget.open) { event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}><summary>目录 <span>{sections.length}</span></summary><nav aria-label="文档目录">{sections.map(section => <button key={section.id} onClick={() => jump(section.id)}>{section.title}</button>)}</nav></details>
       <button aria-expanded={findOpen} onClick={() => { setFindOpen(v => !v); requestAnimationFrame(() => findInput.current?.focus()); }}>文内查找</button>
-      <div className="realm-mode" role="group" aria-label="阅读方式"><button aria-pressed={mode === 'adaptive'} onClick={() => setMode('adaptive')}>自适应</button><button aria-pressed={mode === 'raw'} onClick={() => setMode('raw')}>原文</button></div>
-      {onSave && <button aria-pressed={!!saved} onClick={() => { const ok = onSave(); notify(ok === false ? '浏览器未能持久保存，本次更改仅在当前页面有效。' : saved ? '已取消收藏' : '已加入随行档案，仅保存在此浏览器'); }}>{saved ? '★ 已收藏' : '☆ 收藏'}</button>}
+      <ResponsiveMenu label="阅读设置" className="realm-reader-options">
+        <div className="realm-mode" role="group" aria-label="阅读方式"><button aria-pressed={mode === 'adaptive'} onClick={() => setMode('adaptive')}>自适应</button><button aria-pressed={mode === 'raw'} onClick={() => setMode('raw')}>原文</button></div>
+        {onSave && <button aria-pressed={!!saved} onClick={() => { const ok = onSave(); notify(ok === false ? '浏览器未能持久保存，本次更改仅在当前页面有效。' : saved ? '已取消收藏' : '已加入随行档案，仅保存在此浏览器'); }}>{saved ? '★ 已收藏' : '☆ 收藏'}</button>}
+      </ResponsiveMenu>
     </div>
-    {findOpen && <div className="realm-find"><input ref={findInput} type="search" aria-label="文内精确查找" placeholder="在当前正文精确查找…" value={find} onChange={e => setFind(e.target.value)} onKeyDown={e => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); nextMatch(e.shiftKey ? -1 : 1); } if (e.key === 'Escape') setFindOpen(false); }} /><span role="status">{matchCount ? `${matchIndex + 1} / ${matchCount}` : find ? '无精确匹配' : '输入关键词'}</span><button disabled={!matchCount} aria-label="上一个匹配" onClick={() => nextMatch(-1)}>↑</button><button disabled={!matchCount} aria-label="下一个匹配" onClick={() => nextMatch(1)}>↓</button><button aria-label="关闭文内查找" onClick={() => setFindOpen(false)}>×</button></div>}
+    {findOpen && <div className="realm-find"><input ref={findInput} type="search" aria-label="文内精确查找" placeholder="在当前正文精确查找…" value={find} onChange={e => setFind(e.target.value)} onKeyDown={e => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); nextMatch(e.shiftKey ? -1 : 1); } if (e.key === 'Escape') { e.stopPropagation(); setFindOpen(false); } }} /><span role="status">{matchCount ? `${matchIndex + 1} / ${matchCount}` : find ? '无精确匹配' : '输入关键词'}</span><button disabled={!matchCount} aria-label="上一个匹配" onClick={() => nextMatch(-1)}>↑</button><button disabled={!matchCount} aria-label="下一个匹配" onClick={() => nextMatch(1)}>↓</button><button aria-label="关闭文内查找" onClick={() => setFindOpen(false)}>×</button></div>}
     <div ref={scroll} className="realm-reader-scroll">
       <header className="realm-document-heading"><div className="realm-overline">RESOURCE ARCHIVE / {detail.top_kind || '序列档案'}</div><h1 ref={title} tabIndex={-1}>{detail.title}</h1>
         <div className="realm-document-meta">{detail.side && <span>{detail.side}</span>}<span>{detail.category}</span>{detail.authors?.length ? <span>{detail.authors.join(' / ')}</span> : null}</div>

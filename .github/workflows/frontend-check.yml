@@ -46,11 +46,20 @@ jobs:
           done
           node tests/browser.cjs
           node tests/workbench-browser.cjs
+          node tests/reading-layout-browser.cjs
       - name: Upload UI screenshots and failure evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: realm-archive-ui
           path: web/frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload preview build for reproducing layout failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: realm-archive-build
+          path: web/frontend/dist/
           if-no-files-found: ignore
           retention-days: 14

@@ -69,18 +69,18 @@ export function ReaderWorkbench({ openPath, onOpen, onFocusMode, revision, ...re
   const peers = tabs.filter(tab => tab.path !== openPath);
   const isSplit = mode === 'compare' && !!referencePath && referencePath !== openPath;
 
-  return <section className="realm-reader realm-reader-workbench" aria-label="多资源阅读工作台">
-    {tabs.length > 0 && <div className="workbench-tab-strip" ref={tabStrip} aria-label="已打开的档案">
-      {tabs.map(tab => <div className={`workbench-tab${tab.path === openPath ? ' active' : ''}`} key={tab.path}>
-        <button className="workbench-tab-title" data-resource-tab={tab.path} aria-current={tab.path === openPath ? 'page' : undefined} title={tab.title} onClick={() => onOpen(tab.path)}>{tab.title}</button>
-        <button className="workbench-tab-close" aria-label={`关闭档案：${tab.title}`} onClick={() => remove(tab.path)}>×</button>
-      </div>)}
-    </div>}
-    {openPath && <div className="workbench-controls">
-      <span>已打开 {tabs.length} 份</span>
-      <button aria-pressed={mode === 'compare'} disabled={!peers.length && mode !== 'compare'} title={!peers.length ? '先打开另一份资源，它会保留在上方标签中' : '固定一份参照档案，同时切换主档案'} onClick={compare}>{mode === 'compare' ? '退出并排' : '并排对照'}</button>
-      <button aria-pressed={mode === 'history'} onClick={() => setMode(current => current === 'history' ? 'read' : 'history')}>{mode === 'history' ? '返回正文' : '历史版本'}</button>
-      {!peers.length && <small>再打开一份档案，即可并排对照</small>}
+  return <section className="realm-reader realm-reader-workbench" data-mode={mode} aria-label="多资源阅读工作台">
+    {(tabs.length > 0 || openPath) && <div className="workbench-header">
+      {tabs.length > 0 && <div className="workbench-tab-strip" ref={tabStrip} aria-label="已打开的档案">
+        {tabs.map(tab => <div className={`workbench-tab${tab.path === openPath ? ' active' : ''}`} key={tab.path}>
+          <button className="workbench-tab-title" data-resource-tab={tab.path} aria-current={tab.path === openPath ? 'page' : undefined} title={tab.title} onClick={() => onOpen(tab.path)}>{tab.title}</button>
+          <button className="workbench-tab-close" aria-label={`关闭档案：${tab.title}`} onClick={() => remove(tab.path)}>×</button>
+        </div>)}
+      </div>}
+      {openPath && <div className="workbench-controls">
+        <button aria-pressed={mode === 'compare'} disabled={!peers.length && mode !== 'compare'} title={!peers.length ? '先打开另一份资源，它会保留在上方标签中' : '固定一份参照档案，同时切换主档案'} onClick={compare}>{mode === 'compare' ? '退出并排' : '并排对照'}</button>
+        <button aria-pressed={mode === 'history'} onClick={() => setMode(current => current === 'history' ? 'read' : 'history')}>{mode === 'history' ? '返回正文' : '历史版本'}</button>
+      </div>}
     </div>}
     {isSplit && <div className="workbench-compare-controls">
       <label>固定参照<select aria-label="选择参照档案" value={referencePath} onChange={e => setReferencePath(e.target.value)}>{peers.map(tab => <option key={tab.path} value={tab.path}>{tab.title}</option>)}</select></label>
