@@ -1,0 +1,154 @@
+/* Query frontend only: one continuous reading surface, not nested cards.
+   Keep these overrides after realm.css/workbench.css; the tactical desk and
+   document parser are deliberately untouched. */
+.realm-responsive-menu { position: relative; min-width: 0; }
+.realm-responsive-menu .realm-menu-trigger { display: none; }
+.realm-menu-panel { display: flex; align-items: center; gap: 6px; }
+.realm-nav-menu { margin-left: auto; }
+.realm-library .realm-topbar { min-height: 56px; padding: 8px 16px; gap: 14px; }
+.realm-library .realm-brand-mark { width: 34px; height: 34px; font-size: 28px; }
+.realm-library .realm-brand small { display: none; }
+.realm-library .realm-layout-controls { padding: 4px 12px; gap: 6px; border-bottom: 1px solid var(--r-line); background: var(--r-panel); }
+.realm-library .realm-layout-controls > .realm-overline { display: none; }
+.realm-library .realm-layout-controls button { border-color: transparent; background: transparent; }
+.realm-library .realm-layout-controls button:hover:not(:disabled) { background: var(--r-hover); }
+.realm-library .realm-layout-controls button[aria-pressed="true"] { color: var(--r-accent); background: var(--r-accent-wash); }
+.realm-library .realm-layout-controls button:disabled { opacity: .45; cursor: not-allowed; }
+.realm-library .realm-workspace { grid-template-columns: 184px 272px minmax(0, 1fr); gap: 0; padding: 0; background: var(--r-panel); }
+.realm-library .realm-workspace.index-hidden { grid-template-columns: 272px minmax(0, 1fr); }
+.realm-library .realm-workspace.results-hidden { grid-template-columns: 184px minmax(0, 1fr); }
+.realm-library .realm-workspace.index-hidden.results-hidden { grid-template-columns: minmax(0, 1fr); }
+.realm-library :is(.realm-navigation, .realm-results, .realm-reader) { border: 0; border-radius: 0; box-shadow: none; }
+.realm-library :is(.realm-navigation, .realm-results) { border-right: 1px solid var(--r-line); }
+.realm-library .realm-navigation { background: var(--r-bg); }
+.realm-library .realm-panel-heading { padding: 12px 12px 10px; }
+.realm-library .realm-panel-heading > .realm-overline { display: none; }
+.realm-library .realm-panel-heading h2 { font-size: 16px; margin: 0; }
+.realm-library .realm-filters { padding-inline: 10px; }
+.realm-library .realm-search { margin-inline: 10px; }
+.realm-library .realm-results-meta { padding-top: 6px; }
+.realm-library .realm-results-meta > span { display: none; }
+/* ROW_HEIGHT in ResourceList is 104px. Keep every virtual row at that height. */
+.realm-library .realm-resource-row { padding: 0; }
+.realm-library .realm-resource-card { border: 0; border-bottom: 1px solid var(--r-soft-line); border-radius: 0; padding: 8px 12px; gap: 4px; }
+.realm-library .realm-resource-card.selected { background: var(--r-accent-wash); box-shadow: inset 3px 0 var(--r-accent); }
+.realm-library .realm-resource-card:hover { background: var(--r-hover); }
+.realm-library .realm-resource-tags { height: 16px; flex-basis: 16px; }
+.realm-library .realm-resource-snippet { height: 18px; flex-basis: 18px; line-height: 18px; -webkit-line-clamp: 1; }
+.realm-library .realm-load-more { margin: 0; border: 0; border-top: 1px solid var(--r-line); border-radius: 0; min-height: 40px; }
+/* Open documents and their comparison actions share one row. */
+.realm-library .workbench-header { display: flex; align-items: center; flex: 0 0 auto; min-width: 0; border-bottom: 1px solid var(--r-line); background: var(--r-panel); }
+.realm-library .workbench-tab-strip { flex: 1; padding: 0; gap: 0; }
+.realm-library .workbench-tab { max-width: 220px; border: 0; border-right: 1px solid var(--r-soft-line); border-radius: 0; background: transparent; }
+.realm-library .workbench-tab.active { background: var(--r-accent-wash); box-shadow: inset 0 -2px var(--r-accent); }
+.realm-library .workbench-tab button { min-height: 40px; }
+.realm-library .workbench-controls { border: 0; border-radius: 0; padding: 0 6px; gap: 2px; flex-wrap: nowrap; }
+.realm-library .workbench-controls button { white-space: nowrap; background: transparent; border-color: transparent; }
+.realm-library .workbench-reading-panes { gap: 0; }
+.realm-library .workbench-reference { border-left: 1px solid var(--r-line); }
+.realm-library .workbench-pane-label { border: 0; border-bottom: 1px solid var(--r-soft-line); padding-block: 5px; }
+.realm-library .workbench-compare-controls { border: 0; border-bottom: 1px solid var(--r-line); }
+.realm-library .realm-reader-toolbar { padding: 4px 12px; gap: 6px; border-bottom-color: var(--r-soft-line); }
+.realm-library .realm-reader-toolbar > button, .realm-library .realm-toc > summary { background: transparent; border-color: transparent; }
+.realm-library .realm-reader-options { margin-left: auto; }
+.realm-library .realm-reader-scroll { scrollbar-gutter: stable; }
+.realm-library :is(.workbench-primary, .workbench-reference) { container-type: inline-size; }
+.realm-library :is(.realm-document-heading, .realm-document-content, .realm-reading-note, .realm-document-footer) { box-sizing: border-box; width: 100%; max-width: 1200px; margin-inline: auto; }
+.realm-library .realm-document-heading { padding: 18px 24px 8px; }
+.realm-library .realm-document-heading > .realm-overline { display: none; }
+.realm-library .realm-document-heading h1 { margin: 0 0 6px; font-size: 26px; line-height: 1.5; overflow-wrap: anywhere; }
+.realm-library .realm-document-actions { margin-top: 6px; }
+.realm-library .realm-document-actions > button { background: transparent; border-color: transparent; padding-inline: 0; margin-right: 10px; }
+.realm-library .realm-reading-note { padding: 0 24px; border: 0; margin-block: 0 14px; }
+.realm-library .realm-document-content, .realm-library .split .realm-document-content { padding: 0 24px 24px; gap: 24px; }
+.realm-library .archive-section { border: 0; border-top: 1px solid var(--r-line); border-radius: 0; background: transparent; overflow: visible; }
+.realm-library .archive-section.archive-intro, .realm-library .archive-section.archive-raw { border: 0; }
+.realm-library .archive-section-bar { border: 0; background: transparent; padding: 5px 0 8px; }
+.realm-library .archive-section-bar button { padding-inline: 6px; }
+.realm-library .archive-parts { padding: 0; }
+.realm-library .archive-field { grid-template-columns: 90px minmax(0, 1fr); padding-block: 8px; gap: 12px; }
+.realm-library .archive-field.is-name { padding-bottom: 10px; }
+.realm-library .archive-field.is-name .archive-field-value { font-size: 20px; }
+.realm-library .archive-field-value, .realm-library .archive-prose { font-size: 16px; line-height: 1.85; }
+.realm-library .archive-source { font-size: 15px; line-height: 1.85; }
+.realm-library .realm-document-footer { padding: 16px 24px; }
+.realm-library .realm-welcome { padding: 24px; }
+.realm-library .realm-gate { width: 96px; height: 96px; flex-basis: 96px; margin-block: 16px; }
+.realm-library .realm-gate i { inset: 12px; }
+.realm-library .realm-gate i + i { inset: 23px; }
+.realm-library .realm-welcome-notes { margin-top: 18px; }
+.realm-library .realm-filter-dialog { box-sizing: border-box; padding-bottom: max(18px, env(safe-area-inset-bottom)); }
+/* Focus hides chrome, not document tools or the escape route. It never remounts
+   the reader, so the document's scroll/view/find state is retained. */
+.realm-library.realm-focus-reading > .realm-topbar { display: none; }
+.realm-library.realm-focus-reading .realm-layout-controls :is(.realm-index-toggle, .realm-results-toggle) { display: none; }
+.realm-library.realm-focus-reading .workbench-header { display: none; }
+/* Comparison/history must remain escapable while explicit focus is enabled. */
+.realm-library.realm-focus-reading .realm-reader-workbench[data-mode="compare"] .workbench-header,
+.realm-library.realm-focus-reading .realm-reader-workbench[data-mode="history"] .workbench-header { display: flex; }
+@container (max-width: 560px) {
+  .realm-library .archive-field:not(.is-name):not(.is-rule) { display: grid; grid-template-columns: minmax(70px, 25%) minmax(0, 1fr); gap: 10px; }
+  .realm-library .archive-field-label { padding-top: 2px; }
+}
+@media (max-width: 1180px) {
+  .realm-library .realm-workspace, .realm-library .realm-workspace.index-hidden { grid-template-columns: 260px minmax(0, 1fr); }
+  .realm-library .realm-workspace.results-hidden, .realm-library .realm-workspace.index-hidden.results-hidden { grid-template-columns: minmax(0, 1fr); }
+  .realm-library .realm-document-heading, .realm-library .split .realm-document-heading { padding-inline: 18px; }
+  .realm-library .realm-document-content, .realm-library .split .realm-document-content, .realm-library .realm-reading-note { padding-inline: 18px; }
+}
+@media (max-width: 820px) {
+  .realm-app .realm-topbar { flex-wrap: nowrap; gap: 8px; padding: 4px 12px; min-height: 52px; z-index: 10; }
+  .realm-library .realm-brand strong { font-size: 16px; }
+  .realm-library .realm-brand-mark { width: 30px; height: 30px; font-size: 25px; }
+  .realm-responsive-menu .realm-menu-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 44px; padding: 6px 10px; font-size: 13px; border: 0; background: transparent; color: var(--r-text); }
+  .realm-responsive-menu .realm-menu-panel { display: none; }
+  .realm-responsive-menu.is-open .realm-menu-panel { display: flex; flex-direction: column; align-items: stretch; position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; width: 224px; max-width: calc(100vw - 24px); max-height: min(60dvh, 400px); overflow: auto; padding: 8px; background: var(--r-panel); border: 1px solid var(--r-line); border-radius: 8px; box-shadow: 0 8px 28px #0003; }
+  .realm-app .realm-nav-menu nav { display: flex; flex-direction: column; align-items: stretch; width: 100%; gap: 2px; }
+  .realm-app .realm-nav-menu nav :is(button, a) { min-height: 44px; padding: 10px 12px; text-align: left; font-size: 14px; box-sizing: border-box; }
+  .realm-library .realm-layout-controls { flex-wrap: nowrap; padding: 0 8px; min-height: 44px; }
+  .realm-library .realm-layout-controls button { min-height: 44px; font-size: 12px; padding-inline: 8px; white-space: nowrap; }
+  .realm-library .realm-layout-controls .realm-focus-toggle { display: inline-flex; align-items: center; }
+  .realm-library .realm-workspace, .realm-library .realm-workspace.index-hidden, .realm-library .realm-workspace.results-hidden, .realm-library .realm-workspace.index-hidden.results-hidden { grid-template-columns: minmax(0, 1fr); }
+  .realm-library .realm-results { border: 0; }
+  .realm-library .realm-search input, .realm-library .realm-find input { font-size: 16px; }
+  .realm-library .realm-filter-trigger { min-height: 44px; }
+  .realm-library .realm-search-head .realm-panel-heading { padding-block: 8px; }
+  .realm-library .workbench-tab { max-width: 180px; }
+  .realm-library .workbench-tab button { min-height: 44px; }
+  .realm-library .workbench-tab-close { width: 44px; }
+  .realm-library .workbench-controls { padding-inline: 2px; gap: 0; }
+  .realm-library .workbench-controls button { min-height: 44px; padding-inline: 7px; font-size: 12px; }
+  .realm-library .realm-reader-toolbar { flex-wrap: nowrap; padding: 0 8px; gap: 2px; min-height: 44px; }
+  .realm-library .realm-reader-toolbar button { min-height: 44px; padding-inline: 9px; font-size: 13px; }
+  .realm-library .realm-toc > summary { min-height: 44px; display: flex; align-items: center; padding: 6px 8px; box-sizing: border-box; font-size: 13px; }
+  .realm-library .realm-toc nav { width: min(310px, 76vw); }
+  .realm-library .realm-reader-options .realm-mode { margin: 0; }
+  .realm-library .realm-reader-options .realm-mode button { flex: 1; }
+  .realm-library .realm-reader-options .realm-menu-panel > button { width: 100%; text-align: left; }
+  .realm-library .realm-reader-scroll { scrollbar-gutter: auto; }
+  .realm-library .realm-document-heading, .realm-library .split .realm-document-heading { padding: 14px 14px 8px; }
+  .realm-library .realm-document-heading h1 { font-size: 23px; }
+  .realm-library .realm-document-content, .realm-library .split .realm-document-content { padding: 0 14px max(24px, env(safe-area-inset-bottom)); gap: 22px; }
+  .realm-library .realm-reading-note { padding-inline: 14px; margin-bottom: 12px; }
+  .realm-library .archive-parts { padding: 0; }
+  .realm-library .archive-section-bar { gap: 2px; padding-top: 2px; }
+  .realm-library .archive-section-bar button { min-height: 44px; font-size: 11px; padding-inline: 5px; }
+  .realm-library .archive-field-label { font-size: 12px; }
+  .realm-library .archive-field-value, .realm-library .archive-prose { font-size: 16px; line-height: 1.85; }
+  .realm-library .archive-field.is-name .archive-field-value { font-size: 19px; }
+  .realm-library .realm-document-actions > button, .realm-library .realm-document-actions summary { min-height: 44px; display: inline-flex; align-items: center; }
+  .realm-library .workbench-reference { border: 0; }
+  .realm-library .realm-filter-dialog .filter-options button, .realm-library .realm-filter-dialog .filter-category, .realm-library .realm-filter-dialog .filter-expand { min-height: 44px; }
+  .realm-library .realm-filter-dialog .filter-expand { min-width: 36px; }
+  .realm-library .realm-find button { min-width: 36px; min-height: 44px; }
+  .realm-library .realm-document-footer { padding-inline: 14px; }
+}
+@media (max-width: 360px) {
+  .realm-library .realm-reader-toolbar { padding-inline: 4px; }
+  .realm-library .realm-reader-toolbar button { padding-inline: 7px; }
+  .realm-library .workbench-controls button { padding-inline: 5px; font-size: 11px; }
+  .realm-library .archive-section-bar > span { font-size: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .realm-library *, .realm-nav-menu * { scroll-behavior: auto !important; transition: none !important; }
+}

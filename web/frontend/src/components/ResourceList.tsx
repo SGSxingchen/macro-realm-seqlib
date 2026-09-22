@@ -4,7 +4,7 @@ import type { Resource } from '../types';
 import { ResourceCard } from './ResourceCard';
 
 type Props = { items: Resource[]; activePath: string; onOpen: (path: string) => void; highlightTokens: string[]; loading: boolean; scrollKey?: string; error?: boolean };
-const ROW_HEIGHT = 152;
+const ROW_HEIGHT = 104;
 const positions = new Map<string, number>();
 
 export function ResourceList({ items, activePath, onOpen, highlightTokens, loading, scrollKey = '', error }: Props) {

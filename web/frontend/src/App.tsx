@@ -37,9 +37,12 @@ function LibraryApp() {
   const [focus, setFocus] = useState(false);
   const [compareFocus, setCompareFocus] = useState(false);
   const [searchFocusTick, setSearchFocusTick] = useState(0);
-  const focused = focus || compareFocus;
+  // Comparison can free the sidebars without pretending to be explicit focus.
+  // With no document open, always leave a usable search surface.
+  const readingFocus = Boolean(nav.openPath) && focus;
+  const focused = Boolean(nav.openPath) && (focus || compareFocus);
   const showIndex = panes.index && !focused;
-  const showResults = panes.results && !focused;
+  const showResults = (!nav.openPath || panes.results) && !focused;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const dialogReturnFocus = useRef<HTMLButtonElement | null>(null);
   const listRequest = useRef<AbortController | null>(null);
@@ -126,7 +129,10 @@ function LibraryApp() {
     if (drawer && !dialog.open) dialog.showModal();
     if (!drawer && dialog.open) {
       dialog.close();
-      if (dialogReturnFocus.current?.getBoundingClientRect().width) dialogReturnFocus.current.focus();
+      if (focusSearchAfterNavigation.current) {
+        focusSearchAfterNavigation.current = false;
+        document.querySelector<HTMLInputElement>('#realm-query')?.focus();
+      } else if (dialogReturnFocus.current?.getBoundingClientRect().width) dialogReturnFocus.current.focus();
     }
   }, [drawer]);
   useEffect(() => {
@@ -135,6 +141,15 @@ function LibraryApp() {
     mq.addEventListener('change', resize);
     return () => mq.removeEventListener('change', resize);
   }, []);
+  useEffect(() => {
+    const escapeFocus = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || !readingFocus || drawer) return;
+      if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable="true"], details[open]')) return;
+      setFocus(false);
+    };
+    window.addEventListener('keydown', escapeFocus);
+    return () => window.removeEventListener('keydown', escapeFocus);
+  }, [readingFocus, drawer]);
 
   const revealSearch = useCallback(() => {
     focusSearchAfterNavigation.current = true;
@@ -145,7 +160,7 @@ function LibraryApp() {
     if (window.matchMedia('(max-width: 820px)').matches) navigate({ openPath: '', anchor: '' }, true);
   }, [navigate]);
   useLayoutEffect(() => {
-    if (focusSearchAfterNavigation.current && nav.tab === 'read' && showResults && (!nav.openPath || window.matchMedia('(min-width: 821px)').matches)) {
+    if (focusSearchAfterNavigation.current && !dialogRef.current?.open && nav.tab === 'read' && showResults && (!nav.openPath || window.matchMedia('(min-width: 821px)').matches)) {
       focusSearchAfterNavigation.current = false;
       document.querySelector<HTMLInputElement>('#realm-query')?.focus();
     }
@@ -189,15 +204,15 @@ function LibraryApp() {
     setPanes(value => ({ ...value, [pane]: !shown }));
   };
 
-  return <main className={`app realm-app ${nav.tab === 'read' ? 'realm-library' : nav.tab === 'admin' ? 'admin-mode' : ''}`}>
+  return <main className={`app realm-app ${nav.tab === 'read' ? `realm-library${readingFocus ? ' realm-focus-reading' : ''}` : nav.tab === 'admin' ? 'admin-mode' : ''}`}>
     <Header recordCount={tree.reduce((sum, node) => sum + node.count, 0)} tab={nav.tab} onTab={tab => { setDrawer(false); navigate({ tab }); }} />
     {nav.tab === 'read' ? <div className="realm-reading-shell">
       <div className="realm-layout-controls" aria-label="阅读布局">
         <span className="realm-overline">READING DESK</span>
         <button className="realm-index-toggle" aria-expanded={showIndex} aria-controls="realm-index-panel" onClick={() => togglePane('index')}>{showIndex ? '收起索引' : '展开索引'}</button>
         <button className="realm-global-filter" aria-haspopup="dialog" onClick={event => openFilters(event.currentTarget)}>索引 / 收藏</button>
-        <button className="realm-results-toggle" aria-expanded={showResults} aria-controls="realm-results-panel" onClick={() => togglePane('results')}>{showResults ? '收起结果' : '展开结果'}</button>
-        <button className="realm-focus-toggle" aria-pressed={focused} onClick={() => { if (focused) { setFocus(false); setCompareFocus(false); } else setFocus(true); }}>{focused ? '退出专注' : '专注阅读'}</button>
+        <button className="realm-results-toggle" disabled={!nav.openPath} title={!nav.openPath ? '打开档案后可收起结果' : undefined} aria-expanded={showResults} aria-controls="realm-results-panel" onClick={() => togglePane('results')}>{showResults ? '收起结果' : '展开结果'}</button>
+        <button className="realm-focus-toggle" aria-pressed={readingFocus} disabled={!nav.openPath} title={!nav.openPath ? '打开一份档案后进入专注阅读' : '专注阅读，按 Esc 或再次点击退出'} onClick={() => setFocus(value => !value)}>{readingFocus ? '退出专注' : '专注阅读'}</button>
         <button className="realm-search-toggle" onClick={revealSearch}>搜索档案 <kbd>⌘ / Ctrl K</kbd></button>
       </div>
       <div className={`realm-workspace ${nav.openPath ? 'has-resource' : ''} ${showIndex ? '' : 'index-hidden'} ${showResults ? '' : 'results-hidden'}`}>
@@ -240,7 +255,8 @@ function LibraryApp() {
           <header><h2 id="realm-filter-title">筛选档案</h2><button autoFocus onClick={() => setDrawer(false)} aria-label="关闭筛选">×</button></header>
           {treeError && <p role="alert">分类暂不可用 <button onClick={reload}>重试</button></p>}{filterRail}
           {saved.length > 0 && <div className="realm-saved"><h3>随行档案</h3>{saved.map(item => <div key={item.path}><button className="saved-title" onClick={() => openResource(item.path)}>{item.title}</button><button aria-label={`取消收藏：${item.title}`} onClick={() => { const next = saved.filter(v => v.path !== item.path); setSaved(next); if (!saveResources(next)) setStorageNotice('收藏未能保存。'); }}>×</button></div>)}</div>}
-          <button className="realm-primary" onClick={() => setDrawer(false)}>查看结果{response ? ` · ${response.total}` : ''}</button>
+          {storageNotice && <p role="status">{storageNotice}</p>}
+          <button className="realm-primary" onClick={() => { setDrawer(false); if (window.matchMedia('(max-width: 820px)').matches) revealSearch(); }}>查看结果{response ? ` · ${response.total}` : ''}</button>
         </dialog>
       </div>
     </div> : nav.tab === 'updates' ? <RecentUpdates onOpen={async path => openResource(path)} /> : nav.tab === 'stats' ? <SessionStats /> : <AdminPanel detail={detail} reload={reload} onResourceMoved={() => { navigate({ openPath: '', anchor: '' }, true); reload(); }} onBackToRead={() => navigate({ tab: 'read' })} />}
