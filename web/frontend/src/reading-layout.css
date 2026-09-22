@@ -1,6 +1,8 @@
 /* Query frontend only: one continuous reading surface, not nested cards.
    Keep these overrides after realm.css/workbench.css; the tactical desk and
    document parser are deliberately untouched. */
+/* The legacy .app width min(1820px, 99vw) otherwise leaves unused space. */
+.app.realm-library { width: 100%; }
 .realm-responsive-menu { position: relative; min-width: 0; }
 .realm-responsive-menu .realm-menu-trigger { display: none; }
 .realm-menu-panel { display: flex; align-items: center; gap: 6px; }

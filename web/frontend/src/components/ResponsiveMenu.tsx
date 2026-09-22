@@ -10,6 +10,12 @@ export function ResponsiveMenu({ label, className, children, closeOnSelect = fal
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
+    const media = window.matchMedia('(max-width: 820px)');
+    const reset = () => { if (!media.matches) setOpen(false); };
+    media.addEventListener('change', reset);
+    return () => media.removeEventListener('change', reset);
+  }, []);
+  useEffect(() => {
     if (!open) return;
     const outside = (event: PointerEvent) => {
       if (!root.current?.contains(event.target as Node)) setOpen(false);
