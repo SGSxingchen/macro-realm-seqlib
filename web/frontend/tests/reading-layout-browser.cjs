@@ -104,7 +104,9 @@ async function setup(browser, width, height = 844, storedPanes) {
         assert.ok(await page.locator('.realm-focus-reading').count(), 'Escape in settings closes only the disclosure');
         assert.ok(await settings.evaluate(n => document.activeElement === n));
         await settings.click();
-        await page.locator('.realm-document-heading h1').click();
+        // The title's centre is covered by the menu on 320px screens.
+        // Click its left edge to exercise a genuine outside interaction.
+        await page.locator('.realm-document-heading h1').click({ position: { x: 2, y: 2 } });
         assert.equal(await settings.getAttribute('aria-expanded'), 'false', 'Outside click dismisses settings');
       }
       // The TOC dismisses locally and leaves focus mode active.
