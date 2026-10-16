@@ -113,6 +113,26 @@ function ReaderContent({ detail, anchor = '', query = '', saved, onBack, onAncho
     try { await copyText(text); notify(message); }
     catch (error) { notify(error instanceof Error ? error.message : '复制失败，请在原文视图手动选择。'); }
   };
+  const downloadTxt = () => {
+    let url: string | undefined;
+    const link = document.createElement('a');
+    try {
+      const filename = detail.path.split('/').pop() || detail.title || '资源';
+      link.download = filename.replace(/\.[^.]+$/, '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') + '.txt';
+      url = URL.createObjectURL(new Blob([detail.content], { type: 'text/plain;charset=utf-8' }));
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      notify('已发起 TXT 下载');
+    } catch (error) {
+      console.error('资源 TXT 下载失败', error);
+      notify('下载失败，请重试或使用复制全文。');
+    } finally {
+      link.remove();
+      // 留出浏览器开始读取下载内容的时间，再释放临时地址。
+      if (url) { const downloadUrl = url; window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 30000); }
+    }
+  };
   const nextMatch = (step: number) => {
     if (!matches.current.length) return;
     matches.current[matchIndex]?.removeAttribute('data-current');
@@ -136,7 +156,7 @@ function ReaderContent({ detail, anchor = '', query = '', saved, onBack, onAncho
     <div ref={scroll} className="realm-reader-scroll">
       <header className="realm-document-heading"><div className="realm-overline">RESOURCE ARCHIVE / {detail.top_kind || '序列档案'}</div><h1 ref={title} tabIndex={-1}>{detail.title}</h1>
         <div className="realm-document-meta">{detail.side && <span>{detail.side}</span>}<span>{detail.category}</span>{detail.authors?.length ? <span>{detail.authors.join(' / ')}</span> : null}</div>
-        <div className="realm-document-actions"><button onClick={() => copy(detail.content, '已复制完整原文')}>复制全文</button><button onClick={() => copy(resourceLink(detail.path), '已复制档案链接')}>分享档案</button><details><summary>档案信息</summary><div><p>{detail.path}</p><p>{detail.encoding} · {detail.size} 字节</p><button onClick={() => copy(detail.path, '已复制文件路径')}>复制路径</button></div></details></div>
+        <div className="realm-document-actions"><button onClick={() => copy(detail.content, '已复制完整原文')}>复制全文</button><button onClick={downloadTxt}>下载 TXT</button><button onClick={() => copy(resourceLink(detail.path), '已复制档案链接')}>分享档案</button><details><summary>档案信息</summary><div><p>{detail.path}</p><p>{detail.encoding} · {detail.size} 字节</p><button onClick={() => copy(detail.path, '已复制文件路径')}>复制路径</button></div></details></div>
       </header>
       <div className="realm-reading-note">{mode === 'adaptive' ? '按明确字段辅助排版；非标准内容按原有顺序保留。规则以原文为准。' : '原文视图：保留完整内容、换行与顺序。'}</div>
       <div className={`realm-document-content${mode === 'raw' ? ' is-raw' : ''}`}>

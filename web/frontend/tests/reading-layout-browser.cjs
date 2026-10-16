@@ -61,6 +61,11 @@ async function setup(browser, width, height = 844, storedPanes) {
       await noOverflow(page);
       await screenshot(page, `${width}-results`);
       await page.locator('[data-resource-index="0"]').click(); await opened(page, 0);
+      const downloaded = page.waitForEvent('download');
+      await page.locator('.workbench-primary').getByRole('button', { name: '下载 TXT', exact: true }).click();
+      const download = await downloaded;
+      assert.equal(download.suggestedFilename(), resources[0].path.split('/').pop(), '下载保留原资源文件名');
+      assert.equal(fs.readFileSync(await download.path(), 'utf8'), resources[0].content, '下载包含完整原文与换行');
       await noOverflow(page);
       const normal = await scroll(page).boundingBox();
       if (width <= 820) {
