@@ -82,7 +82,11 @@ jobs:
           git pull --ff-only origin main
 
           cd "$DEPLOY_PATH/web/backend"
-          if [ ! -x .venv/bin/python ]; then
+          # 服务器升级 Python 后旧 venv 的 bin/python3 可能变成悬空链接，
+          # 仅用 -x .venv/bin/python 判断会漏掉这种“存在但不可用”的 venv。
+          if ! .venv/bin/python -m pip --version >/dev/null 2>&1; then
+            echo "backend venv 不可用，删除后重建"
+            rm -rf .venv
             python3 -m venv .venv
           fi
           .venv/bin/python -m pip install --upgrade pip
