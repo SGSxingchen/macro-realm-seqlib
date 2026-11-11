@@ -93,14 +93,31 @@ jobs:
           npm run build
 
           # Nginx serves this directory directly; building dist alone does not update the page.
+          test -n "$DEPLOY_STATIC_PATH"
           test -d "$DEPLOY_STATIC_PATH"
           install -d -m 0755 "$DEPLOY_STATIC_PATH/assets"
           find "$DEPLOY_PATH/web/frontend/dist/assets" -maxdepth 1 -type f \
             -exec install -m 0644 {} "$DEPLOY_STATIC_PATH/assets/" \;
           install -m 0644 "$DEPLOY_PATH/web/frontend/dist/index.html" "$DEPLOY_STATIC_PATH/index.html"
           install -m 0644 "$DEPLOY_PATH/web/frontend/dist/tabletop.html" "$DEPLOY_STATIC_PATH/tabletop.html"
+
+          # SEO 静态产物：robots / sitemap / 分类目录 / 全部条目页。
+          install -m 0644 "$DEPLOY_PATH/web/frontend/dist/robots.txt" "$DEPLOY_STATIC_PATH/robots.txt"
+          install -m 0644 "$DEPLOY_PATH/web/frontend/dist/sitemap.xml" "$DEPLOY_STATIC_PATH/sitemap.xml"
+          install -m 0644 "$DEPLOY_PATH/web/frontend/dist/catalog.html" "$DEPLOY_STATIC_PATH/catalog.html"
+          # entry/ 必须全量递归同步，并清掉上一次构建里已不存在的旧页面。
+          if [ -e "$DEPLOY_STATIC_PATH/entry" ]; then
+            rm -rf "$DEPLOY_STATIC_PATH/entry"
+          fi
+          cp -R "$DEPLOY_PATH/web/frontend/dist/entry" "$DEPLOY_STATIC_PATH/entry"
+
           test -s "$DEPLOY_STATIC_PATH/index.html"
           test -s "$DEPLOY_STATIC_PATH/tabletop.html"
+          test -s "$DEPLOY_STATIC_PATH/robots.txt"
+          test -s "$DEPLOY_STATIC_PATH/sitemap.xml"
+          test -s "$DEPLOY_STATIC_PATH/catalog.html"
+          test -d "$DEPLOY_STATIC_PATH/entry"
+          test -n "$(find "$DEPLOY_STATIC_PATH/entry" -type f -name '*.html' -print -quit)"
 
           sudo systemctl restart "$DEPLOY_SERVICE"
           sudo systemctl is-active --quiet "$DEPLOY_SERVICE"

@@ -452,7 +452,7 @@ def review_summary(review: dict) -> dict:
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "repo": str(REPO_ROOT), "admin_configured": bool(admin_password()), "wiki_configured": wiki_credentials_configured()}
+    return {"ok": True, "admin_configured": bool(admin_password()), "wiki_configured": wiki_credentials_configured()}
 
 
 @app.get("/api/session-stats/overview")
