@@ -39,22 +39,24 @@ type ReadingPreferences = { mode: 'adaptive' | 'raw'; find: string; findOpen: bo
 const positions = new Map<string, number>();
 const preferences = new Map<string, ReadingPreferences>();
 
+const CANONICAL_SIDES = ['战技侧', '神秘侧', '科技侧', '特殊侧'] as const;
+
 const SIDE_DESCRIPTIONS: Record<string, string> = {
-  '战技侧': '武技、兵器、体术与正面交锋体系',
-  '神秘侧': '咒术、仪式、血脉、神秘学与异能体系',
-  '科技侧': '义体、军工、力场、智能与科学造物',
-  '特殊侧': '跨体系机制、概念特质与特殊规则序列',
+  '战技侧': '冷热兵器技艺、格斗流派、极意体术与正面交锋序列',
+  '神秘侧': '魔术礼装、神代血脉、咒术仪式、灵魂与异能体系',
+  '科技侧': '义体殖装、动力装甲、高能军工、战术智能与力场造物',
+  '特殊侧': '跨世界法则、概念类特质、替身/异常机制与特殊序列',
 };
 
 export function Reader(props: Props) {
   if (props.error) {
     return (
       <article className="realm-reader">
-        {props.onBack && <button className="realm-back" onClick={props.onBack}>← 返回结果</button>}
+        {props.onBack && <button type="button" className="realm-back" onClick={props.onBack}>← 返回结果</button>}
         <div className="realm-reader-state" role="alert">
           <h2>暂时无法打开这份档案</h2>
           <p>资源可能已改名、下架，或网络暂不可用。不会自动替换成同名条目。</p>
-          <button onClick={props.onRetry}>重新加载</button>
+          <button type="button" onClick={props.onRetry}>重新加载</button>
           <details><summary>错误详情</summary><pre>{props.error}</pre></details>
         </div>
       </article>
@@ -63,7 +65,7 @@ export function Reader(props: Props) {
   if (props.loading) {
     return (
       <article className="realm-reader" aria-busy="true">
-        {props.onBack && <button className="realm-back" onClick={props.onBack}>← 返回结果</button>}
+        {props.onBack && <button type="button" className="realm-back" onClick={props.onBack}>← 返回结果</button>}
         <div className="realm-reader-state">
           <p role="status">正在展开档案…</p>
           <div className="realm-skeleton"><div /><div /><div /></div>
@@ -73,55 +75,111 @@ export function Reader(props: Props) {
   }
   if (!props.detail) {
     const w = props.welcome;
+    const sideCountMap = new Map((w?.sides || []).map(s => [s.name, s.count]));
+    const quadrantSides = w
+      ? CANONICAL_SIDES.map(name => ({ name, count: sideCountMap.get(name) ?? 0 }))
+      : [];
+    const sortedCategories = w
+      ? [...w.categories].sort((a, b) => b.count - a.count)
+      : [];
+
     return (
       <article className="realm-reader realm-welcome">
         <div className="realm-welcome-container">
           <header className="realm-welcome-hero">
-            <div className="realm-welcome-badge">
-              <span className="welcome-sigil" aria-hidden="true">∞</span>
-              <span>宏观界域 · 强化序列档案库{w?.totalCount ? ` · ${w.totalCount} 份公开档案` : ''}</span>
+            <div className="realm-welcome-kicker">
+              {w?.totalCount ? `宏观界域 · 现存 ${w.totalCount} 项公开强化序列` : '宏观界域 · 公开强化序列总枢'}
             </div>
-            <h2>诸界之间，查阅你的下一份强化序列</h2>
-            <p>完整收录职业、技能表、特质改造、能量池与公共建筑原文。结构化速读与无损原文随时切换，支持多档案并排对照。</p>
+            <h1>轮回强化序列总枢</h1>
+            <p>覆盖万界副本的职业、技能表、特质改造、能量池与界域公共设施。支持多词组合与拼音检索、模块化参数速读、原始文本逐字对照及多档案同屏比对。</p>
             <div className="realm-welcome-cta">
-              <button className="realm-primary" onClick={props.onBrowse}>开始检索 <kbd>⌘K</kbd></button>
+              <button
+                type="button"
+                className="realm-welcome-search"
+                style={{
+                  flex: '1 1 240px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  textAlign: 'left',
+                }}
+                onClick={props.onBrowse}
+              >
+                <span>检索序列名称、规则词条、出处世界或创作者…</span>
+                <kbd aria-hidden="true">⌘K</kbd>
+              </button>
               {w && w.sampleItems.length > 0 && (
-                <button type="button" className="realm-secondary-cta" onClick={w.onOpenRandom}>随机抽选档案</button>
+                <button type="button" className="realm-secondary-cta realm-welcome-random" onClick={w.onOpenRandom}>
+                  随机抽取序列
+                </button>
               )}
             </div>
           </header>
 
-          {w && w.sides.length > 0 && (
-            <section className="realm-welcome-section" aria-label="按作品侧浏览">
-              <h3>按作品侧快速筛选</h3>
-              <div className="welcome-side-grid">
-                {w.sides.map(side => (
-                  <button
-                    key={side.name}
-                    type="button"
-                    className="welcome-side-card"
-                    data-side={sideKey(side.name)}
-                    onClick={() => w.onPickSide(side.name)}
-                  >
-                    <div className="welcome-side-top">
-                      <strong>{side.name}</strong>
-                      <span>{side.count} 份</span>
-                    </div>
-                    <small>{SIDE_DESCRIPTIONS[side.name] || '点击筛选该侧别下的全部档案'}</small>
-                  </button>
-                ))}
+          {w && (w.sides.length > 0 || w.totalCount > 0) && (
+            <section className="realm-welcome-section" aria-label="四大强化体系">
+              <h3>四大强化体系</h3>
+              <div className="realm-quadrant-matrix">
+                {quadrantSides.map(side => {
+                  const sKey = sideKey(side.name);
+                  return (
+                    <button
+                      key={side.name}
+                      type="button"
+                      className="realm-quad-cell"
+                      onClick={() => w.onPickSide(side.name)}
+                    >
+                      <div
+                        className="realm-quad-head"
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'baseline',
+                          gap: '8px',
+                          width: '100%',
+                        }}
+                      >
+                        <span
+                          className="realm-quad-name"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                        >
+                          <i
+                            className="realm-quad-bar"
+                            style={{
+                              width: '3px',
+                              height: '0.95em',
+                              display: 'inline-block',
+                              flexShrink: 0,
+                              ...(sKey ? { background: `var(--side-${sKey})` } : {}),
+                            }}
+                            aria-hidden="true"
+                          />
+                          <strong>{side.name}</strong>
+                        </span>
+                        {side.count > 0 && <span className="realm-quad-count">{side.count} 项</span>}
+                      </div>
+                      <p className="realm-quad-desc">{SIDE_DESCRIPTIONS[side.name]}</p>
+                    </button>
+                  );
+                })}
               </div>
             </section>
           )}
 
-          {w && w.categories.length > 0 && (
-            <section className="realm-welcome-section" aria-label="按分类浏览">
-              <h3>核心序列大类</h3>
-              <div className="welcome-cat-pills">
-                {w.categories.map(cat => (
-                  <button key={cat.path} type="button" onClick={() => w.onPickCategory(cat.path)}>
+          {w && sortedCategories.length > 0 && (
+            <section className="realm-welcome-section" aria-label="六大兑换分区">
+              <h3>六大兑换分区</h3>
+              <div className="realm-terminal-strip">
+                {sortedCategories.map(cat => (
+                  <button
+                    key={cat.path}
+                    type="button"
+                    className="realm-term-cell"
+                    onClick={() => w.onPickCategory(cat.path)}
+                  >
+                    <strong>{cat.count}</strong>
                     <span>{cat.name}</span>
-                    <em>{cat.count}</em>
                   </button>
                 ))}
               </div>
@@ -132,28 +190,38 @@ export function Reader(props: Props) {
             const quickItems: Array<{ path: string; title: string; side?: string }> =
               w.savedItems.length > 0 ? w.savedItems.slice(0, 6) : w.sampleItems.slice(0, 6);
             return (
-              <section className="realm-welcome-section" aria-label={w.savedItems.length > 0 ? '随行收藏' : '档案直达'}>
+              <section className="realm-welcome-section" aria-label={w.savedItems.length > 0 ? '随行收藏' : '序列速览'}>
                 <h3>{w.savedItems.length > 0 ? '随行收藏直达' : '当前列表速览'}</h3>
                 <div className="welcome-quick-list">
-                  {quickItems.map(item => (
-                    <button key={item.path} type="button" className="welcome-quick-item" onClick={() => w.onOpenResource(item.path)}>
-                      <span className="quick-item-title">{item.title}</span>
-                      {item.side ? (
-                        <small data-side={sideKey(item.side)}>{item.side}</small>
-                      ) : (
-                        <small>打开 ↵</small>
-                      )}
-                    </button>
-                  ))}
+                  {quickItems.map(item => {
+                    const qSeq = item.title.match(/^(\d{1,4})】\s*(.+)$/);
+                    return (
+                      <button
+                        key={item.path}
+                        type="button"
+                        className="welcome-quick-item"
+                        onClick={() => w.onOpenResource(item.path)}
+                      >
+                        <span className="quick-item-title">
+                          {qSeq ? `${qSeq[1]} · ${qSeq[2]}` : item.title}
+                        </span>
+                        {item.side ? (
+                          <small data-side={sideKey(item.side)}>{item.side}</small>
+                        ) : (
+                          <small>查阅 ↵</small>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </section>
             );
           })()}
 
           <footer className="realm-welcome-notes">
-            <span><kbd>Ctrl / ⌘ K</kbd> 聚焦全局搜索</span>
-            <span>支持多词组合与拼音检索</span>
-            <span>原文逐字保留 · 不改写任何规则</span>
+            <span>快捷键聚焦全局检索</span>
+            <span>支持多词组合与拼音匹配</span>
+            <span>原文逐字无损保留 · 不改写任何规则</span>
           </footer>
         </div>
       </article>
@@ -343,13 +411,20 @@ function ReaderContent({
     reveal(matches.current[index]);
   };
 
-  const seqMatch = detail.title.match(/^(\d{1,4}】)(.+)$/);
+  const seqMatch = detail.title.match(/^(\d{1,4})(】)(.+)$/);
+  const sKey = sideKey(detail.side);
+  const kickerParts: Array<{ text: string; accent?: boolean; side?: string }> = [];
+  if (seqMatch) kickerParts.push({ text: `编号 ${seqMatch[1]}`, accent: true });
+  if (detail.top_kind) kickerParts.push({ text: detail.top_kind });
+  if (detail.side && detail.side !== detail.top_kind) kickerParts.push({ text: detail.side, side: sKey });
+  if (!kickerParts.length && detail.category) kickerParts.push({ text: detail.category });
+
   const showDesktopOutline = instance === 'primary' && mode === 'adaptive' && sections.length >= 2;
 
   return (
     <article className="realm-reader">
       <div className="realm-reader-toolbar">
-        {onBack && <button className="realm-back" onClick={onBack}>← 结果</button>}
+        {onBack && <button type="button" className="realm-back" onClick={onBack}>← 结果</button>}
         <details
           ref={toc}
           className="realm-toc"
@@ -365,13 +440,14 @@ function ReaderContent({
           <summary>目录 <span>{sections.length}</span></summary>
           <nav aria-label="文档目录">
             {sections.map(section => (
-              <button key={section.id} className={activeSectionId === section.id ? 'is-active' : undefined} onClick={() => jump(section.id)}>
+              <button type="button" key={section.id} className={activeSectionId === section.id ? 'is-active' : undefined} onClick={() => jump(section.id)}>
                 {section.title}
               </button>
             ))}
           </nav>
         </details>
         <button
+          type="button"
           aria-expanded={findOpen}
           onClick={() => {
             setFindOpen(v => !v);
@@ -382,11 +458,12 @@ function ReaderContent({
         </button>
         <ResponsiveMenu label="阅读设置" className="realm-reader-options">
           <div className="realm-mode" role="group" aria-label="阅读方式">
-            <button aria-pressed={mode === 'adaptive'} onClick={() => setMode('adaptive')}>自适应</button>
-            <button aria-pressed={mode === 'raw'} onClick={() => setMode('raw')}>原文</button>
+            <button type="button" aria-pressed={mode === 'adaptive'} onClick={() => setMode('adaptive')}>自适应</button>
+            <button type="button" aria-pressed={mode === 'raw'} onClick={() => setMode('raw')}>原文</button>
           </div>
           {onSave && (
             <button
+              type="button"
               aria-pressed={!!saved}
               onClick={() => {
                 const ok = onSave();
@@ -420,50 +497,69 @@ function ReaderContent({
             }}
           />
           <span role="status">{matchCount ? `${matchIndex + 1} / ${matchCount}` : find ? '无精确匹配' : '输入关键词'}</span>
-          <button disabled={!matchCount} aria-label="上一个匹配" onClick={() => nextMatch(-1)}>↑</button>
-          <button disabled={!matchCount} aria-label="下一个匹配" onClick={() => nextMatch(1)}>↓</button>
-          <button aria-label="关闭文内查找" onClick={() => setFindOpen(false)}>×</button>
+          <button type="button" disabled={!matchCount} aria-label="上一个匹配" onClick={() => nextMatch(-1)}>↑</button>
+          <button type="button" disabled={!matchCount} aria-label="下一个匹配" onClick={() => nextMatch(1)}>↓</button>
+          <button type="button" aria-label="关闭文内查找" onClick={() => setFindOpen(false)}>×</button>
         </div>
       )}
       <div ref={scroll} className="realm-reader-scroll">
         <div className={`realm-reader-layout${showDesktopOutline ? ' has-outline' : ''}`}>
           <div className="realm-reader-main">
             <header className="realm-document-heading">
-              <div className="realm-document-meta">
-                {detail.top_kind && <span className="doc-meta-kind">{detail.top_kind}</span>}
-                {detail.side && <span className="doc-meta-side" data-side={sideKey(detail.side)}>{detail.side}</span>}
-                {detail.category && detail.category !== detail.top_kind && <span className="doc-meta-cat">{detail.category}</span>}
-                {detail.authors?.length ? <span className="doc-meta-authors">创作者：{detail.authors.join(' / ')}</span> : null}
-              </div>
+              {kickerParts.length > 0 && (
+                <div className="realm-seq-kicker">
+                  {kickerParts.map((part, idx) => (
+                    <span key={idx} className="kicker-segment">
+                      {idx > 0 && <span className="kicker-sep" aria-hidden="true"> · </span>}
+                      <span
+                        className={part.accent ? 'kicker-code' : part.side ? 'kicker-side' : undefined}
+                        style={part.side ? { color: `var(--side-${part.side})` } : undefined}
+                      >
+                        {part.text}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              )}
               <h1 ref={title} tabIndex={-1}>
                 {seqMatch ? (
                   <>
-                    <span className="doc-seq-prefix">{seqMatch[1]}</span>
-                    <span>{seqMatch[2]}</span>
+                    <span className="doc-seq-prefix">{seqMatch[1] + seqMatch[2]}</span>
+                    <span>{seqMatch[3]}</span>
                   </>
                 ) : (
                   detail.title
                 )}
               </h1>
-              <div className="realm-document-actions">
-                <button onClick={() => copy(detail.content, '已复制完整原文')}>复制全文</button>
-                <button onClick={downloadTxt}>下载 TXT</button>
-                <button onClick={() => copy(resourceLink(detail.path), '已复制档案链接')}>分享档案</button>
-                <details className="doc-info-disclosure">
-                  <summary>档案信息</summary>
-                  <div className="doc-info-popover">
-                    <p>{detail.path}</p>
-                    <p>{detail.encoding} · {detail.size} 字节</p>
-                    <button onClick={() => copy(detail.path, '已复制文件路径')}>复制路径</button>
-                  </div>
-                </details>
+              <div
+                className="realm-document-subrow"
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '8px 16px',
+                }}
+              >
+                <div className="realm-document-meta" style={{ marginBottom: 0 }}>
+                  {detail.category && <span className="doc-meta-cat">分区：{detail.category}</span>}
+                  {detail.authors?.length ? <span className="doc-meta-authors">署名：{detail.authors.join(' / ')}</span> : null}
+                </div>
+                <div className="realm-document-actions">
+                  <button type="button" onClick={() => copy(detail.content, '已复制完整原文')}>复制全文</button>
+                  <button type="button" onClick={downloadTxt}>下载 TXT</button>
+                  <button type="button" onClick={() => copy(resourceLink(detail.path), '已复制档案链接')}>分享档案</button>
+                  <details className="doc-info-disclosure">
+                    <summary>档案信息</summary>
+                    <div className="doc-info-popover">
+                      <p>{detail.path}</p>
+                      <p>{detail.encoding} · {detail.size} 字节</p>
+                      <button type="button" onClick={() => copy(detail.path, '已复制文件路径')}>复制路径</button>
+                    </div>
+                  </details>
+                </div>
               </div>
             </header>
-            <div className="realm-reading-note">
-              {mode === 'adaptive'
-                ? '结构化阅读视图：自动提炼属性标签与能力卡，非标准段落按原序保留，实际判定以原文为准。'
-                : '纯文本原文视图：100% 保留原始换行、缩进与符号顺序。'}
-            </div>
             <div className={`realm-document-content${mode === 'raw' ? ' is-raw' : ''}`}>
               {sections.length ? (
                 sections.map(section => (
@@ -483,8 +579,13 @@ function ReaderContent({
               )}
             </div>
             <footer className="realm-document-footer">
-              <span>档案末尾 · 宏观界域强化序列库</span>
+              <span>
+                {mode === 'adaptive'
+                  ? '档案末尾 · 模块化速读视图，实际判定以原文为准'
+                  : '档案末尾 · 纯文本原文视图，逐字保留原始换行与符号'}
+              </span>
               <button
+                type="button"
                 onClick={() => {
                   if (scroll.current) scroll.current.scrollTop = 0;
                   onAnchor?.('');
@@ -503,12 +604,14 @@ function ReaderContent({
               <nav className="outline-list">
                 {sections.map(section => {
                   const rank = section.kind === 'entry' ? extractRank(section.title) : undefined;
-                  const label = section.kind === 'intro' ? '档案概览' : cleanOutlineTitle(section.title);
+                  const isPhase = section.kind === 'section';
+                  const label = section.kind === 'intro' ? '序列导言' : cleanOutlineTitle(section.title);
+                  const cls = `${isPhase ? 'is-phase ' : ''}${activeSectionId === section.id ? 'is-active' : ''}`.trim();
                   return (
                     <button
                       key={section.id}
                       type="button"
-                      className={activeSectionId === section.id ? 'is-active' : undefined}
+                      className={cls || undefined}
                       onClick={() => jump(section.id)}
                       title={section.title}
                     >
