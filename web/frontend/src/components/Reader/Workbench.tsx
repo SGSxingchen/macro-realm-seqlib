@@ -21,6 +21,7 @@ export function ReaderWorkbench({ openPath, onOpen, onFocusMode, revision, ...re
   const [phonePane, setPhonePane] = useState<'primary' | 'reference'>('primary');
   const previousPath = useRef(openPath);
   const tabStrip = useRef<HTMLDivElement>(null);
+  const changeMode = (next: Mode) => { setMode(next); onFocusMode(next !== 'read'); };
 
   useEffect(() => {
     setTabs(current => rememberTab(current, openPath, readerProps.detail?.path === openPath ? readerProps.detail.title : undefined));
@@ -29,10 +30,10 @@ export function ReaderWorkbench({ openPath, onOpen, onFocusMode, revision, ...re
       previousPath.current = openPath;
       setPhonePane('primary');
     }
-    if (!openPath) setMode('read');
-  }, [openPath, readerProps.detail?.title, mode, referencePath]);
+    if (!openPath) { setMode('read'); onFocusMode(false); }
+  }, [openPath, readerProps.detail?.title, mode, referencePath, onFocusMode]);
   useEffect(() => { storeOpenTabs(tabs); }, [tabs]);
-  useEffect(() => { onFocusMode(mode !== 'read'); return () => onFocusMode(false); }, [mode, onFocusMode]);
+  useLayoutEffect(() => { onFocusMode(mode !== 'read'); return () => onFocusMode(false); }, [mode, onFocusMode]);
   useLayoutEffect(() => {
     const strip = tabStrip.current;
     const active = strip?.querySelector<HTMLElement>('[aria-current="page"]');
@@ -58,13 +59,13 @@ export function ReaderWorkbench({ openPath, onOpen, onFocusMode, revision, ...re
   const remove = (path: string) => {
     const next = closeTab(tabs, path, openPath);
     setTabs(next.tabs);
-    if (path === referencePath) { setReferencePath(''); setMode('read'); }
+    if (path === referencePath) { setReferencePath(''); changeMode('read'); }
     if (next.active !== openPath) onOpen(next.active);
   };
   const compare = () => {
-    if (mode === 'compare') { setMode('read'); return; }
+    if (mode === 'compare') { changeMode('read'); return; }
     const path = referencePath && referencePath !== openPath && tabs.some(tab => tab.path === referencePath) ? referencePath : [...tabs].reverse().find(tab => tab.path !== openPath)?.path || '';
-    setReferencePath(path); setMode('compare'); setPhonePane('primary');
+    setReferencePath(path); changeMode('compare'); setPhonePane('primary');
   };
   const peers = tabs.filter(tab => tab.path !== openPath);
   const isSplit = mode === 'compare' && !!referencePath && referencePath !== openPath;
@@ -79,7 +80,7 @@ export function ReaderWorkbench({ openPath, onOpen, onFocusMode, revision, ...re
       </div>}
       {openPath && <div className="workbench-controls">
         <button aria-pressed={mode === 'compare'} disabled={!peers.length && mode !== 'compare'} title={!peers.length ? '先打开另一份资源，它会保留在上方标签中' : '固定一份参照档案，同时切换主档案'} onClick={compare}>{mode === 'compare' ? '退出并排' : '并排对照'}</button>
-        <button aria-pressed={mode === 'history'} onClick={() => setMode(current => current === 'history' ? 'read' : 'history')}>{mode === 'history' ? '返回正文' : '历史版本'}</button>
+        <button aria-pressed={mode === 'history'} onClick={() => changeMode(mode === 'history' ? 'read' : 'history')}>{mode === 'history' ? '返回正文' : '历史版本'}</button>
       </div>}
     </div>}
     {isSplit && <div className="workbench-compare-controls">

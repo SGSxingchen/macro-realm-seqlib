@@ -1,104 +1,448 @@
-/* Reading desk: panels can be restored even when both are hidden. */
-.realm-reading-shell { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; color: var(--r-text); }
-.realm-layout-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 10px 16px 0; flex: 0 0 auto; }
-.realm-layout-controls > span { margin-right: 7px; }
-.realm-layout-controls button { padding: 5px 10px; font-size: 12px; min-height: 34px; border-color: var(--r-line); background: var(--r-panel); color: var(--r-muted); }
-.realm-layout-controls button[aria-pressed="true"] { color: var(--r-accent); background: var(--r-accent-wash); }
-.realm-layout-controls .realm-global-filter { display: none; }
-.realm-layout-controls .realm-search-toggle { margin-left: auto; }
-.realm-search-toggle kbd { font-size: 9px; margin-left: 5px; }
-.realm-workspace.index-hidden { grid-template-columns: 312px minmax(0, 1fr); }
-.realm-workspace.results-hidden { grid-template-columns: 216px minmax(0, 1fr); }
-.realm-workspace.index-hidden.results-hidden { grid-template-columns: minmax(0, 1fr); }
-.realm-workspace.index-hidden > .realm-navigation, .realm-workspace.results-hidden > .realm-results { display: none; }
-.realm-reader-workbench { background: transparent; border: 0; gap: 0; }
-.workbench-tab-strip { display: flex; position: relative; gap: 5px; overflow-x: auto; min-width: 0; padding: 0 0 8px; flex: 0 0 auto; scrollbar-width: thin; }
-.workbench-tab { display: flex; flex: 0 0 auto; align-items: center; max-width: 240px; border: 1px solid var(--r-line); border-radius: 8px; background: var(--r-panel); overflow: hidden; }
-.workbench-tab.active { border-color: var(--r-accent); background: var(--r-accent-wash); }
-.workbench-tab button { border: 0; background: transparent; border-radius: 0; font-size: 12px; min-height: 36px; }
-.workbench-tab .workbench-tab-title { text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; padding: 6px 10px; }
-.workbench-tab.active .workbench-tab-title { color: var(--r-accent); }
-.workbench-tab .workbench-tab-close { flex-shrink: 0; padding: 6px; width: 30px; color: var(--r-muted); }
-.workbench-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 7px 10px; flex: 0 0 auto; border: 1px solid var(--r-line); border-bottom: 0; border-radius: 10px 10px 0 0; background: var(--r-panel); }
-.workbench-controls > span { color: var(--r-muted); font-size: 11px; margin-right: auto; }
-.workbench-controls button, .workbench-compare-controls button { font-size: 11px; min-height: 34px; padding: 5px 9px; }
-.workbench-controls button[aria-pressed="true"] { background: var(--r-accent-wash); color: var(--r-accent); }
-.workbench-controls small { color: var(--r-muted); font-size: 10px; flex-basis: 100%; }
-.workbench-reading-panes { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; min-height: 0; min-width: 0; gap: 12px; }
-.workbench-reading-panes[hidden] { display: none; }
-.workbench-reading-panes.split { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.workbench-primary, .workbench-reference { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-.workbench-primary > .realm-reader, .workbench-reference > .realm-reader { flex: 1; min-height: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
-.workbench-pane-label { font-size: 11px; color: var(--r-muted); padding: 7px 12px; border: 1px solid var(--r-line); border-bottom: 0; background: var(--r-panel); }
-.workbench-reference .workbench-pane-label { color: var(--r-warm); }
-.workbench-compare-controls { flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; background: var(--r-panel); border: 1px solid var(--r-line); padding: 8px 12px; }
-.workbench-compare-controls label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 11px; letter-spacing: 0; min-width: 0; color: var(--r-muted); }
-.workbench-compare-controls select { width: min(290px, 44vw); min-width: 0; font-size: 12px; padding: 6px; background: var(--r-raised); color: var(--r-text); border-color: var(--r-line); }
-.workbench-compare-controls > span { font-size: 10px; color: var(--r-muted); margin-left: auto; }
-.workbench-phone-panes { display: none; }
-/* Wide focus mode should improve reading, not create extremely long lines. */
-.workbench-primary .realm-document-content, .workbench-primary .realm-document-heading { width: 100%; max-width: 1080px; margin-inline: auto; }
-.split .realm-document-content { padding-inline: 20px; }
-.split .realm-document-heading { padding-inline: 20px; }
-.split .archive-field { display: block; }
-.split .archive-field-label { margin-bottom: 5px; }
-.realm-history { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; background: var(--r-panel); border: 1px solid var(--r-line); border-radius: 0 0 12px 12px; padding: 24px; }
-.realm-history > header h2 { margin: 6px 0 4px; font-size: 22px; }
-.realm-history > header p { margin: 0 0 18px; color: var(--r-muted); font-size: 13px; overflow-wrap: anywhere; }
-.history-caution { padding: 12px 14px; border-left: 2px solid var(--r-warm); background: var(--r-raised); font-size: 12px; line-height: 1.85; color: var(--r-text); }
-.realm-history form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; margin: 18px 0; }
-.realm-history form label { margin: 0; letter-spacing: 0; text-transform: none; font-size: 12px; color: var(--r-muted); }
-.realm-history input { margin-top: 6px; font-size: 12px; min-height: 38px; border-color: var(--r-line); background: var(--r-bg); color: var(--r-text); }
-.realm-history form button { font-size: 12px; min-height: 38px; }
-.history-candidates { border: 1px solid var(--r-line); padding: 14px; border-radius: 8px; }
-.history-candidates h3 { margin: 0 0 10px; font-size: 13px; color: var(--r-warm); }
-.history-candidates > div { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.history-candidates p { margin: 0; font-size: 12px; overflow-wrap: anywhere; }
-.history-candidates small { font-size: 11px; color: var(--r-muted); }
-.history-candidates button { font-size: 12px; }
-.history-status { font-size: 12px; color: var(--r-muted); line-height: 1.85; }
-.history-sources { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding-top: 10px; }
-.history-sources p { background: var(--r-raised); padding: 12px; font-size: 11px; line-height: 1.8; border: 1px solid var(--r-line); border-radius: 7px; overflow-wrap: anywhere; }
-.history-sources b { color: var(--r-accent); margin-right: 5px; }
-.history-diff { border: 1px solid var(--r-line); border-radius: 8px; overflow: hidden; }
-.history-line { display: grid; grid-template-columns: 64px 20px minmax(0, 1fr); border-bottom: 1px solid var(--r-soft-line); min-width: 0; }
-.history-line-number { text-align: right; font: 10px/2 monospace; padding: 5px 8px 5px 0; color: var(--r-muted); user-select: none; }
-.history-change-sign { font-size: 13px; padding-block: 5px; }
-.history-line pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.9 var(--r-sans); padding: 5px 9px 5px 0; margin: 0; }
-.history-line.added { background: #52bc9030; }
-.history-line.removed { background: #c85b7130; }
-.history-gap { text-align: center; color: var(--r-muted); padding: 8px; font-size: 11px; background: var(--r-raised); }
-.realm-history footer { color: var(--r-muted); font-size: 11px; margin-top: 24px; line-height: 1.8; }
-@media (max-width: 1180px) {
-  .realm-layout-controls .realm-index-toggle { display: none; }
-  .realm-layout-controls .realm-global-filter { display: inline-flex; }
-  .realm-workspace.index-hidden { grid-template-columns: 300px minmax(0, 1fr); }
-  .realm-workspace.results-hidden { grid-template-columns: minmax(0, 1fr); }
+/* Multi-resource Reading Workbench & History Comparison */
+.realm-reading-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  color: var(--r-text);
 }
-@media (max-width: 820px) {
-  .realm-layout-controls { padding: 6px 8px 0; gap: 5px; }
-  .realm-layout-controls .realm-results-toggle, .realm-layout-controls .realm-focus-toggle, .realm-layout-controls > span { display: none; }
-  .realm-search-toggle kbd { display: none; }
-  .realm-layout-controls button { font-size: 11px; min-height: 36px; }
-  .realm-workspace.index-hidden, .realm-workspace.results-hidden, .realm-workspace.index-hidden.results-hidden { grid-template-columns: minmax(0, 1fr); }
-  .realm-workspace:not(.has-resource) > .realm-results { display: flex; }
-  .realm-workspace.has-resource > .realm-results { display: none; }
-  .workbench-tab { max-width: 205px; }
-  .workbench-tab button { min-height: 40px; }
-  .workbench-controls button, .workbench-compare-controls button { min-height: 38px; }
-  .workbench-controls { padding: 6px 8px; }
-  .workbench-reading-panes.split { grid-template-columns: minmax(0, 1fr); }
-  .workbench-reading-panes.split.phone-primary > .workbench-reference, .workbench-reading-panes.split.phone-reference > .workbench-primary { display: none; }
-  .workbench-phone-panes { display: flex; flex-basis: 100%; gap: 6px; }
-  .workbench-phone-panes button { flex: 1; }
-  .workbench-phone-panes button[aria-pressed="true"] { background: var(--r-accent-wash); color: var(--r-accent); }
-  .workbench-compare-controls { padding: 7px 8px; }
-  .workbench-compare-controls > span { display: none; }
-  .workbench-compare-controls select { width: min(210px, 47vw); }
-  .split .realm-document-content { padding-inline: 14px; }
-  .realm-history { padding: 16px 12px; }
-  .realm-history form, .history-sources { grid-template-columns: minmax(0, 1fr); }
-  .history-sources { gap: 0; }
-  .history-line { grid-template-columns: 47px 16px minmax(0, 1fr); }
-  .history-line-number { font-size: 9px; }
+
+.realm-layout-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 4px;
+  padding: 2px 12px;
+  min-height: 36px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--r-line);
+  background: var(--r-bg);
+}
+.realm-layout-controls button {
+  padding: 4px 10px;
+  font-size: 12px;
+  min-height: 28px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--r-muted);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.realm-layout-controls button:hover:not(:disabled) {
+  background: var(--r-hover);
+  color: var(--r-text);
+  border-color: transparent;
+}
+.realm-layout-controls button[aria-pressed="true"] {
+  color: var(--r-accent);
+  background: var(--r-accent-wash);
+  font-weight: 600;
+}
+.realm-layout-controls button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.realm-layout-controls .realm-global-filter {
+  display: none;
+}
+.realm-layout-controls .realm-search-toggle {
+  margin-left: auto;
+}
+.realm-search-toggle kbd {
+  font-size: 9.5px;
+  margin-left: 5px;
+}
+
+@media (min-width: 821px) {
+  .realm-app:not(.realm-focus-reading) .realm-reading-shell.search-open .realm-search-toggle {
+    display: none;
+  }
+}
+
+.realm-workspace.index-hidden {
+  grid-template-columns: 264px minmax(0, 1fr);
+}
+.realm-workspace.results-hidden {
+  grid-template-columns: 192px minmax(0, 1fr);
+}
+.realm-workspace.index-hidden.results-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+.realm-workspace.index-hidden > .realm-navigation,
+.realm-workspace.results-hidden > .realm-results {
+  display: none;
+}
+
+/* ---------- Workbench Tabs & Split Controls ---------- */
+.realm-reader-workbench {
+  background: var(--r-bg);
+  border: 0;
+  gap: 0;
+}
+.workbench-header {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 40px;
+  border-bottom: 1px solid var(--r-line);
+  background: var(--r-panel);
+}
+.workbench-tab-strip {
+  display: flex;
+  position: relative;
+  flex: 1;
+  gap: 0;
+  overflow-x: auto;
+  min-width: 0;
+  padding: 0;
+  scrollbar-width: thin;
+}
+.workbench-tab {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  max-width: 224px;
+  border: 0;
+  border-right: 1px solid var(--r-soft-line);
+  border-radius: 0;
+  background: transparent;
+  overflow: hidden;
+  transition: background 0.12s;
+}
+.workbench-tab:hover {
+  background: var(--r-hover);
+}
+.workbench-tab.active {
+  background: var(--r-accent-wash);
+  box-shadow: inset 0 -2px 0 var(--r-accent);
+}
+.workbench-tab button {
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  font-size: 12px;
+  min-height: 40px;
+}
+.workbench-tab button:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+}
+.workbench-tab .workbench-tab-title {
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+  padding: 6px 10px 6px 12px;
+  color: var(--r-text-soft);
+}
+.workbench-tab.active .workbench-tab-title {
+  color: var(--r-accent);
+  font-weight: 600;
+}
+.workbench-tab .workbench-tab-close {
+  flex-shrink: 0;
+  padding: 6px;
+  width: 30px;
+  color: var(--r-muted);
+}
+.workbench-tab .workbench-tab-close:hover {
+  color: var(--r-text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.workbench-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 3px;
+  padding: 0 8px;
+  flex: 0 0 auto;
+}
+.workbench-controls button,
+.workbench-compare-controls button {
+  font-size: 11.5px;
+  min-height: 30px;
+  padding: 4px 9px;
+  white-space: nowrap;
+  background: transparent;
+  border-color: transparent;
+  color: var(--r-text-soft);
+}
+.workbench-controls button:hover:not(:disabled) {
+  background: var(--r-hover);
+  color: var(--r-text);
+}
+.workbench-controls button[aria-pressed="true"] {
+  background: var(--r-accent-wash);
+  color: var(--r-accent);
+  font-weight: 600;
+}
+
+.workbench-reading-panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  gap: 0;
+}
+.workbench-reading-panes[hidden] {
+  display: none;
+}
+.workbench-reading-panes.split {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.workbench-primary,
+.workbench-reference {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  container-type: inline-size;
+}
+.workbench-reference {
+  border-left: 1px solid var(--r-line);
+}
+.workbench-primary > .realm-reader,
+.workbench-reference > .realm-reader {
+  flex: 1;
+  min-height: 0;
+}
+.workbench-pane-label {
+  font-size: 11px;
+  color: var(--r-muted);
+  padding: 5px 14px;
+  border-bottom: 1px solid var(--r-soft-line);
+  background: var(--r-panel);
+}
+.workbench-reference .workbench-pane-label {
+  color: var(--r-warm);
+}
+
+.workbench-compare-controls {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: var(--r-panel);
+  border-bottom: 1px solid var(--r-line);
+  padding: 6px 12px;
+}
+.workbench-compare-controls button {
+  border-color: var(--r-line);
+  background: var(--r-raised);
+}
+.workbench-compare-controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 11.5px;
+  letter-spacing: 0;
+  min-width: 0;
+  color: var(--r-muted);
+}
+.workbench-compare-controls select {
+  width: min(280px, 44vw);
+  min-width: 0;
+  font-size: 12px;
+  padding: 5px 8px;
+  background: var(--r-raised);
+  color: var(--r-text);
+  border-color: var(--r-line);
+}
+.workbench-compare-controls > span {
+  font-size: 11px;
+  color: var(--r-muted);
+  margin-left: auto;
+}
+.workbench-phone-panes {
+  display: none;
+}
+
+.split .realm-document-content,
+.split .realm-document-heading,
+.split .realm-reading-note,
+.split .realm-document-footer {
+  padding-inline: 18px;
+}
+.split .archive-field {
+  display: block;
+}
+.split .archive-field-label {
+  margin-bottom: 4px;
+}
+
+/* ---------- History Version Comparison ---------- */
+.realm-history {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  background: var(--r-bg);
+  padding: 22px clamp(16px, 3vw, 32px) 32px;
+}
+.realm-history > * {
+  max-width: 1020px;
+  margin-inline: auto;
+}
+.realm-history > header h2 {
+  margin: 4px 0;
+  font-family: var(--r-serif);
+  font-size: 22px;
+}
+.realm-history > header p {
+  margin: 0 0 16px;
+  color: var(--r-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.history-caution {
+  padding: 11px 14px;
+  border-left: 3px solid var(--r-warm);
+  border-radius: 0 8px 8px 0;
+  background: var(--r-panel);
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--r-text-soft);
+}
+.realm-history form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px 12px;
+  margin-block: 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--r-line);
+  background: var(--r-panel);
+}
+.realm-history form label {
+  margin: 0;
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 12px;
+  color: var(--r-muted);
+}
+.realm-history input {
+  margin-top: 6px;
+  font-size: 12.5px;
+  min-height: 36px;
+  border-color: var(--r-line);
+  background: var(--r-bg);
+  color: var(--r-text);
+}
+.realm-history form button {
+  font-size: 12px;
+  min-height: 36px;
+}
+.history-candidates {
+  border: 1px solid var(--r-line);
+  background: var(--r-panel);
+  padding: 14px 16px;
+  border-radius: 9px;
+}
+.history-candidates h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--r-warm);
+}
+.history-candidates > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.history-candidates p {
+  margin: 0;
+  font-size: 12.5px;
+  font-family: var(--r-mono);
+  overflow-wrap: anywhere;
+}
+.history-candidates small {
+  font-size: 11.5px;
+  color: var(--r-muted);
+}
+.history-candidates button {
+  font-size: 12px;
+}
+.history-status {
+  font-size: 12.5px;
+  color: var(--r-muted);
+  line-height: 1.8;
+}
+.history-sources {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 8px;
+}
+.history-sources p {
+  background: var(--r-panel);
+  padding: 11px 13px;
+  font-size: 11.5px;
+  line-height: 1.75;
+  border: 1px solid var(--r-line);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+  margin: 0 0 10px;
+}
+.history-sources b {
+  color: var(--r-accent);
+  margin-right: 5px;
+}
+.history-diff {
+  border: 1px solid var(--r-line);
+  border-radius: 8px;
+  background: var(--r-panel);
+  overflow: hidden;
+}
+.history-line {
+  display: grid;
+  grid-template-columns: 68px 20px minmax(0, 1fr);
+  border-bottom: 1px solid var(--r-soft-line);
+  min-width: 0;
+}
+.history-line-number {
+  text-align: right;
+  font: 10.5px/2 var(--r-mono);
+  padding: 4px 8px 4px 0;
+  color: var(--r-muted);
+  user-select: none;
+}
+.history-change-sign {
+  font-size: 13px;
+  padding-block: 4px;
+  font-family: var(--r-mono);
+}
+.history-line pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 13px/1.85 var(--r-sans);
+  padding: 4px 10px 4px 0;
+  margin: 0;
+}
+.history-line.added {
+  background: var(--green-bg);
+}
+.history-line.removed {
+  background: var(--red-bg);
+}
+.history-gap {
+  text-align: center;
+  color: var(--r-muted);
+  padding: 7px;
+  font-size: 11.5px;
+  background: var(--r-raised);
+}
+.realm-history footer {
+  color: var(--r-muted);
+  font-size: 11.5px;
+  margin-top: 22px;
+  line-height: 1.75;
 }
