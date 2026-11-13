@@ -11,6 +11,10 @@ TRPG（桌面角色扮演游戏）"宏观界域"的强化序列资料库。包�
 ├── .github/workflows/    # GitHub Actions 自动发布
 │   └── release.yml
 ├── tools/hhw/            # 内置的 HTML Help Workshop（hhc.exe + 依赖 DLL）
+├── web/                  # 在线站（trpg.chordvers.org）前后端源码
+│   ├── backend/          # FastAPI 只读检索/历史对照/结团统计/后台维护接口
+│   └── frontend/         # Vite + React + TS 高维终端风前端
+├── docs/                 # 项目规范与模块说明文档
 ├── 序列库/               # 当前版本在用的资源（724个文件）
 │   ├── 公共建筑/
 │   ├── 技能表/
@@ -182,3 +186,17 @@ python tools/renumber_resources.py --apply
 - `.txt` 文件首行会同步为最终文件名（不含扩展名）。
 - 默认是 dry run，只有加 `--apply` 才会实际改名和更新首行。
 - 详细中文说明见 `docs/renumber_resources.md`。
+
+## Web 在线站前端规范（trpg.chordvers.org）
+
+在线站前后端位于 `web/`（服务启动与接口说明见 `web/README.md`，战术桌见 `docs/tactical-tabletop.md`）。后续迭代 `web/frontend/` 时必须遵守以下防回退底线，完整规范见 **`docs/frontend-style-and-interaction.md`**：
+
+1. **视觉风格基调（无限流高维兑换终端）**：
+   - 采用**虚空棱镜暗色**（默认：`#0b0d11` 底 + `#73ded0` 棱镜青 + `#e5c07b` 星辉金，与战术桌同源）与**白昼终端亮色**（`#f3f5f8` 底 + `#ffffff` 纸面 + `#0d7a73` 深青）双主题。
+   - 全站坚持 `2px` 微切角与 `1px` 细线分割；**严禁**退回通用后台大圆角气泡卡片/浅蓝模板风，**严禁**偏向中式宣纸古籍等单一题材风，**严禁**在界面中塞无意义的纯大写英文装饰词。
+2. **核心交互与无损红线**：
+   - **原文 100% 无损**：`Reader/adaptive.ts` 按连续原文区间切分，全文复制与单段复制必须直接取原始 `content` / `raw`，严禁从展示字段反向拼接；文内精确查找高亮时须保留首部人员与更新日志的结构化排版。
+   - **虚拟列表与标题契约**：中栏列表（`ResourceCard.tsx`）固定 `104px` 行高，阅读器 `h1` 严格保持原始资源标题，不得随意增删前后缀。
+   - **全端自适应**：桌面支持左/中栏独立折叠、多档案标签、专注阅读、主/参照双栏独立滚动对照及历史版本比对；手机端（`<= 820px`）采用「检索列表 ↔ 全屏阅读」单栏切换、抽屉筛选、贴边通栏能力卡与 `16px` 防自动放大输入框。
+3. **改后必跑校验**（在 `web/frontend/` 下执行）：
+   - `npm run build` 与 `node --test tests/*.test.cjs`；涉及布局或响应式改动时需通过 `tests/browser.cjs`、`tests/workbench-browser.cjs`、`tests/reading-layout-browser.cjs` 多视口回归。
