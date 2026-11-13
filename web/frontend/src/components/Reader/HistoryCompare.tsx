@@ -59,7 +59,7 @@ export function HistoryCompare({ path, title }: { path: string; title: string })
   };
 
   return <section className="realm-history" aria-label="历史版本对照">
-    <header><span className="realm-overline">VERSION COMPARISON / READ ONLY</span><h2>历史版本对照</h2><p>{title}</p></header>
+    <header><span className="realm-overline">只读历史比对</span><h2>历史版本对照</h2><p>{title}</p></header>
     <div className="history-caution">比较「指定版本的旧文件」与「服务器当前档案」。同路径、同名称、Git 相似度均不是身份保证；请先核对旧路径和正文，尤其是重排编号或全面重置的资源。</div>
     <form onSubmit={e => { e.preventDefault(); void compare(); }}>
       <label>基准版本 / Git 标签<input aria-label="历史基准版本" placeholder="例如 v6.6.1；留空使用后端默认基线" value={baseline} onChange={e => { invalidate(); setBaseline(e.target.value); setCandidates([]); setSearched(false); }} /></label>

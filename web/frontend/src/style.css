@@ -6,55 +6,55 @@
  */
 
 :root, :root[data-theme="dark"] {
-  --bg: #0e1218;
-  --bg2: #11161e;
-  --panel: #161c25;
-  --panel-2: #1a2029;
-  --panel-3: #11171f;
-  --line: #2a3340;
-  --line-soft: #1d242d;
-  --line-strong: #38465a;
+  --bg: #0c1016;
+  --bg2: #0f151d;
+  --panel: #121821;
+  --panel-2: #171f2b;
+  --panel-3: #0e141c;
+  --line: #253142;
+  --line-soft: #1b2432;
+  --line-strong: #35465d;
 
-  --text: #e6edf3;
-  --text-soft: #b8c2cd;
-  --muted: #7c8896;
-  --subtle: #58656f;
+  --text: #ebeff5;
+  --text-soft: #b8c3d4;
+  --muted: #8694a8;
+  --subtle: #5d6b7e;
 
-  --accent: #7eb8e0;
-  --accent-strong: #4d96d2;
-  --accent-bg: rgba(126, 184, 224, 0.10);
-  --warm: #d4a05b;
-  --warm-soft: #b3823e;
-  --warm-bg: rgba(212, 160, 91, 0.12);
+  --accent: #5fa8d8;
+  --accent-strong: #3f8ec4;
+  --accent-bg: rgba(95, 168, 216, 0.12);
+  --warm: #d6a55c;
+  --warm-soft: #a97c38;
+  --warm-bg: rgba(214, 165, 92, 0.13);
 
-  --red: #e56370;
-  --red-bg: rgba(229, 99, 112, 0.12);
-  --green: #5fc88f;
-  --green-bg: rgba(95, 200, 143, 0.12);
+  --red: #e06c75;
+  --red-bg: rgba(224, 108, 117, 0.13);
+  --green: #58c28d;
+  --green-bg: rgba(88, 194, 141, 0.13);
 
-  --mark-bg: rgba(212, 160, 91, 0.28);
-  --mark-fg: #ffe1ad;
+  --mark-bg: rgba(214, 165, 92, 0.30);
+  --mark-fg: #ffe5b8;
 
-  --shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
-  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.20), 0 4px 12px rgba(0, 0, 0, 0.25);
+  --shadow: 0 18px 44px rgba(0, 0, 0, 0.48);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.22), 0 4px 14px rgba(0, 0, 0, 0.24);
 
   --body-bg: var(--bg);
   --grid-line: transparent;
-  --btn-bg: #1c232d;
-  --btn-bg-hover: #232b37;
-  --btn-bg-active: rgba(126, 184, 224, 0.14);
-  --btn-bd: #2f3a48;
-  --input-bg: #11171f;
+  --btn-bg: #171f2b;
+  --btn-bg-hover: #1e2837;
+  --btn-bg-active: rgba(95, 168, 216, 0.15);
+  --btn-bd: #283548;
+  --input-bg: #0e141c;
   --topbar-bg: var(--panel);
-  --reader-doc-bg: #131923;
-  --code-bg: #0d131c;
+  --reader-doc-bg: #121821;
+  --code-bg: #0c1118;
 
   --mono: "JetBrains Mono", "Cascadia Mono", "SF Mono", "Noto Sans Mono CJK SC", monospace;
   --serif: "Source Han Serif SC", "Noto Serif SC", "Songti SC", Georgia, serif;
-  --sans: "Inter", "Segoe UI", -apple-system, "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
 
   --radius-l: 12px;
-  --radius-m: 8px;
+  --radius-m: 9px;
   --radius-s: 6px;
   --radius-xs: 4px;
 
@@ -62,48 +62,48 @@
 }
 
 :root[data-theme="light"] {
-  --bg: #f6f4ee;
-  --bg2: #efece3;
-  --panel: #ffffff;
-  --panel-2: #fbf9f3;
-  --panel-3: #f3efe5;
-  --line: #d8d2c2;
-  --line-soft: #e7e2d4;
-  --line-strong: #b9b09a;
+  --bg: #f2efe8;
+  --bg2: #eae5da;
+  --panel: #faf8f3;
+  --panel-2: #ffffff;
+  --panel-3: #f0ece2;
+  --line: #d5cebe;
+  --line-soft: #e3ded0;
+  --line-strong: #b6ad99;
 
-  --text: #1c2231;
-  --text-soft: #424b5d;
-  --muted: #7c7669;
-  --subtle: #a39c8d;
+  --text: #1d232f;
+  --text-soft: #414b5c;
+  --muted: #6c7380;
+  --subtle: #969083;
 
-  --accent: #1f5d8c;
-  --accent-strong: #15446a;
-  --accent-bg: rgba(31, 93, 140, 0.08);
-  --warm: #9a6a1c;
-  --warm-soft: #7a5304;
-  --warm-bg: rgba(154, 106, 28, 0.08);
+  --accent: #1d5c8c;
+  --accent-strong: #15456b;
+  --accent-bg: rgba(29, 92, 140, 0.09);
+  --warm: #946316;
+  --warm-soft: #784f0c;
+  --warm-bg: rgba(148, 99, 22, 0.10);
 
-  --red: #b6262f;
-  --red-bg: rgba(182, 38, 47, 0.08);
-  --green: #1f7a52;
-  --green-bg: rgba(31, 122, 82, 0.08);
+  --red: #be2b35;
+  --red-bg: rgba(190, 43, 53, 0.09);
+  --green: #1e7c54;
+  --green-bg: rgba(30, 124, 84, 0.09);
 
-  --mark-bg: #f3df9b;
+  --mark-bg: #f4df9c;
   --mark-fg: #4a3000;
 
-  --shadow: 0 8px 22px rgba(40, 28, 8, 0.10);
-  --shadow-soft: 0 1px 1px rgba(40, 28, 8, 0.06), 0 3px 8px rgba(40, 28, 8, 0.06);
+  --shadow: 0 10px 26px rgba(32, 24, 10, 0.10);
+  --shadow-soft: 0 1px 2px rgba(32, 24, 10, 0.05), 0 3px 10px rgba(32, 24, 10, 0.05);
 
   --body-bg: var(--bg);
   --grid-line: transparent;
   --btn-bg: #ffffff;
-  --btn-bg-hover: #f5f2e9;
-  --btn-bg-active: rgba(31, 93, 140, 0.10);
+  --btn-bg-hover: #f1ede2;
+  --btn-bg-active: rgba(29, 92, 140, 0.11);
   --btn-bd: #cfc8b6;
   --input-bg: #ffffff;
-  --topbar-bg: #ffffff;
-  --reader-doc-bg: #fbf8ef;
-  --code-bg: #f3efe2;
+  --topbar-bg: #faf8f3;
+  --reader-doc-bg: #ffffff;
+  --code-bg: #f0ece0;
 
   color-scheme: light;
 }
@@ -1194,14 +1194,19 @@ code {
   padding: 18px;
   overflow: auto;
 }
-.auth-panel { max-width: 760px; margin: 6vh auto 0; width: 100%; }
-.console-auth h2 { font-family: var(--serif); font-size: 26px; margin: 0; font-weight: 700; }
+.auth-panel { max-width: 680px; margin: 7vh auto 0; width: calc(100% - 32px); padding: 24px 28px; }
+.auth-panel .row button, .row > button { flex: 0 0 auto; white-space: nowrap; }
+.console-auth h2 { font-family: var(--serif); font-size: 24px; margin: 0; font-weight: 700; }
 
 .admin-console {
   flex: 1; min-height: 0;
+  max-width: 1640px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 16px clamp(12px, 2vw, 24px) 20px;
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
-  gap: 12px;
+  gap: 14px;
 }
 .admin-nav {
   border: 1px solid var(--line-soft);
@@ -1474,11 +1479,16 @@ label, .current-file span {
 
 /* ---------- 最近更新 ---------- */
 .updates-view {
-  height: calc(100vh - 88px);
-  padding: 4px 2px 16px;
+  height: calc(100dvh - 54px);
+  padding: 20px clamp(14px, 2.8vw, 32px) 28px;
+  max-width: 1320px;
+  width: 100%;
+  margin: 0 auto;
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   display: grid;
-  gap: 14px;
+  gap: 16px;
   align-content: start;
 }
 .updates-hero {
@@ -1562,12 +1572,14 @@ label, .current-file span {
 
 /* ---------- 结团统计(仪表盘版) ---------- */
 .stats-view {
-  height: calc(100vh - 88px);
+  height: calc(100dvh - 54px);
   overflow: auto;
-  padding: 4px 2px 24px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 20px clamp(14px, 2.8vw, 32px) 32px;
 }
 .stats-main {
-  max-width: 880px;
+  max-width: 1040px;
   margin: 0 auto;
   display: grid;
   gap: 18px;

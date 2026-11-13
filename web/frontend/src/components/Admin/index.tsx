@@ -91,7 +91,7 @@ export function AdminPanel({ detail, reload, onResourceMoved, onBackToRead }: Pr
   if (!me.authenticated) return (
     <section className="admin-card auth-panel console-auth">
       <div className="section-head">
-        <div><p className="eyebrow">MAINTENANCE CONSOLE</p><h2>维护控制台接入</h2></div>
+        <div><p className="eyebrow">系统维护</p><h2>维护控制台接入</h2></div>
         <button type="button" className="ghost-toggle" onClick={onBackToRead}>返回查阅</button>
       </div>
       <p className="hint">{me.admin_configured ? '输入 ADMIN_PASSWORD 后进入维护控制台。' : '未配置 ADMIN_PASSWORD，后台写操作禁用。'}</p>
@@ -116,7 +116,7 @@ export function AdminPanel({ detail, reload, onResourceMoved, onBackToRead }: Pr
   return (
     <section className="admin-console">
       <aside className="admin-nav">
-        <p className="eyebrow">MAINTENANCE</p>
+        <p className="eyebrow">后台管理</p>
         <h2>维护控制台</h2>
         <button type="button" className="back-read" onClick={onBackToRead}>← 返回查阅</button>
         {tabs.map(([id, label]) => <button type="button" key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>{label}</button>)}
@@ -127,7 +127,7 @@ export function AdminPanel({ detail, reload, onResourceMoved, onBackToRead }: Pr
       </aside>
       <div className="admin-main terminal-scroll">
         <div className="console-top">
-          <div><p className="eyebrow">CONTROL CENTER</p><h2>{tabs.find(t => t[0] === tab)?.[1]}</h2></div>
+          <div><p className="eyebrow">控制台模块</p><h2>{tabs.find(t => t[0] === tab)?.[1]}</h2></div>
           <button onClick={() => runAction('刷新 Git 状态', refreshGit)}>刷新状态</button>
         </div>
         {notice && <div className="notice-line">{notice}</div>}
