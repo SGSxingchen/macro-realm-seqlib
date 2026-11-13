@@ -15,6 +15,8 @@ type Props = {
   onClearFacets: () => void;
 };
 
+const SIDE_ORDER = ['战技侧', '神秘侧', '科技侧', '特殊侧'];
+
 export function FilterRail(p: Props) {
   const singleRoot = p.tree.length === 1 && p.tree[0].path === '序列库' ? p.tree[0] : null;
   const topNodes = singleRoot ? singleRoot.children : p.tree;
@@ -25,10 +27,11 @@ export function FilterRail(p: Props) {
   return (
     <div className="realm-filters">
       <section>
-        <h3>资源分类</h3>
+        <h3>序列分区</h3>
         <div className="filter-branch-row is-root">
           <span className="filter-expand-spacer" />
           <button
+            type="button"
             className={!p.selectedCat ? 'filter-category selected' : 'filter-category'}
             aria-pressed={!p.selectedCat}
             onClick={() => p.onPickCat('')}
@@ -41,11 +44,11 @@ export function FilterRail(p: Props) {
           <Branch key={node.path} node={node} selected={p.selectedCat} onPick={p.onPickCat} depth={0} />
         ))}
       </section>
-      <Facet title="作品侧" group="sides" items={p.facets?.sides || []} selected={p.selectedSides} onToggle={p.onToggle} />
+      <Facet title="四大侧别" group="sides" items={p.facets?.sides || []} selected={p.selectedSides} onToggle={p.onToggle} />
       <Facet title="资源类型" group="kinds" items={p.facets?.kinds || []} selected={p.selectedKinds} onToggle={p.onToggle} collapsed />
       <Facet title="创作者" group="authors" items={p.facets?.authors || []} selected={p.selectedAuthors} onToggle={p.onToggle} collapsed />
       {(p.selectedCat || p.selectedKinds.length + p.selectedSides.length + p.selectedAuthors.length > 0) && (
-        <button className="realm-clear-filters" onClick={p.onClearFacets}>清除全部筛选</button>
+        <button type="button" className="realm-clear-filters" onClick={p.onClearFacets}>清除全部筛选</button>
       )}
     </div>
   );
@@ -78,14 +81,24 @@ function Facet({
   useEffect(() => {
     if (selected.length > 0) setOpen(true);
   }, [selected.length]);
-  const visible = [
+  const merged = [
     ...items,
     ...selected.filter(name => !items.some(item => item.name === name)).map(name => ({ name, count: 0 })),
   ];
+  const visible = group === 'sides'
+    ? [...merged].sort((a, b) => {
+        const ia = SIDE_ORDER.indexOf(a.name);
+        const ib = SIDE_ORDER.indexOf(b.name);
+        if (ia !== -1 && ib !== -1) return ia - ib;
+        if (ia !== -1) return -1;
+        if (ib !== -1) return 1;
+        return 0;
+      })
+    : merged;
   if (!visible.length) return null;
   return (
     <section>
-      <button className="filter-section-toggle" aria-expanded={open} onClick={() => setOpen(v => !v)}>
+      <button type="button" className="filter-section-toggle" aria-expanded={open} onClick={() => setOpen(v => !v)}>
         <span>{title}{selected.length ? ` · ${selected.length}` : ''}</span>
         <span aria-hidden="true">{open ? '−' : '+'}</span>
       </button>
@@ -94,6 +107,7 @@ function Facet({
           {visible.map(item => (
             <button
               key={item.name}
+              type="button"
               data-side={group === 'sides' ? sideKey(item.name) : undefined}
               aria-pressed={selected.includes(item.name)}
               className={selected.includes(item.name) ? 'selected' : ''}
@@ -129,6 +143,7 @@ function Branch({
       <div className="filter-branch-row">
         {node.children.length > 0 ? (
           <button
+            type="button"
             className="filter-expand"
             aria-expanded={open}
             aria-label={`${open ? '收起' : '展开'}${node.name}`}
@@ -140,6 +155,7 @@ function Branch({
           <span className="filter-expand-spacer" />
         )}
         <button
+          type="button"
           className={`filter-category${selected === node.path ? ' selected' : ''}`}
           aria-pressed={selected === node.path}
           onClick={() => onPick(node.path)}

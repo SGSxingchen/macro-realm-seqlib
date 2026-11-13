@@ -7,13 +7,13 @@ type Props = { recordCount: number; tab: AppTab; onTab: (tab: AppTab) => void };
 export function Header({ recordCount, tab, onTab }: Props) {
   return (
     <header className="topbar realm-topbar">
-      <button className="realm-brand" onClick={() => onTab('read')} aria-label="宏观界域 · 返回查阅">
+      <button type="button" className="realm-brand" onClick={() => onTab('read')} aria-label="宏观界域 · 返回查阅">
         <span className="realm-brand-mark" aria-hidden="true">∞</span>
         <span className="realm-brand-text">
           <strong>宏观界域<span>强化序列库</span></strong>
         </span>
       </button>
-      {recordCount > 0 && <div className="realm-library-count">已收录 <b>{recordCount}</b> 份公开档案</div>}
+      {recordCount > 0 && <div className="realm-library-count">已收录 <b>{recordCount}</b> 项序列</div>}
       <ResponsiveMenu label="导航" className="realm-nav-menu" closeOnSelect>
         <nav aria-label="主导航">
           {([

@@ -1,44 +1,52 @@
-/* Macro Realm Sequence Library — Unified Archive & Reading System */
+/* =====================================================================
+   宏观界域 · 强化序列终端核心样式 (Void Prism / Daylight Terminal)
+   去气泡框 · 2px 精密微切角 · 无框横梁与高密度索引条带
+   ===================================================================== */
+
 .realm-app {
   --r-bg: var(--bg);
   --r-panel: var(--panel);
   --r-raised: var(--panel-2);
   --r-deep: var(--panel-3);
-  --r-hover: var(--btn-bg-hover);
+  --r-hover: var(--panel-3);
   --r-line: var(--line);
-  --r-soft-line: var(--line-soft);
+  --r-soft-line: var(--line);
   --r-strong-line: var(--line-strong);
   --r-text: var(--text);
   --r-text-soft: var(--text-soft);
   --r-muted: var(--muted);
+  --r-faint: var(--subtle);
   --r-accent: var(--accent);
   --r-accent-wash: var(--accent-bg);
+  --r-accent-rail: rgba(115, 222, 208, 0.28);
   --r-warm: var(--warm);
   --r-warm-wash: var(--warm-bg);
-  --r-radius: 10px;
+  --r-radius: 2px;
   --r-sans: var(--sans);
-  --r-serif: var(--serif);
+  --r-serif: var(--sans);
   --r-mono: var(--mono);
-
-  --side-martial: #e06c75;
-  --side-martial-bg: rgba(224, 108, 117, 0.13);
-  --side-mystic: #a88ee8;
-  --side-mystic-bg: rgba(168, 142, 232, 0.14);
-  --side-tech: #4fb8cc;
-  --side-tech-bg: rgba(79, 184, 204, 0.13);
-  --side-special: #d6a55c;
-  --side-special-bg: rgba(214, 165, 92, 0.14);
 }
 
 :root[data-theme="light"] .realm-app {
-  --side-martial: #b52a37;
-  --side-martial-bg: rgba(181, 42, 55, 0.09);
-  --side-mystic: #6342b5;
-  --side-mystic-bg: rgba(99, 66, 181, 0.09);
-  --side-tech: #126d80;
-  --side-tech-bg: rgba(18, 109, 128, 0.09);
-  --side-special: #8f5d10;
-  --side-special-bg: rgba(143, 93, 16, 0.10);
+  --r-accent-rail: rgba(13, 122, 115, 0.28);
+}
+
+/* ---------- 四大侧别语义变量 ---------- */
+[data-side="martial"] {
+  --side-fg: var(--side-martial);
+  --side-bg: var(--side-martial-bg);
+}
+[data-side="mystic"] {
+  --side-fg: var(--side-mystic);
+  --side-bg: var(--side-mystic-bg);
+}
+[data-side="tech"] {
+  --side-fg: var(--side-tech);
+  --side-bg: var(--side-tech-bg);
+}
+[data-side="special"] {
+  --side-fg: var(--side-special);
+  --side-bg: var(--side-special-bg);
 }
 
 .app.realm-app {
@@ -61,20 +69,20 @@
   overflow: auto;
 }
 
-/* ---------- Topbar ---------- */
+/* ---------- 48px 单行高维终端顶栏 (.realm-topbar) ---------- */
 .realm-app .realm-topbar {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   gap: 14px;
   position: relative;
-  height: auto;
-  min-height: 52px;
-  padding: 6px 16px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0 18px;
   border: 0;
   border-bottom: 1px solid var(--r-line);
   border-radius: 0;
-  background: var(--r-panel);
+  background: var(--r-bg);
   box-shadow: none;
   color: var(--r-text);
   z-index: 12;
@@ -84,108 +92,137 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 4px 6px 4px 2px;
+  padding: 0;
   border: 0;
   background: transparent;
   text-align: left;
-  border-radius: 8px;
+  border-radius: 0;
 }
 .realm-topbar .realm-brand:hover {
   background: transparent;
 }
 .realm-brand-mark {
-  width: 32px;
-  height: 32px;
-  display: grid;
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
   place-items: center;
-  border: 1px solid rgba(214, 165, 92, 0.42);
-  border-radius: 8px;
-  background: linear-gradient(145deg, var(--r-warm-wash), var(--r-accent-wash));
-  color: var(--r-warm);
-  font: 600 22px Georgia, serif;
+  border: 1px solid var(--r-accent);
+  border-radius: 0;
+  background: transparent;
+  color: var(--r-accent);
+  font-family: var(--r-mono);
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1;
 }
 .realm-brand-text strong {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-size: 16.5px;
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   color: var(--r-text);
 }
 .realm-brand-text strong span {
   font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
+  font-weight: 400;
+  letter-spacing: 0;
   color: var(--r-muted);
 }
 .realm-library-count {
+  font-family: var(--r-mono);
   font-size: 11.5px;
   color: var(--r-muted);
   white-space: nowrap;
-  padding: 2px 9px;
-  border-radius: 999px;
-  background: var(--r-bg);
-  border: 1px solid var(--r-soft-line);
+  padding: 0 0 0 11px;
+  border: 0;
+  border-left: 1px solid var(--r-strong-line);
+  border-radius: 0;
+  background: transparent;
 }
 .realm-library-count b {
-  color: var(--r-warm);
+  color: var(--r-accent);
   font-family: var(--r-mono);
   font-weight: 600;
 }
 
 .realm-nav-menu {
   margin-left: auto;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+.realm-nav-menu > .realm-menu-panel {
+  height: 100%;
 }
 .realm-app .realm-topbar nav {
   position: static;
   display: flex;
   align-items: center;
-  gap: 4px;
+  height: 100%;
+  gap: 18px;
   flex-wrap: nowrap;
 }
-.realm-topbar nav button {
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--r-muted);
-  padding: 6px 11px;
-  font-size: 12.5px;
+.realm-topbar nav button:not(.theme-toggle) {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--r-muted) !important;
+  padding: 0 2px;
+  font-size: 13px;
   font-weight: 500;
-  border-radius: 6px;
+  border-radius: 0 !important;
   white-space: nowrap;
 }
-.realm-topbar nav button:hover:not(:disabled) {
-  color: var(--r-text);
-  background: var(--r-hover);
-  border-color: transparent;
+.realm-topbar nav button:not(.theme-toggle):hover:not(:disabled) {
+  color: var(--r-text) !important;
+  background: transparent !important;
 }
-.realm-topbar nav button[aria-current="page"] {
-  background: var(--r-accent-wash) !important;
-  border-color: rgba(95, 168, 216, 0.32) !important;
-  color: var(--r-accent) !important;
+.realm-topbar nav button:not(.theme-toggle)[aria-current="page"],
+.realm-topbar nav button:not(.theme-toggle).active {
+  background: transparent !important;
+  color: var(--r-text) !important;
   font-weight: 600;
 }
+.realm-topbar nav button:not(.theme-toggle)[aria-current="page"]::after,
+.realm-topbar nav button:not(.theme-toggle).active::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--r-accent);
+}
 .realm-topbar .tabletop-entry {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
   color: var(--r-warm);
   text-decoration: none;
+  font-family: var(--r-mono);
   font-size: 12px;
   font-weight: 500;
-  padding: 5px 10px;
-  margin-left: 4px;
-  border: 1px solid rgba(214, 165, 92, 0.35);
-  background: var(--r-warm-wash);
-  border-radius: 6px;
+  padding: 0 0 0 14px;
+  margin-left: 2px;
+  border: 0;
+  border-left: 1px solid var(--r-line);
+  background: transparent;
+  border-radius: 0;
   white-space: nowrap;
-  transition: background 0.14s, border-color 0.14s;
+  transition: color 0.12s;
 }
 .realm-topbar .tabletop-entry:hover {
-  border-color: var(--r-warm);
+  color: var(--r-text);
 }
 
 .realm-app :is(button, a, summary, select, input):focus-visible {
-  outline: 2px solid var(--r-accent);
-  outline-offset: 2px;
+  outline: 1px solid var(--r-accent);
+  outline-offset: 1px;
 }
 .realm-sr-only {
   position: absolute;
@@ -199,39 +236,17 @@
   border: 0;
 }
 
-/* ---------- Side Color Pills ---------- */
-[data-side="martial"] {
-  color: var(--side-martial) !important;
-  border-color: rgba(224, 108, 117, 0.36) !important;
-  background: var(--side-martial-bg) !important;
-}
-[data-side="mystic"] {
-  color: var(--side-mystic) !important;
-  border-color: rgba(168, 142, 232, 0.36) !important;
-  background: var(--side-mystic-bg) !important;
-}
-[data-side="tech"] {
-  color: var(--side-tech) !important;
-  border-color: rgba(79, 184, 204, 0.36) !important;
-  background: var(--side-tech-bg) !important;
-}
-[data-side="special"] {
-  color: var(--side-special) !important;
-  border-color: rgba(214, 165, 92, 0.38) !important;
-  background: var(--side-special-bg) !important;
-}
-
-/* ---------- Workspace Core ---------- */
+/* ---------- 三栏无框精密网格 (188px + 264px + 1fr -> 1440 下右栏 988px) ---------- */
 .realm-workspace {
   flex: 1;
   min-height: 0;
   min-width: 0;
   display: grid;
-  grid-template-columns: 192px 264px minmax(0, 1fr);
+  grid-template-columns: 188px 264px minmax(0, 1fr);
   gap: 0;
   padding: 0;
   overflow: hidden;
-  background: var(--r-panel);
+  background: var(--r-bg);
   color: var(--r-text);
   font-family: var(--r-sans);
 }
@@ -242,10 +257,10 @@
   background: var(--r-raised);
   color: var(--r-text);
   border-color: var(--r-line);
-  border-radius: 6px;
+  border-radius: 2px;
 }
 .realm-workspace button:hover:not(:disabled) {
-  background: var(--r-hover);
+  background: var(--r-deep);
   border-color: var(--r-strong-line);
 }
 
@@ -256,44 +271,56 @@
   min-width: 0;
   border: 0;
   border-radius: 0;
-  background: var(--r-panel);
-}
-.realm-navigation,
-.realm-results {
-  border-right: 1px solid var(--r-line);
 }
 .realm-navigation {
-  background: var(--r-bg);
+  background: var(--r-panel);
+  border-right: 1px solid var(--r-line);
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
 }
+.realm-results {
+  background: var(--r-bg);
+  border-right: 1px solid var(--r-line);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.realm-reader {
+  background: var(--r-bg);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
 
 .realm-panel-heading {
-  padding: 12px 12px 8px;
+  padding: 10px 12px 6px;
 }
 .realm-panel-heading h2 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--r-text);
+  font-family: var(--r-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--r-muted);
 }
 .realm-overline {
+  font-family: var(--r-mono);
   font-size: 11px;
   line-height: 1.5;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--r-accent);
   font-weight: 600;
 }
 
-/* ---------- Left Filter Rail ---------- */
+/* ---------- 左栏：无外框兑换目录树与 2×2 作品侧方格 ---------- */
 .realm-filters {
-  padding: 0 10px 14px;
+  padding: 0 8px 12px;
 }
 .realm-filters section {
-  border-bottom: 1px solid var(--r-soft-line);
+  border-bottom: 1px solid var(--r-line);
   padding: 10px 0;
 }
 .realm-filters section:first-child {
@@ -302,10 +329,15 @@
 .realm-filters h3,
 .realm-saved h3 {
   margin: 0 0 6px;
-  padding-inline: 4px;
-  font-size: 11.5px;
+  padding-inline: 6px;
+  font-family: var(--r-mono);
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.08em;
   color: var(--r-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 .filter-branch-row {
   display: flex;
@@ -313,22 +345,26 @@
   gap: 2px;
   padding-left: calc(var(--branch-depth, 0) * 10px);
 }
+.realm-filters section:not(:has(.filter-expand)) .filter-expand-spacer {
+  display: none;
+}
 .realm-filters .filter-expand {
-  width: 22px;
-  height: 28px;
+  width: 18px;
+  height: 26px;
   padding: 0;
   flex: 0 0 auto;
   border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--r-muted);
   font-size: 11px;
 }
 .realm-filters .filter-expand:hover {
   color: var(--r-text);
-  background: var(--r-hover);
+  background: var(--r-deep);
 }
 .filter-expand-spacer {
-  width: 22px;
+  width: 18px;
   flex: 0 0 auto;
 }
 .realm-filters .filter-category {
@@ -341,16 +377,16 @@
   font-size: 12.5px;
   text-align: left;
   padding: 5px 8px;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  border: 0 !important;
+  border-left: 2px solid transparent !important;
+  border-radius: 0 !important;
   background: transparent;
   color: var(--r-text-soft);
   min-width: 0;
 }
 .realm-filters .filter-category:hover {
-  background: var(--r-hover);
+  background: var(--r-deep);
   color: var(--r-text);
-  border-color: transparent;
 }
 .filter-category span {
   overflow-wrap: anywhere;
@@ -358,121 +394,199 @@
 .filter-category small {
   color: var(--r-muted);
   font-family: var(--r-mono);
-  font-size: 10.5px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
-.realm-filters button.selected {
-  color: var(--r-accent) !important;
+.realm-filters .filter-category.selected {
+  color: var(--r-text) !important;
   background: var(--r-accent-wash) !important;
-  border-color: rgba(95, 168, 216, 0.32) !important;
+  border-left-color: var(--r-accent) !important;
   font-weight: 600;
 }
-.realm-filters button.selected small {
+.realm-filters .filter-category.selected small {
   color: var(--r-accent);
 }
+
 .realm-filters .filter-section-toggle {
-  padding: 2px 4px;
+  padding: 2px 6px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
   border: 0;
+  border-radius: 0;
   background: transparent;
-  font-size: 11.5px;
+  font-family: var(--r-mono);
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.06em;
   color: var(--r-muted);
 }
 .realm-filters .filter-section-toggle:hover {
   color: var(--r-text);
   background: transparent;
 }
+
 .filter-options {
   display: flex;
-  gap: 5px;
+  gap: 4px;
   flex-wrap: wrap;
-  padding: 8px 2px 2px;
+  padding: 7px 2px 2px;
   max-height: 210px;
   overflow: auto;
 }
 .filter-options button {
   font-size: 11.5px;
-  padding: 4px 8px;
+  padding: 4px 7px;
   display: inline-flex;
   gap: 5px;
   align-items: center;
-  border-radius: 999px;
-  background: var(--r-panel);
+  border-radius: 2px;
+  background: var(--r-raised);
   border: 1px solid var(--r-line);
   color: var(--r-text-soft);
 }
-.filter-options button:not(.selected)[data-side] {
-  opacity: 0.88;
+.filter-options button:hover:not(:disabled) {
+  background: var(--r-deep);
+  border-color: var(--r-strong-line);
+  color: var(--r-text);
 }
-.filter-options button.selected[data-side] {
-  box-shadow: inset 0 0 0 1px currentColor;
+.filter-options button.selected {
+  color: var(--r-accent) !important;
+  background: var(--r-accent-wash) !important;
+  border-color: var(--r-accent) !important;
+  font-weight: 600;
 }
 .filter-options small {
-  color: inherit;
-  opacity: 0.72;
+  color: var(--r-muted);
   font-family: var(--r-mono);
   font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
+
+/* 四大侧别：2×2 锋利小方格 + 侧别方形色点 */
+.filter-group-sides,
+.quadrant-filter,
+.realm-side-grid,
+.realm-filters div:has(> button[data-side]) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 6px 0 2px;
+  max-height: none;
+  overflow: visible;
+}
+.realm-filters button[data-side] {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 5px;
+  border: 1px solid var(--r-line) !important;
+  border-radius: 2px !important;
+  background: var(--r-raised) !important;
+  color: var(--r-text-soft) !important;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.realm-filters button[data-side] span {
+  white-space: nowrap;
+}
+.realm-filters button[data-side] i,
+.realm-filters button[data-side] .side-dot,
+.realm-filters button[data-side]:not(:has(i)):not(:has(.side-dot))::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  display: inline-block;
+  background: var(--side-fg, var(--r-accent));
+}
+.realm-filters button[data-side] small {
+  margin-left: auto;
+  font-size: 9.5px;
+  color: var(--r-muted);
+}
+.realm-filters button[data-side]:hover:not(:disabled) {
+  background: var(--r-deep) !important;
+  border-color: var(--r-strong-line) !important;
+  color: var(--r-text) !important;
+}
+.realm-filters button[data-side].selected {
+  border-color: var(--side-fg, var(--r-accent)) !important;
+  background: var(--side-bg, var(--r-accent-wash)) !important;
+  color: var(--r-text) !important;
+  font-weight: 600;
+}
+.realm-filters button[data-side].selected small {
+  color: var(--side-fg, var(--r-accent));
+}
+
 .realm-filters > .realm-clear-filters {
   margin-top: 10px;
-  font-size: 12px;
+  font-size: 11.5px;
   width: 100%;
-  padding: 6px 10px;
+  padding: 5px 10px;
   color: var(--r-muted);
   background: transparent;
-  border-style: dashed;
+  border: 1px dashed var(--r-strong-line);
+  border-radius: 2px;
+}
+.realm-filters > .realm-clear-filters:hover {
+  color: var(--r-accent);
+  border-color: var(--r-accent);
+  background: var(--r-accent-wash);
 }
 
 .realm-saved {
-  border-top: 1px solid var(--r-soft-line);
-  padding: 12px 12px 18px;
+  border-top: 1px solid var(--r-line);
+  padding: 12px 10px 16px;
 }
 .realm-saved h3 {
-  color: var(--r-warm);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-inline: 0;
+  color: var(--r-muted);
+  padding-inline: 6px;
 }
 .realm-saved h3 span {
   font-family: var(--r-mono);
   font-size: 11px;
+  color: var(--r-warm);
 }
 .realm-saved p {
   font-size: 11.5px;
   color: var(--r-muted);
-  margin: 4px 0;
-  line-height: 1.65;
+  margin: 4px 6px;
+  line-height: 1.6;
 }
 .realm-saved > div {
   display: flex;
-  gap: 4px;
-  margin-top: 6px;
+  gap: 2px;
+  margin-top: 4px;
   align-items: center;
 }
 .realm-saved button {
-  padding: 5px 7px;
-  font-size: 12px;
+  padding: 4px 7px;
+  font-size: 11.5px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--r-text-soft);
 }
 .realm-saved .saved-title {
   flex: 1;
   min-width: 0;
   text-align: left;
+  border-left: 2px solid transparent;
   overflow-wrap: anywhere;
-  background: var(--r-panel);
+}
+.realm-saved .saved-title:hover {
+  border-left-color: var(--r-warm);
+  background: var(--r-deep);
+  color: var(--r-text);
 }
 
-/* ---------- Middle Results Column ---------- */
-.realm-results {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--r-panel);
-}
+/* ---------- 中栏：无外框序列索引条带 (ROW_HEIGHT = 104px 严格恒定) ---------- */
 .realm-search-head {
   display: flex;
   align-items: center;
@@ -482,27 +596,27 @@
   display: none;
   margin-right: 10px;
   font-size: 12px;
-  padding: 5px 10px;
+  padding: 4px 10px;
+  border-radius: 2px;
 }
 .realm-search {
   display: flex;
   align-items: center;
   gap: 7px;
-  margin: 0 10px 6px;
-  padding: 0 10px;
-  height: 38px;
+  margin: 0 10px 8px;
+  padding: 0 9px;
+  height: 34px;
   flex: 0 0 auto;
-  border: 1px solid var(--r-line);
-  border-radius: 8px;
-  background: var(--r-bg);
-  transition: border-color 0.14s, box-shadow 0.14s;
+  border: 1px solid var(--r-strong-line);
+  border-radius: 2px;
+  background: var(--r-panel);
+  transition: border-color 0.12s;
 }
 .realm-search:focus-within {
   border-color: var(--r-accent);
-  box-shadow: 0 0 0 3px var(--r-accent-wash);
 }
 .realm-search > span {
-  font-size: 18px;
+  font-size: 16px;
   color: var(--r-muted);
   line-height: 1;
 }
@@ -520,9 +634,6 @@
   color: var(--r-text);
   outline: none;
 }
-.realm-search input:focus {
-  box-shadow: none;
-}
 .realm-search input::placeholder {
   color: var(--r-muted);
 }
@@ -531,28 +642,29 @@
 }
 .realm-search button {
   padding: 2px;
-  min-width: 24px;
-  min-height: 24px;
+  min-width: 22px;
+  min-height: 22px;
   border: 0;
+  border-radius: 2px;
   background: transparent;
-  font-size: 17px;
+  font-size: 16px;
   color: var(--r-muted);
 }
 .realm-search kbd {
   white-space: nowrap;
-  color: var(--r-muted);
-  border-color: var(--r-soft-line);
-  background: var(--r-panel);
-  font-size: 10px;
-  padding: 1px 5px;
+  color: var(--r-faint);
+  border: 0;
+  background: transparent;
+  font-size: 10.5px;
+  padding: 0;
 }
 
 .realm-filter-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-  padding: 2px 10px 4px;
-  max-height: 92px;
+  gap: 4px;
+  padding: 0 10px 6px;
+  max-height: 88px;
   overflow: auto;
   flex: 0 0 auto;
 }
@@ -561,11 +673,11 @@
 }
 .realm-filter-chips button {
   font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 999px;
+  padding: 2px 7px;
+  border-radius: 2px;
   color: var(--r-accent);
   background: var(--r-accent-wash);
-  border-color: rgba(95, 168, 216, 0.32);
+  border: 1px solid var(--accent-dim);
   overflow-wrap: anywhere;
   max-width: 100%;
 }
@@ -580,16 +692,19 @@
   justify-content: space-between;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px 6px;
+  padding: 5px 12px;
   color: var(--r-muted);
-  font-size: 11.5px;
-  border-bottom: 1px solid var(--r-soft-line);
+  font-family: var(--r-mono);
+  font-size: 11px;
+  border-top: 1px solid var(--r-line);
+  border-bottom: 1px solid var(--r-line);
+  background: var(--r-panel);
 }
 .realm-results-meta span {
   display: none;
 }
 
-/* Virtualized list: ROW_HEIGHT = 104px MUST stay exact */
+/* Virtualized list: ROW_HEIGHT = 104px MUST stay exact, card height = 103px */
 .realm-resource-list {
   flex: 1;
   min-height: 0;
@@ -597,65 +712,85 @@
   position: relative;
 }
 .realm-resource-row {
-  padding: 4px 8px;
+  padding: 0;
+  margin: 0;
   box-sizing: border-box;
 }
 .realm-resource-card {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: center;
   gap: 3px;
-  height: 100%;
-  padding: 8px 11px;
+  height: 103px;
+  margin: 0;
+  padding: 10px 12px;
   color: var(--r-text);
   text-decoration: none;
-  border: 1px solid var(--r-soft-line);
-  border-radius: 8px;
-  background: var(--r-raised);
+  border: 0;
+  border-bottom: 1px solid var(--r-line);
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
   overflow: hidden;
   box-sizing: border-box;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.1s, border-color 0.1s;
 }
 .realm-resource-card:hover {
-  background: var(--r-hover);
-  border-color: var(--r-line);
+  background: var(--r-deep);
 }
-.realm-resource-card.selected {
-  border-color: var(--r-accent);
+.realm-resource-card.selected,
+.realm-resource-card[aria-current="true"] {
   background: var(--r-accent-wash);
-  box-shadow: inset 3px 0 0 var(--r-accent);
+  border-left-color: var(--r-accent);
+  box-shadow: none;
 }
-.realm-resource-tags {
+.realm-resource-tags,
+.seq-row-meta {
   display: flex;
   align-items: center;
-  gap: 5px;
-  height: 18px;
-  flex: 0 0 18px;
+  gap: 7px;
+  height: 17px;
+  flex: 0 0 17px;
+  font-size: 11px;
   overflow: hidden;
 }
-.card-tag-kind,
-.card-tag-side {
-  font-size: 10.5px;
-  line-height: 15px;
-  padding: 0 6px;
-  border-radius: 4px;
-  border: 1px solid var(--r-line);
-  color: var(--r-muted);
-  background: var(--r-panel);
-  white-space: nowrap;
-}
-.card-tag-kind {
-  color: var(--r-text-soft);
-}
-.card-seq-num {
+.realm-resource-tags > :last-child:not(:first-child) {
   margin-left: auto;
+}
+.card-seq-num,
+.seq-id,
+.card-seq {
   font-family: var(--r-mono);
   font-size: 11px;
   font-weight: 600;
-  color: var(--r-warm);
+  color: var(--r-accent);
   white-space: nowrap;
 }
-.realm-resource-card strong {
+.card-tag-side,
+.seq-side-tag {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--side-fg, var(--r-text-soft));
+  background: transparent;
+  white-space: nowrap;
+}
+.card-tag-kind,
+.seq-kind {
+  font-size: 11px;
+  line-height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--r-faint);
+  background: transparent;
+  white-space: nowrap;
+}
+.realm-resource-card strong,
+.seq-title {
   font-size: 13.5px;
   font-weight: 600;
   line-height: 19px;
@@ -667,28 +802,34 @@
   overflow-wrap: anywhere;
   color: var(--r-text);
 }
-.realm-resource-snippet {
+.realm-resource-snippet,
+.seq-sub {
   color: var(--r-muted);
   font-size: 11.5px;
   line-height: 17px;
   height: 17px;
   flex: 0 0 17px;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
   overflow: hidden;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
 }
+
 .realm-workspace .realm-load-more {
   margin: 0;
   border: 0;
   border-top: 1px solid var(--r-line);
   border-radius: 0;
-  min-height: 40px;
+  min-height: 38px;
   flex: 0 0 auto;
-  font-size: 12px;
+  font-family: var(--r-mono);
+  font-size: 11.5px;
   padding: 8px;
   background: var(--r-panel);
+  color: var(--r-text-soft);
+}
+.realm-workspace .realm-load-more:hover:not(:disabled) {
+  color: var(--r-accent);
+  background: var(--r-deep);
 }
 .realm-no-results {
   padding: 32px 18px;
@@ -696,12 +837,13 @@
   text-align: center;
 }
 .realm-no-results > span {
-  font: 36px Georgia, serif;
+  font-family: var(--r-mono);
+  font-size: 28px;
   color: var(--r-accent);
 }
 .realm-no-results h3 {
   color: var(--r-text);
-  font-size: 14.5px;
+  font-size: 14px;
   margin: 8px 0 6px;
 }
 .realm-no-results p {
@@ -710,15 +852,15 @@
   margin: 0;
 }
 .realm-skeleton {
-  padding: 10px;
+  padding: 0;
   display: grid;
-  gap: 8px;
+  gap: 0;
 }
 .realm-skeleton > div {
-  height: 96px;
-  border-radius: 8px;
-  background: var(--r-raised);
-  border: 1px solid var(--r-soft-line);
+  height: 103px;
+  border-radius: 0;
+  background: var(--r-panel);
+  border-bottom: 1px solid var(--r-line);
 }
 .realm-error {
   font-size: 12px;
@@ -738,67 +880,71 @@
   color: var(--r-muted);
 }
 
-/* ---------- Reader Toolbar & Find ---------- */
-.realm-reader {
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  overflow: hidden;
-  background: var(--r-bg);
-}
+/* ---------- 阅读栏顶条 (.realm-reader-toolbar) & 文内查找 ---------- */
 .realm-reader-toolbar {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: nowrap;
   flex: 0 0 auto;
-  min-height: 40px;
-  padding: 4px 14px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--r-line);
   position: relative;
   z-index: 4;
   background: var(--r-panel);
 }
 .realm-reader-toolbar button {
-  min-height: 30px;
+  min-height: 26px;
   font-size: 12px;
-  padding: 4px 10px;
+  padding: 3px 9px;
   white-space: nowrap;
   background: transparent;
   border-color: transparent;
-  color: var(--r-text-soft);
+  border-radius: 2px;
+  color: var(--r-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
-.realm-reader-toolbar > button:hover:not(:disabled) {
-  background: var(--r-hover);
+.realm-reader-toolbar > button:hover:not(:disabled),
+.realm-reader-options button:hover:not(:disabled) {
+  background: var(--r-deep);
   color: var(--r-text);
+  border-color: transparent;
 }
 .realm-reader-toolbar > button[aria-expanded="true"],
 .realm-reader-options button[aria-pressed="true"] {
   color: var(--r-accent);
   background: var(--r-accent-wash);
+  font-weight: 600;
 }
 .realm-workspace .realm-back {
   display: none;
 }
+
 .realm-toc {
   position: relative;
 }
 .realm-toc > summary {
   list-style: none;
   cursor: pointer;
-  min-height: 30px;
+  min-height: 26px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 3px 9px;
   font-size: 12px;
-  border: 1px solid var(--r-soft-line);
-  border-radius: 6px;
+  border: 1px solid var(--r-line);
+  border-radius: 2px;
   background: var(--r-raised);
   color: var(--r-text-soft);
 }
 .realm-toc > summary:hover {
-  background: var(--r-hover);
+  background: var(--r-deep);
+  border-color: var(--r-strong-line);
   color: var(--r-text);
 }
 .realm-toc > summary::-webkit-details-marker {
@@ -812,33 +958,37 @@
 .realm-toc nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 4px);
   left: 0;
   width: min(320px, 78vw);
   max-height: min(54dvh, 420px);
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 8px;
-  background: var(--r-panel);
-  border: 1px solid var(--r-line);
-  border-radius: 9px;
+  padding: 6px;
+  background: var(--r-raised);
+  border: 1px solid var(--r-strong-line);
+  border-radius: 2px;
   box-shadow: var(--shadow);
   z-index: 20;
 }
 .realm-toc nav button {
+  justify-content: flex-start;
   text-align: left;
   white-space: normal;
   overflow-wrap: anywhere;
   background: transparent;
-  border-color: transparent;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0;
   font-size: 12.5px;
   padding: 6px 9px;
-  border-radius: 6px;
+  color: var(--r-text-soft);
 }
 .realm-toc nav button.is-active {
   color: var(--r-accent);
+  border-left-color: var(--r-accent);
   background: var(--r-accent-wash);
   font-weight: 600;
 }
@@ -849,18 +999,22 @@
 .realm-mode {
   display: inline-flex;
   border: 1px solid var(--r-line);
-  border-radius: 6px;
-  padding: 1px;
+  border-radius: 2px;
+  padding: 0;
   background: var(--r-bg);
   overflow: hidden;
 }
 .realm-mode button {
   border: 0;
-  border-radius: 5px;
-  min-height: 26px;
-  padding: 3px 10px;
+  border-right: 1px solid var(--r-line);
+  border-radius: 0;
+  min-height: 24px;
+  padding: 2px 10px;
   color: var(--r-muted);
   background: transparent;
+}
+.realm-mode button:last-child {
+  border-right: 0;
 }
 .realm-mode button[aria-pressed="true"] {
   color: var(--r-accent);
@@ -873,7 +1027,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 14px;
+  padding: 5px 14px;
   border-bottom: 1px solid var(--r-line);
   background: var(--r-raised);
 }
@@ -883,8 +1037,12 @@
   font-size: 12.5px;
   color: var(--r-text);
   background: var(--r-bg);
-  border-color: var(--r-line);
-  padding: 6px 10px;
+  border: 1px solid var(--r-strong-line);
+  border-radius: 2px;
+  padding: 5px 9px;
+}
+.realm-find input:focus {
+  border-color: var(--r-accent);
 }
 .realm-find span {
   font-size: 11px;
@@ -893,13 +1051,14 @@
   white-space: nowrap;
 }
 .realm-find button {
-  padding: 4px 8px;
-  min-width: 28px;
-  min-height: 28px;
+  padding: 3px 8px;
+  min-width: 26px;
+  min-height: 26px;
   font-size: 12px;
+  border-radius: 2px;
 }
 
-/* ---------- Reader Scroll & Document Header ---------- */
+/* ---------- 序列档案头部 (.realm-document-heading) ---------- */
 .realm-reader-scroll {
   flex: 1;
   min-height: 0;
@@ -909,7 +1068,7 @@
 }
 .realm-reader-layout {
   width: 100%;
-  max-width: 920px;
+  max-width: 900px;
   margin-inline: auto;
 }
 .realm-reader-main {
@@ -920,80 +1079,158 @@
 }
 
 .realm-document-heading {
-  padding: 22px 26px 14px;
-  border-bottom: 1px solid var(--r-soft-line);
+  padding: 26px 28px 18px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--r-strong-line);
 }
+.realm-seq-kicker,
+.seq-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--r-mono);
+  font-size: 11.5px;
+  color: var(--r-muted);
+  margin-bottom: 8px;
+}
+.realm-seq-kicker code,
+.realm-seq-kicker b,
+.realm-seq-kicker strong,
+.realm-seq-kicker .code-id,
+.realm-seq-kicker .kicker-id,
+.realm-seq-kicker .kicker-code {
+  color: var(--r-accent);
+  font-family: var(--r-mono);
+  font-weight: 600;
+  background: transparent;
+  padding: 0;
+  border: 0;
+}
+.realm-seq-kicker .kicker-sep {
+  color: var(--r-faint);
+}
+.realm-seq-kicker [data-side],
+.seq-breadcrumb [data-side] {
+  color: var(--side-fg, var(--r-accent));
+  font-family: var(--r-sans);
+  font-weight: 600;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
 .realm-document-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 8px;
-  margin-bottom: 10px;
-  font-size: 11.5px;
+  gap: 6px 12px;
+  margin-bottom: 8px;
+  font-size: 12px;
   color: var(--r-muted);
 }
 .doc-meta-kind,
 .doc-meta-side {
   display: inline-flex;
   align-items: center;
-  padding: 1px 8px;
-  border-radius: 4px;
-  font-size: 11px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  font-size: 12px;
   font-weight: 600;
-  border: 1px solid var(--r-line);
-  background: var(--r-panel);
+  background: transparent;
   color: var(--r-text-soft);
+}
+.doc-meta-side[data-side] {
+  color: var(--side-fg, var(--r-accent));
 }
 .doc-meta-cat {
   color: var(--r-muted);
 }
 .doc-meta-authors {
-  color: var(--r-text-soft);
+  color: var(--r-muted);
 }
+.doc-meta-authors b,
+.doc-meta-authors strong {
+  color: var(--r-text-soft);
+  font-weight: 500;
+}
+
 .realm-document-heading h1 {
   margin: 0 0 12px;
-  font-family: var(--r-serif);
-  font-size: clamp(22px, 2vw, 29px);
-  line-height: 1.42;
+  font-family: var(--r-sans);
+  font-size: clamp(1.65rem, 1.3rem + 1vw, 2.1rem);
   font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
   overflow-wrap: anywhere;
   color: var(--r-text);
 }
+.realm-document-heading h1:focus {
+  outline: none;
+}
 .doc-seq-prefix {
   font-family: var(--r-mono);
-  font-size: 0.76em;
-  color: var(--r-warm);
+  font-size: 0.78em;
+  color: var(--r-accent);
   margin-right: 4px;
   font-weight: 600;
 }
+
+.realm-document-sub,
+.realm-document-subrow,
+.realm-document-meta-row,
+.realm-document-bar,
+.seq-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 16px;
+  font-size: 12px;
+  color: var(--r-muted);
+}
+.realm-document-sub .realm-document-meta,
+.realm-document-subrow .realm-document-meta,
+.realm-document-meta-row .realm-document-meta {
+  margin-bottom: 0;
+}
+
+/* 无外框安静下划线文字动作 */
 .realm-document-actions {
   display: flex;
-  gap: 7px;
+  gap: 14px;
   align-items: center;
   flex-wrap: wrap;
+}
+:is(.realm-document-sub, .realm-document-subrow, .realm-document-meta-row, .realm-document-bar, .seq-meta-row) .realm-document-actions {
+  margin-left: auto;
 }
 .realm-document-actions > button,
 .doc-info-disclosure > summary {
   font-size: 12px;
-  padding: 5px 11px;
-  min-height: 30px;
-  border-radius: 6px;
-  border: 1px solid var(--r-line);
-  background: var(--r-panel);
-  color: var(--r-text-soft);
+  padding: 2px 0;
+  min-height: 28px;
+  border: 0;
+  border-bottom: 1px solid var(--r-strong-line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--r-muted);
   cursor: pointer;
   list-style: none;
   display: inline-flex;
   align-items: center;
+  transition: color 0.12s, border-color 0.12s;
 }
 .doc-info-disclosure > summary::-webkit-details-marker {
   display: none;
 }
-.realm-document-actions > button:hover,
+.realm-document-actions > button:hover:not(:disabled),
 .doc-info-disclosure > summary:hover {
-  background: var(--r-hover);
-  color: var(--r-text);
-  border-color: var(--r-strong-line);
+  background: transparent;
+  color: var(--r-accent);
+  border-color: transparent;
+  border-bottom-color: var(--r-accent);
 }
 .doc-info-disclosure[open] {
   flex-basis: 100%;
@@ -1001,8 +1238,8 @@
 .doc-info-popover {
   margin-top: 8px;
   padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--r-soft-line);
+  border-radius: 2px;
+  border: 1px solid var(--r-line);
   background: var(--r-panel);
   color: var(--r-muted);
   font-size: 11.5px;
@@ -1015,65 +1252,48 @@
 .doc-info-popover button {
   margin-top: 4px;
   font-size: 11.5px;
-  padding: 4px 9px;
+  padding: 3px 9px;
+  border-radius: 2px;
 }
 
 .realm-reading-note {
-  padding: 9px 26px 14px;
-  color: var(--r-muted);
+  padding: 0 28px 12px;
+  color: var(--r-faint);
   font-size: 11.5px;
   line-height: 1.6;
 }
 
-/* ---------- Adaptive Document & TRPG Ability Cards ---------- */
+/* ---------- 自适应正文、无框导言、阶段横梁与模块卡 ---------- */
 .realm-document-content {
-  padding: 0 26px 28px;
+  padding: 0 28px 36px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
+}
+
+/* 硬性测试契约：scroll-margin-top 必须保持 20px (< 4px 误差) */
+[data-archive-anchor],
+.archive-section {
+  scroll-margin-top: 20px;
 }
 
 .archive-section {
-  scroll-margin-top: 20px;
   min-width: 0;
-  border: 1px solid var(--r-line);
-  border-radius: 10px;
-  background: var(--r-panel);
-  padding: 14px 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
   position: relative;
 }
-.archive-section.archive-entry {
-  background: var(--r-raised);
-  border-left: 3px solid var(--r-accent);
-}
-.archive-section.archive-entry[data-rank="ex"],
-.archive-section.archive-entry[data-rank="s"] {
-  border-left-color: var(--r-warm);
-}
-.archive-section.archive-entry[data-rank="a"] {
-  border-left-color: var(--side-martial);
-}
-.archive-section.archive-entry[data-rank="b"] {
-  border-left-color: var(--r-accent);
-}
-.archive-section.archive-entry[data-rank="c"] {
-  border-left-color: var(--side-tech);
-}
-.archive-section.archive-entry[data-rank="d"] {
-  border-left-color: var(--green);
-}
-.archive-section.archive-entry[data-rank="e"],
-.archive-section.archive-entry[data-rank="f"] {
-  border-left-color: var(--r-strong-line);
-}
 
-/* Intro metadata & prose */
+/* 导言：去外框 + 左侧 2px 棱镜导轨 + 紧凑单排补丁记录 */
 .archive-section.archive-intro {
   border: 0;
   border-radius: 0;
   background: transparent;
   padding: 0;
+  margin-bottom: 6px;
 }
 .archive-section.archive-intro.is-empty {
   display: none;
@@ -1083,73 +1303,107 @@
   flex-direction: column;
   gap: 8px;
   margin-bottom: 12px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--r-soft-line);
-  background: var(--r-panel);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
+.archive-intro-credits,
 .archive-credits {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 8px;
+  align-items: baseline;
+  gap: 6px 16px;
+  font-size: 12.5px;
+  color: var(--r-muted);
+  margin-bottom: 10px;
 }
-.archive-credit-pill {
+.archive-intro-Meta .archive-credits,
+.archive-intro-meta .archive-credits,
+.archive-intro-meta .archive-intro-credits {
+  margin-bottom: 0;
+}
+.archive-credit-pill,
+.archive-intro-credits > span {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 5px;
-  padding: 2px 8px;
-  border-radius: 5px;
-  background: var(--r-raised);
-  border: 1px solid var(--r-soft-line);
-  font-size: 11.5px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 12.5px;
+  color: var(--r-muted);
 }
-.archive-credit-pill em {
+.archive-credit-pill em,
+.archive-intro-credits em {
   font-style: normal;
   color: var(--r-muted);
 }
-.archive-credit-pill b {
-  font-weight: 600;
-  color: var(--r-text);
-}
-.archive-changelogs {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 4px;
-  border-top: 1px dashed var(--r-soft-line);
-}
-.archive-credits:empty + .archive-changelogs {
-  padding-top: 0;
-  border-top: 0;
-}
-.archive-changelog-item {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 12px;
-  line-height: 1.6;
+.archive-credit-pill b,
+.archive-intro-credits b,
+.archive-intro-credits strong {
+  font-weight: 500;
   color: var(--r-text-soft);
 }
-.changelog-date {
+
+.archive-intro-prose,
+.archive-intro-prose.archive-parts {
+  padding: 2px 0 2px 14px;
+  margin-bottom: 10px;
+  border: 0;
+  border-left: 2px solid var(--r-accent-rail);
+  border-radius: 0;
+  background: transparent;
+  color: var(--r-text-soft);
+  font-size: 14.5px;
+  line-height: 1.85;
+}
+
+.archive-intro-logs,
+.archive-changelogs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 18px;
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px dashed var(--r-line);
+  font-family: var(--r-mono);
+  font-size: 11.5px;
+  color: var(--r-muted);
+}
+.archive-credits:empty + .archive-changelogs,
+.archive-intro-credits:empty + .archive-intro-logs {
+  margin-top: 0;
+}
+.archive-changelog-item,
+.archive-intro-logs > * {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--r-muted);
+}
+.changelog-date,
+.archive-intro-logs time,
+.archive-intro-logs code {
   flex-shrink: 0;
   font-family: var(--r-mono);
   font-size: 11px;
   color: var(--r-warm);
-}
-.archive-intro-prose {
-  padding: 12px 16px;
-  border-radius: 8px;
-  border: 1px solid var(--r-soft-line);
-  background: var(--r-panel);
+  background: transparent;
+  padding: 0;
 }
 
-/* Solo 1-line changelog section */
+/* 独立单行修订记录 */
 .archive-section.archive-section-changelog {
-  padding: 7px 12px;
-  border-radius: 8px;
-  border-style: dashed;
-  border-color: var(--r-soft-line);
-  background: var(--r-panel);
+  padding: 6px 0;
+  border: 0;
+  border-top: 1px dashed var(--r-line);
+  border-radius: 0;
+  background: transparent;
 }
 .archive-changelog-row {
   display: flex;
@@ -1160,16 +1414,20 @@
   color: var(--r-muted);
 }
 .changelog-tag {
+  font-family: var(--r-mono);
   font-size: 10.5px;
   font-weight: 600;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: 2px;
+  border: 1px solid color-mix(in oklab, var(--r-warm) 45%, transparent);
   color: var(--r-warm);
-  background: var(--r-warm-wash);
+  background: transparent;
 }
 .changelog-text {
   flex: 1;
   min-width: 140px;
+  font-family: var(--r-mono);
+  font-size: 11.5px;
   color: var(--r-text-soft);
   overflow-wrap: anywhere;
 }
@@ -1180,22 +1438,134 @@
 }
 .archive-inline-actions button {
   font-size: 11px;
-  padding: 2px 7px;
+  padding: 2px 6px;
   min-height: 24px;
   background: transparent;
   border-color: transparent;
+  border-radius: 2px;
   color: var(--r-muted);
 }
 
-/* Card Header */
-.archive-section-bar {
+/* ---------- 阶段分栏横梁 (.archive-section.is-phase 及普通章节) ---------- */
+.archive-section.is-phase,
+.archive-section.archive-section:not(.archive-entry):not(.archive-intro):not(.archive-raw):not(.archive-section-changelog) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  margin-top: 1.8rem;
+}
+.realm-document-content > .archive-section.is-phase:first-child {
+  margin-top: 0.25rem;
+}
+.archive-phase-head,
+.archive-section:not(.archive-entry) > .archive-section-bar {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
   flex-wrap: wrap;
-  padding: 0 0 10px;
-  border-bottom: 1px solid var(--r-soft-line);
+  gap: 8px 14px;
+  padding: 0 0 7px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--r-strong-line);
+}
+.archive-phase-head h2,
+.archive-phase-title,
+.archive-section-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--r-sans);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--r-text);
+  overflow-wrap: anywhere;
+}
+.archive-phase-head:not(:has(.archive-phase-note)) .archive-phase-actions,
+.archive-section:not(.archive-entry) > .archive-section-bar .archive-card-actions {
+  margin-left: auto;
+}
+.archive-phase-head h2::before,
+.archive-phase-title::before,
+.archive-section-heading::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  background: var(--r-accent);
+  transform: rotate(45deg);
+}
+.archive-section:not(.archive-entry) .archive-kind-pill {
+  display: none;
+}
+.archive-phase-note {
+  font-family: var(--r-mono);
+  font-size: 12px;
+  color: var(--r-warm);
+  line-height: 1.45;
+}
+.archive-phase-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.archive-phase-actions button {
+  font-size: 11px;
+  padding: 2px 6px;
+  min-height: 24px;
+  color: var(--r-muted);
+  background: transparent;
+  border-color: transparent;
+  border-radius: 2px;
+}
+.archive-phase-actions button:hover {
+  color: var(--r-accent);
+  background: var(--r-deep);
+}
+
+/* ---------- 强化能力模块卡 (.archive-entry) ---------- */
+.archive-section.archive-entry {
+  background: var(--r-raised);
+  border: 1px solid var(--r-line);
+  border-left: 3px solid var(--tier-e);
+  border-radius: 2px;
+  padding: 15px 18px;
+}
+.archive-section.archive-entry[data-rank="f"],
+.archive-section.archive-entry[data-rank="e"] {
+  border-left-color: var(--tier-e);
+}
+.archive-section.archive-entry[data-rank="d"] {
+  border-left-color: var(--tier-d);
+}
+.archive-section.archive-entry[data-rank="c"] {
+  border-left-color: var(--tier-c);
+}
+.archive-section.archive-entry[data-rank="b"] {
+  border-left-color: var(--tier-b);
+}
+.archive-section.archive-entry[data-rank="a"] {
+  border-left-color: var(--tier-a);
+}
+.archive-section.archive-entry[data-rank="s"],
+.archive-section.archive-entry[data-rank="ex"] {
+  border-left-color: var(--tier-s);
+}
+
+.archive-entry > .archive-section-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 10px;
+  flex-wrap: wrap;
+  padding: 0 0 9px;
+  border-bottom: 1px solid var(--r-line);
+}
+.archive-entry:has(> .archive-parts > .archive-stat-grid:first-child) > .archive-section-bar {
+  border-bottom: 0;
+  padding-bottom: 7px;
 }
 .archive-heading-group {
   display: flex;
@@ -1207,121 +1577,147 @@
 }
 .archive-kind-pill {
   flex-shrink: 0;
+  font-family: var(--r-mono);
   font-size: 10.5px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.04em;
-  padding: 2px 7px;
-  border-radius: 4px;
-  color: var(--r-accent);
-  background: var(--r-accent-wash);
-  border: 1px solid rgba(95, 168, 216, 0.25);
+  padding: 1px 6px;
+  border-radius: 2px;
+  color: var(--r-muted);
+  background: transparent;
+  border: 1px solid var(--r-strong-line);
 }
-.archive-entry-heading,
-.archive-section-heading {
+.archive-entry-heading {
   margin: 0;
-  font-family: var(--r-serif);
-  font-size: 18px;
+  font-family: var(--r-sans);
+  font-size: 16px;
   font-weight: 700;
-  line-height: 1.45;
+  line-height: 1.4;
   color: var(--r-text);
   overflow-wrap: anywhere;
 }
-.archive-rank-badge,
-.outline-rank {
+
+.archive-rank-badge {
   flex-shrink: 0;
   font-family: var(--r-mono);
   font-size: 11px;
-  font-weight: 700;
-  padding: 1px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--r-line);
-  color: var(--r-text-soft);
-  background: var(--r-panel);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 2px;
+  border: 1px solid color-mix(in oklab, var(--tier-e) 50%, transparent);
+  color: var(--tier-e);
+  background: transparent;
 }
-.rank-ex,
-.rank-s {
-  color: var(--r-warm);
-  border-color: rgba(214, 165, 92, 0.45);
-  background: var(--r-warm-wash);
+.outline-rank {
+  flex-shrink: 0;
+  font-family: var(--r-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  font-style: normal;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--r-faint);
 }
-.rank-a {
-  color: var(--side-martial);
-  border-color: rgba(224, 108, 117, 0.45);
-  background: var(--side-martial-bg);
-}
-.rank-b {
-  color: var(--r-accent);
-  border-color: rgba(95, 168, 216, 0.45);
-  background: var(--r-accent-wash);
-}
-.rank-c {
-  color: var(--side-tech);
-  border-color: rgba(79, 184, 204, 0.4);
-  background: var(--side-tech-bg);
+.rank-f,
+.rank-e {
+  color: var(--tier-e);
+  border-color: color-mix(in oklab, var(--tier-e) 50%, transparent);
 }
 .rank-d {
-  color: var(--green);
-  border-color: rgba(88, 194, 141, 0.4);
-  background: var(--green-bg);
+  color: var(--tier-d);
+  border-color: color-mix(in oklab, var(--tier-d) 50%, transparent);
+}
+.rank-c {
+  color: var(--tier-c);
+  border-color: color-mix(in oklab, var(--tier-c) 50%, transparent);
+}
+.rank-b {
+  color: var(--tier-b);
+  border-color: color-mix(in oklab, var(--tier-b) 50%, transparent);
+}
+.rank-a {
+  color: var(--tier-a);
+  border-color: color-mix(in oklab, var(--tier-a) 50%, transparent);
+}
+.rank-s,
+.rank-ex {
+  color: var(--tier-s);
+  border-color: color-mix(in oklab, var(--tier-s) 50%, transparent);
 }
 
 .archive-card-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
+  gap: 4px;
   align-items: center;
 }
 .archive-card-actions button {
   font-size: 11px;
-  padding: 3px 7px;
-  min-height: 26px;
+  padding: 2px 6px;
+  min-height: 24px;
   color: var(--r-muted);
   background: transparent;
   border-color: transparent;
-  border-radius: 5px;
+  border-radius: 2px;
 }
 .archive-card-actions button:hover {
-  color: var(--r-text);
-  background: var(--r-hover);
+  color: var(--r-accent);
+  background: var(--r-deep);
 }
 @media (hover: hover) {
-  .archive-card-actions {
-    opacity: 0.68;
-    transition: opacity 0.14s;
+  .archive-card-actions,
+  .archive-phase-actions {
+    opacity: 0.55;
+    transition: opacity 0.12s;
   }
-  .archive-section:hover .archive-card-actions,
-  .archive-section:focus-within .archive-card-actions {
+  .archive-section:hover :is(.archive-card-actions, .archive-phase-actions),
+  .archive-section:focus-within :is(.archive-card-actions, .archive-phase-actions) {
     opacity: 1;
   }
 }
 
-/* Card Body & Compact Stat Grid */
+/* ---------- 精密战术参数横条 (.archive-stat-grid) ---------- */
 .archive-parts {
-  padding-top: 10px;
+  padding-top: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.archive-intro-prose.archive-parts {
-  padding: 12px 16px;
+.archive-entry:has(> .archive-parts > .archive-stat-grid:first-child) > .archive-parts {
+  padding-top: 0;
 }
 .archive-stat-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: baseline;
+  gap: 6px 0;
+  padding: 6px 0;
   margin-bottom: 2px;
+  border-top: 1px solid var(--r-line);
+  border-bottom: 1px solid var(--r-line);
+  font-size: 12px;
 }
 .archive-stat-chip {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
-  padding: 3px 9px;
-  border-radius: 6px;
-  border: 1px solid var(--r-line);
-  background: var(--r-panel);
-  font-size: 12.5px;
-  line-height: 1.5;
+  padding: 0 12px 0 0;
+  margin: 0 12px 0 0;
+  border: 0;
+  border-right: 1px solid var(--r-line);
+  border-radius: 0;
+  background: transparent;
+  font-size: 12px;
+  line-height: 1.45;
   max-width: 100%;
+}
+.archive-stat-chip:last-child {
+  border-right: 0;
+  margin-right: 0;
+  padding-right: 0;
 }
 .archive-stat-label {
   color: var(--r-muted);
@@ -1329,30 +1725,28 @@
   flex-shrink: 0;
 }
 .archive-stat-value {
+  font-family: var(--r-mono);
   color: var(--r-text);
   font-weight: 500;
   overflow-wrap: anywhere;
 }
+.archive-stat-chip.is-nil,
 .archive-stat-chip.is-muted {
-  opacity: 0.56;
-  border-color: var(--r-soft-line);
+  opacity: 0.42;
   background: transparent;
-}
-.archive-stat-chip.is-muted .archive-stat-value {
-  color: var(--r-muted);
-  font-weight: 400;
 }
 
 .archive-field {
   display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
+  grid-template-columns: 84px minmax(0, 1fr);
   gap: 12px;
   padding: 6px 0;
-  border-top: 1px solid var(--r-soft-line);
+  border-top: 1px dashed var(--r-line);
 }
-.archive-parts > .archive-field:first-child {
+.archive-parts > .archive-field:first-child,
+.archive-stat-grid + .archive-field {
   border-top: 0;
-  padding-top: 0;
+  padding-top: 2px;
 }
 .archive-field-label {
   color: var(--r-muted);
@@ -1363,8 +1757,9 @@
 }
 .archive-field-value,
 .archive-prose {
-  font-size: 15.5px;
-  line-height: 1.88;
+  font-family: var(--r-sans);
+  font-size: 14.5px;
+  line-height: 1.82;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   tab-size: 4;
@@ -1372,7 +1767,7 @@
 }
 .archive-field.is-name {
   display: block;
-  padding-bottom: 8px;
+  padding-bottom: 6px;
 }
 .archive-field.is-name .archive-field-label {
   color: var(--r-accent);
@@ -1380,58 +1775,59 @@
   margin-bottom: 3px;
 }
 .archive-field.is-name .archive-field-value {
-  font-family: var(--r-serif);
-  font-size: 18px;
+  font-size: 16.5px;
   font-weight: 700;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 .archive-field.is-rule {
   display: block;
-  padding-top: 8px;
+  padding-top: 6px;
 }
-.archive-parts > .archive-field.is-rule:first-child {
-  padding-top: 0;
+.archive-parts > .archive-field.is-rule:first-child,
+.archive-stat-grid + .archive-field.is-rule {
+  padding-top: 2px;
 }
 .archive-field.is-rule .archive-field-label {
   display: inline-block;
   color: var(--r-accent);
+  font-family: var(--r-mono);
   font-size: 11.5px;
   font-weight: 600;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 .archive-prose {
   color: var(--r-text-soft);
 }
-.archive-section:not(.archive-entry) .archive-prose {
+.archive-section:not(.archive-entry):not(.archive-intro) .archive-prose {
   color: var(--r-text);
 }
 
-/* Raw Source & Diff Compare */
+/* ---------- 原文视图 & 差异对照 ---------- */
 .archive-source {
-  font-family: var(--r-sans);
-  font-size: 14.5px;
-  line-height: 1.86;
+  font-family: var(--r-mono);
+  font-size: 13.5px;
+  line-height: 1.82;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   margin: 0;
   tab-size: 4;
 }
 .source-compare {
-  margin-top: 12px;
-  padding: 12px 14px;
-  border-radius: 7px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 2px;
   background: var(--r-bg);
-  border: 1px dashed var(--r-line);
-  color: var(--r-muted);
-  font-size: 13.5px;
+  border: 1px dashed var(--r-strong-line);
+  color: var(--r-text-soft);
+  font-size: 12.5px;
 }
 .realm-document-content.is-raw {
   gap: 0;
   background: var(--r-panel);
-  margin-inline: 26px;
-  padding: 20px 24px;
-  border: 1px solid var(--r-soft-line);
-  border-radius: 10px;
+  margin-inline: 28px;
+  padding: 18px 22px;
+  border: 1px solid var(--r-line);
+  border-radius: 2px;
 }
 .archive-section.archive-raw {
   padding: 0;
@@ -1442,13 +1838,13 @@
 
 .realm-reader mark {
   padding: 0 2px;
-  border-radius: 3px;
+  border-radius: 2px;
   background: var(--mark-bg);
   color: var(--mark-fg);
 }
 .realm-reader mark[data-current="true"] {
   background: var(--r-warm);
-  color: #11161d;
+  color: #0b0d11;
   outline: 1px solid var(--r-warm);
 }
 
@@ -1458,29 +1854,31 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 16px 26px 28px;
-  border-top: 1px solid var(--r-soft-line);
+  padding: 14px 28px 30px;
+  border-top: 1px solid var(--r-line);
   color: var(--r-muted);
   font-size: 11.5px;
 }
 .realm-document-footer button {
   font-size: 11.5px;
-  padding: 5px 10px;
+  padding: 4px 10px;
+  border-radius: 2px;
 }
 
 .realm-toast {
   display: none;
   position: absolute;
-  bottom: 16px;
-  left: 16px;
-  right: 16px;
+  bottom: 14px;
+  left: 14px;
+  right: 14px;
   z-index: 8;
   width: fit-content;
-  max-width: calc(100% - 32px);
+  max-width: calc(100% - 28px);
   border: 1px solid var(--r-accent);
-  border-radius: 8px;
-  padding: 10px 15px;
-  background: var(--r-panel);
+  border-left-width: 3px;
+  border-radius: 2px;
+  padding: 8px 14px;
+  background: var(--r-raised);
   box-shadow: var(--shadow);
   color: var(--r-text);
   font-size: 12.5px;
@@ -1498,7 +1896,7 @@
   overflow: auto;
 }
 .realm-reader-state h2 {
-  font-family: var(--r-serif);
+  font-family: var(--r-sans);
   font-size: 20px;
   margin-top: 0;
 }
@@ -1510,92 +1908,154 @@
   overflow-wrap: anywhere;
 }
 
-/* ---------- Welcome Hub (界域速览台) ---------- */
+/* ---------- 轮回强化序列总枢 (.realm-welcome) ---------- */
 .realm-welcome {
-  padding: 28px clamp(16px, 3vw, 40px);
-  background: radial-gradient(ellipse at 50% 0%, var(--r-accent-wash), transparent 58%), var(--r-bg);
+  padding: 38px clamp(16px, 3.5vw, 44px) 56px;
+  background: var(--r-bg);
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
+  container-type: inline-size;
 }
 .realm-welcome-container {
-  max-width: 780px;
+  max-width: 58rem;
   width: 100%;
-  margin: auto;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 28px;
 }
 .realm-welcome-hero {
-  padding: 24px 26px;
-  border-radius: 12px;
-  border: 1px solid var(--r-line);
-  background: var(--r-panel);
-  box-shadow: var(--shadow-soft);
+  padding: 0 0 26px;
+  border: 0;
+  border-bottom: 1px solid var(--r-strong-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
+.realm-welcome-telemetry,
+.realm-welcome-kicker,
 .realm-welcome-badge {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 10px 3px 6px;
-  border-radius: 999px;
-  border: 1px solid var(--r-soft-line);
-  background: var(--r-raised);
-  font-size: 11.5px;
-  color: var(--r-muted);
-  margin-bottom: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--r-mono);
+  font-size: 12px;
+  color: var(--r-accent);
+  letter-spacing: 0.06em;
+  margin: 0 0 10px;
 }
 .welcome-sigil {
-  color: var(--r-warm);
-  font: 700 15px Georgia, serif;
+  color: var(--r-accent);
+  font-family: var(--r-mono);
+  font-weight: 600;
 }
+.realm-welcome-hero h1,
 .realm-welcome-hero h2 {
-  font-family: var(--r-serif);
-  font-size: clamp(21px, 2.1vw, 28px);
+  font-family: var(--r-sans);
+  font-size: clamp(1.85rem, 1.4rem + 1.4vw, 2.5rem);
   font-weight: 700;
-  line-height: 1.4;
-  margin: 0 0 8px;
+  letter-spacing: -0.02em;
+  line-height: 1.22;
+  margin: 0 0 10px;
   color: var(--r-text);
 }
 .realm-welcome-hero > p {
-  color: var(--r-text-soft);
-  font-size: 13.5px;
-  line-height: 1.8;
-  margin: 0 0 18px;
+  color: var(--r-muted);
+  font-size: 14.5px;
+  line-height: 1.75;
+  max-width: 58ch;
+  margin: 0 0 20px;
 }
+.realm-welcome-cmdbar,
 .realm-welcome-cta {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  align-items: center;
+  align-items: stretch;
+  max-width: 38rem;
 }
+.realm-welcome-search,
+.realm-welcome-search-btn,
+.realm-welcome-trigger,
+.realm-cmd-trigger {
+  flex: 1 1 240px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 14px;
+  background: var(--r-raised) !important;
+  border: 1px solid var(--r-strong-line) !important;
+  border-radius: 2px !important;
+  color: var(--r-muted) !important;
+  font-size: 13.5px;
+  text-align: left;
+}
+.realm-welcome-search:hover,
+.realm-welcome-search-btn:hover,
+.realm-welcome-trigger:hover,
+.realm-cmd-trigger:hover {
+  border-color: var(--r-accent) !important;
+  color: var(--r-text) !important;
+  background: var(--r-deep) !important;
+}
+.realm-welcome-cmdbar kbd,
+.realm-welcome-cta kbd {
+  font-family: var(--r-mono);
+  font-size: 11px;
+  color: var(--r-accent);
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
 .realm-workspace .realm-primary {
   background: var(--r-accent);
-  color: #fff;
-  border-color: var(--r-accent);
+  color: var(--accent-ink);
+  border: 1px solid var(--r-accent);
+  border-radius: 2px;
   font-weight: 600;
   padding: 8px 16px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-}
-:root[data-theme="dark"] .realm-workspace .realm-primary {
-  color: #091018;
 }
 .realm-workspace .realm-primary:hover:not(:disabled) {
   filter: brightness(1.07);
   border-color: var(--r-accent);
   background: var(--r-accent);
+  color: var(--accent-ink);
 }
 .realm-primary kbd {
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(0, 0, 0, 0.16);
   color: inherit;
-  border-color: transparent;
+  border: 0;
   font-size: 10.5px;
+  padding: 1px 5px;
 }
-.realm-secondary-cta {
-  padding: 8px 15px;
-  font-weight: 500;
+.realm-secondary-cta,
+.realm-rand-btn {
+  padding: 9px 16px;
+  background: transparent !important;
+  border: 1px solid var(--r-accent) !important;
+  border-radius: 2px !important;
+  color: var(--r-accent) !important;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.realm-secondary-cta:hover:not(:disabled),
+.realm-rand-btn:hover:not(:disabled) {
+  background: var(--r-accent-wash) !important;
+  border-color: var(--r-accent) !important;
+  color: var(--r-accent) !important;
 }
 
 .realm-welcome-section {
@@ -1603,80 +2063,169 @@
   flex-direction: column;
   gap: 10px;
 }
-.realm-welcome-section h3 {
+.realm-welcome-section h2,
+.realm-welcome-section h3,
+.realm-matrix-label {
   margin: 0;
-  font-size: 12.5px;
+  font-family: var(--r-mono);
+  font-size: 11.5px;
   font-weight: 600;
-  color: var(--r-muted);
-  letter-spacing: 0.03em;
+  color: var(--r-faint);
+  letter-spacing: 0.08em;
 }
+
+/* 四大强化体系：1px 十字网格 2×2 象限矩阵 */
+.realm-quadrant-matrix,
 .welcome-side-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 0;
+  border-top: 1px solid var(--r-strong-line);
+  border-left: 1px solid var(--r-strong-line);
 }
+.realm-quad-cell,
 .welcome-side-card {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 12px 14px;
-  border-radius: 9px;
-  border: 1px solid var(--r-line);
-  background: var(--r-panel) !important;
-  text-align: left;
-}
-.welcome-side-card:hover {
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 18px 20px;
+  border: 0 !important;
+  border-right: 1px solid var(--r-strong-line) !important;
+  border-bottom: 1px solid var(--r-strong-line) !important;
+  border-radius: 0 !important;
   background: var(--r-raised) !important;
+  color: var(--r-text) !important;
+  text-align: left;
+  min-width: 0;
+  cursor: pointer;
+  transition: background 0.12s;
 }
+.realm-quad-cell:hover,
+.welcome-side-card:hover {
+  background: var(--r-deep) !important;
+}
+.realm-quad-head,
 .welcome-side-top {
   width: 100%;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 8px;
 }
+.realm-quad-name,
+.realm-quad-head strong,
 .welcome-side-top strong {
-  font-size: 14px;
-  font-weight: 700;
-}
-.welcome-side-top span {
-  font-family: var(--r-mono);
-  font-size: 11px;
-  opacity: 0.85;
-}
-.welcome-side-card small {
-  color: var(--r-muted);
-  font-size: 11.5px;
-  line-height: 1.5;
-}
-
-.welcome-cat-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.welcome-cat-pills button {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: var(--r-panel);
-  border: 1px solid var(--r-line);
-  font-size: 12.5px;
+  gap: 8px;
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--r-text);
 }
+.realm-quad-bar {
+  width: 3px;
+  height: 15px;
+  flex-shrink: 0;
+  display: inline-block;
+  background: var(--side-fg, var(--r-accent));
+}
+.realm-quad-count,
+.realm-quad-head span:last-child,
+.realm-quad-head em,
+.welcome-side-top span {
+  font-style: normal;
+  font-family: var(--r-mono);
+  font-size: 12px;
+  color: var(--r-muted);
+  font-variant-numeric: tabular-nums;
+}
+.realm-quad-desc,
+.realm-quad-cell p,
+.realm-quad-cell small,
+.welcome-side-card small {
+  margin: 0;
+  color: var(--r-muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+  font-weight: 400;
+}
+
+/* 六大兑换分区：6 列精密网格条带（窄屏自适应 3 / 2 列无溢出） */
+.realm-terminal-strip,
+.welcome-cat-pills {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--r-line);
+  border-left: 1px solid var(--r-line);
+}
+.realm-term-cell,
+.welcome-cat-pills button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  padding: 13px 14px;
+  border: 0 !important;
+  border-right: 1px solid var(--r-line) !important;
+  border-bottom: 1px solid var(--r-line) !important;
+  border-radius: 0 !important;
+  background: var(--r-panel) !important;
+  color: var(--r-text) !important;
+  text-align: left;
+  min-width: 0;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.realm-term-cell:hover,
+.welcome-cat-pills button:hover {
+  background: var(--r-deep) !important;
+}
+.realm-term-cell strong,
+.realm-term-cell b,
 .welcome-cat-pills em {
   font-style: normal;
   font-family: var(--r-mono);
-  font-size: 11px;
-  color: var(--r-warm);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--r-text);
+  font-variant-numeric: tabular-nums;
+}
+.realm-term-cell span,
+.realm-term-cell small,
+.welcome-cat-pills span {
+  font-size: 12px;
+  color: var(--r-muted);
+  overflow-wrap: anywhere;
+}
+
+@container (max-width: 720px) {
+  .realm-terminal-strip,
+  .welcome-cat-pills {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container (max-width: 480px) {
+  .realm-quadrant-matrix,
+  .welcome-side-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .realm-terminal-strip,
+  .welcome-cat-pills {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .welcome-quick-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 0;
+  border-top: 1px solid var(--r-line);
+  border-left: 1px solid var(--r-line);
 }
 .welcome-quick-item {
   display: flex;
@@ -1684,11 +2233,16 @@
   justify-content: space-between;
   gap: 8px;
   padding: 9px 12px;
-  border-radius: 8px;
-  background: var(--r-panel);
-  border: 1px solid var(--r-soft-line);
+  border: 0 !important;
+  border-right: 1px solid var(--r-line) !important;
+  border-bottom: 1px solid var(--r-line) !important;
+  border-radius: 0 !important;
+  background: var(--r-panel) !important;
   text-align: left;
   min-width: 0;
+}
+.welcome-quick-item:hover {
+  background: var(--r-deep) !important;
 }
 .quick-item-title {
   flex: 1;
@@ -1702,23 +2256,24 @@
 }
 .welcome-quick-item small {
   flex-shrink: 0;
-  font-size: 10.5px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  color: var(--r-muted);
-  border: 1px solid transparent;
+  font-family: var(--r-mono);
+  font-size: 11px;
+  padding: 0;
+  border: 0;
+  color: var(--side-fg, var(--r-muted));
 }
 
 .realm-welcome-notes {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 18px;
-  padding-top: 6px;
-  color: var(--r-muted);
-  font-size: 11.5px;
+  padding-top: 4px;
+  color: var(--r-faint);
+  font-family: var(--r-mono);
+  font-size: 11px;
 }
 
-/* ---------- Mobile / Tablet Filter Drawer ---------- */
+/* ---------- 移动端 / 平板筛选抽屉 ---------- */
 .realm-filter-dialog {
   position: fixed;
   margin: 0;
@@ -1726,11 +2281,12 @@
   height: 100vh;
   height: 100dvh;
   max-height: 100dvh;
-  width: min(360px, 92vw);
+  width: min(340px, 92vw);
   max-width: 92vw;
-  padding: 0 14px max(18px, env(safe-area-inset-bottom));
+  padding: 0 12px max(18px, env(safe-area-inset-bottom));
   border: 0;
-  border-right: 1px solid var(--r-line);
+  border-right: 1px solid var(--r-strong-line);
+  border-radius: 0;
   color: var(--r-text);
   background: var(--r-panel);
   overflow-y: auto;
@@ -1739,8 +2295,7 @@
   box-shadow: var(--shadow);
 }
 .realm-filter-dialog::backdrop {
-  background: rgba(4, 8, 14, 0.62);
-  backdrop-filter: blur(2px);
+  background: rgba(5, 7, 10, 0.68);
 }
 .realm-filter-dialog > header {
   display: flex;
@@ -1749,20 +2304,25 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  padding: 12px 0;
+  padding: 10px 4px;
   background: var(--r-panel);
   border-bottom: 1px solid var(--r-line);
 }
 .realm-filter-dialog h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
 }
 .realm-filter-dialog > header button {
-  min-width: 40px;
-  min-height: 40px;
+  min-width: 38px;
+  min-height: 38px;
   font-size: 20px;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
 }
 .realm-filter-dialog > .realm-primary {
   position: sticky;

@@ -19,6 +19,24 @@ export function sideKey(side?: string): string | undefined {
   return undefined;
 }
 
+function cleanCardSnippet(raw: string, title: string): string {
+  let s = raw.replace(/^\uFEFF/, '').trim();
+  if (!s) return '';
+  if (s.startsWith(title)) {
+    s = s.slice(title.length).trim();
+  }
+  const bareTitle = title.replace(/^\d{1,4}】\s*/, '').trim();
+  if (bareTitle && s.startsWith(bareTitle)) {
+    s = s.slice(bareTitle.length).trim();
+  }
+  s = s
+    .replace(/^(?:[（(【\[]\s*(?:制作人|制作者|投稿人|调整人|修改人|重置人|审核人|审核者|复查人|文本优化|作者|协力)\s*[:：][^）)】\]]+[）)】\]]\s*)+/g, '')
+    .replace(/^(?:[【\[]\s*\d{2,4}\s*[./年-]\s*\d{1,2}[^】\]]*[】\]]\s*)+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return s;
+}
+
 export function ResourceCard({ item, active, onOpen, highlightTokens, index }: Props) {
   const marked = (text: string) =>
     highlight(text, highlightTokens).map((part, i) =>
@@ -27,13 +45,17 @@ export function ResourceCard({ item, active, onOpen, highlightTokens, index }: P
 
   const seqMatch = item.title.match(/^(\d{1,4})】\s*(.+)$/);
   const rawSnippet = (item.snippet || '').trim();
+  const displaySnippet = highlightTokens.length > 0 ? rawSnippet : cleanCardSnippet(rawSnippet, item.title);
   const redundantSnippet =
-    !rawSnippet || rawSnippet === item.category || rawSnippet === item.top_kind || rawSnippet === item.side;
+    !displaySnippet ||
+    displaySnippet === item.category ||
+    displaySnippet === item.top_kind ||
+    displaySnippet === item.side;
   const fallbackMeta = item.authors?.length
-    ? `制作 / 审核：${item.authors.join(' · ')}`
+    ? `署名：${item.authors.join(' · ')}`
     : item.category && item.category !== item.top_kind
       ? item.category
-      : '点击展开完整规则档案';
+      : '点击查阅完整序列原文';
 
   return (
     <a
@@ -49,17 +71,25 @@ export function ResourceCard({ item, active, onOpen, highlightTokens, index }: P
       }}
     >
       <div className="realm-resource-tags">
-        {item.top_kind && <span className="card-tag-kind">{item.top_kind}</span>}
+        {seqMatch && (
+          <span className="card-seq-num" style={{ marginLeft: 0 }}>
+            {marked(seqMatch[1])}
+          </span>
+        )}
         {item.side && item.side !== item.top_kind && (
           <span className="card-tag-side" data-side={sideKey(item.side)}>{item.side}</span>
         )}
-        {seqMatch && <span className="card-seq-num">#{marked(seqMatch[1])}</span>}
+        {item.top_kind && (
+          <span className="card-tag-kind" style={{ marginLeft: 'auto' }}>
+            {item.top_kind}
+          </span>
+        )}
       </div>
       <strong title={item.title}>
         {seqMatch ? marked(seqMatch[2]) : marked(item.title)}
       </strong>
       <div className="realm-resource-snippet">
-        {redundantSnippet ? fallbackMeta : marked(rawSnippet)}
+        {redundantSnippet ? fallbackMeta : marked(displaySnippet)}
       </div>
     </a>
   );

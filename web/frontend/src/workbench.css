@@ -1,4 +1,8 @@
-/* Multi-resource Reading Workbench & History Comparison */
+/* =====================================================================
+   宏观界域 · 多档案工作台与历史比对 (Void Prism / Daylight Terminal)
+   30px 控制带 + 36px 档案槽同色融合 · 2px 精密微切角 · 零气泡框
+   ===================================================================== */
+
 .realm-reading-shell {
   display: flex;
   flex-direction: column;
@@ -8,29 +12,34 @@
   color: var(--r-text);
 }
 
+/* ---------- 30px 极窄终端控制带 (.realm-layout-controls) ---------- */
 .realm-layout-controls {
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
   gap: 4px;
-  padding: 2px 12px;
-  min-height: 36px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 12px;
   flex: 0 0 auto;
   border-bottom: 1px solid var(--r-line);
-  background: var(--r-bg);
+  background: var(--r-panel);
 }
 .realm-layout-controls button {
-  padding: 4px 10px;
-  font-size: 12px;
-  min-height: 28px;
-  border-color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  border: 0;
+  border-radius: 2px;
   background: transparent;
   color: var(--r-muted);
-  border-radius: 6px;
   white-space: nowrap;
 }
 .realm-layout-controls button:hover:not(:disabled) {
-  background: var(--r-hover);
+  background: var(--r-deep);
   color: var(--r-text);
   border-color: transparent;
 }
@@ -50,8 +59,13 @@
   margin-left: auto;
 }
 .realm-search-toggle kbd {
+  font-family: var(--r-mono);
   font-size: 9.5px;
   margin-left: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--r-faint);
 }
 
 @media (min-width: 821px) {
@@ -60,11 +74,12 @@
   }
 }
 
+/* 三栏折叠列宽（与 188px + 264px + 1fr 精密网格对齐） */
 .realm-workspace.index-hidden {
   grid-template-columns: 264px minmax(0, 1fr);
 }
 .realm-workspace.results-hidden {
-  grid-template-columns: 192px minmax(0, 1fr);
+  grid-template-columns: 188px minmax(0, 1fr);
 }
 .realm-workspace.index-hidden.results-hidden {
   grid-template-columns: minmax(0, 1fr);
@@ -74,7 +89,7 @@
   display: none;
 }
 
-/* ---------- Workbench Tabs & Split Controls ---------- */
+/* ---------- 36px 档案标签与并排控制带 (.workbench-header) ---------- */
 .realm-reader-workbench {
   background: var(--r-bg);
   border: 0;
@@ -85,7 +100,8 @@
   align-items: center;
   flex: 0 0 auto;
   min-width: 0;
-  min-height: 40px;
+  height: 36px;
+  min-height: 36px;
   border-bottom: 1px solid var(--r-line);
   background: var(--r-panel);
 }
@@ -93,6 +109,7 @@
   display: flex;
   position: relative;
   flex: 1;
+  height: 100%;
   gap: 0;
   overflow-x: auto;
   min-width: 0;
@@ -103,39 +120,44 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
+  height: 100%;
   max-width: 224px;
   border: 0;
-  border-right: 1px solid var(--r-soft-line);
+  border-right: 1px solid var(--r-line);
   border-radius: 0;
   background: transparent;
   overflow: hidden;
-  transition: background 0.12s;
+  transition: background 0.1s;
 }
 .workbench-tab:hover {
-  background: var(--r-hover);
+  background: var(--r-deep);
 }
 .workbench-tab.active {
   background: var(--r-accent-wash);
   box-shadow: inset 0 -2px 0 var(--r-accent);
 }
 .workbench-tab button {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  min-height: 36px;
   border: 0;
   background: transparent;
   border-radius: 0;
   font-size: 12px;
-  min-height: 40px;
 }
 .workbench-tab button:hover:not(:disabled) {
   background: transparent;
   border-color: transparent;
 }
 .workbench-tab .workbench-tab-title {
+  justify-content: flex-start;
   text-align: left;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   min-width: 0;
-  padding: 6px 10px 6px 12px;
+  padding: 0 8px 0 12px;
   color: var(--r-text-soft);
 }
 .workbench-tab.active .workbench-tab-title {
@@ -143,14 +165,16 @@
   font-weight: 600;
 }
 .workbench-tab .workbench-tab-close {
+  justify-content: center;
   flex-shrink: 0;
-  padding: 6px;
-  width: 30px;
+  padding: 0;
+  width: 28px;
   color: var(--r-muted);
+  font-family: var(--r-mono);
 }
 .workbench-tab .workbench-tab-close:hover {
   color: var(--r-text);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--r-deep);
 }
 
 .workbench-controls {
@@ -163,16 +187,20 @@
 }
 .workbench-controls button,
 .workbench-compare-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 11.5px;
-  min-height: 30px;
-  padding: 4px 9px;
+  min-height: 26px;
+  padding: 3px 9px;
   white-space: nowrap;
   background: transparent;
-  border-color: transparent;
-  color: var(--r-text-soft);
+  border: 0;
+  border-radius: 2px;
+  color: var(--r-muted);
 }
 .workbench-controls button:hover:not(:disabled) {
-  background: var(--r-hover);
+  background: var(--r-deep);
   color: var(--r-text);
 }
 .workbench-controls button[aria-pressed="true"] {
@@ -212,10 +240,12 @@
   min-height: 0;
 }
 .workbench-pane-label {
+  font-family: var(--r-mono);
   font-size: 11px;
+  letter-spacing: 0.04em;
   color: var(--r-muted);
-  padding: 5px 14px;
-  border-bottom: 1px solid var(--r-soft-line);
+  padding: 4px 14px;
+  border-bottom: 1px solid var(--r-line);
   background: var(--r-panel);
 }
 .workbench-reference .workbench-pane-label {
@@ -230,11 +260,17 @@
   gap: 8px;
   background: var(--r-panel);
   border-bottom: 1px solid var(--r-line);
-  padding: 6px 12px;
+  padding: 5px 12px;
 }
 .workbench-compare-controls button {
-  border-color: var(--r-line);
+  border: 1px solid var(--r-line);
   background: var(--r-raised);
+  color: var(--r-text-soft);
+}
+.workbench-compare-controls button:hover:not(:disabled) {
+  border-color: var(--r-accent);
+  color: var(--r-accent);
+  background: var(--r-accent-wash);
 }
 .workbench-compare-controls label {
   display: flex;
@@ -250,12 +286,14 @@
   width: min(280px, 44vw);
   min-width: 0;
   font-size: 12px;
-  padding: 5px 8px;
+  padding: 4px 8px;
   background: var(--r-raised);
   color: var(--r-text);
-  border-color: var(--r-line);
+  border: 1px solid var(--r-strong-line);
+  border-radius: 2px;
 }
 .workbench-compare-controls > span {
+  font-family: var(--r-mono);
   font-size: 11px;
   color: var(--r-muted);
   margin-left: auto;
@@ -277,7 +315,7 @@
   margin-bottom: 4px;
 }
 
-/* ---------- History Version Comparison ---------- */
+/* ---------- 历史版本比对终端 (.realm-history) ---------- */
 .realm-history {
   flex: 1;
   min-height: 0;
@@ -293,22 +331,26 @@
 }
 .realm-history > header h2 {
   margin: 4px 0;
-  font-family: var(--r-serif);
-  font-size: 22px;
+  font-family: var(--r-sans);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--r-text);
 }
 .realm-history > header p {
   margin: 0 0 16px;
   color: var(--r-muted);
-  font-size: 13px;
+  font-family: var(--r-mono);
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 .history-caution {
-  padding: 11px 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--r-line);
   border-left: 3px solid var(--r-warm);
-  border-radius: 0 8px 8px 0;
+  border-radius: 2px;
   background: var(--r-panel);
   font-size: 12.5px;
-  line-height: 1.8;
+  line-height: 1.75;
   color: var(--r-text-soft);
 }
 .realm-history form {
@@ -318,7 +360,7 @@
   gap: 10px 12px;
   margin-block: 16px;
   padding: 14px 16px;
-  border-radius: 10px;
+  border-radius: 2px;
   border: 1px solid var(--r-line);
   background: var(--r-panel);
 }
@@ -332,24 +374,38 @@
 .realm-history input {
   margin-top: 6px;
   font-size: 12.5px;
-  min-height: 36px;
-  border-color: var(--r-line);
+  min-height: 34px;
+  border: 1px solid var(--r-strong-line);
+  border-radius: 2px;
   background: var(--r-bg);
   color: var(--r-text);
 }
 .realm-history form button {
   font-size: 12px;
-  min-height: 36px;
+  min-height: 34px;
+  padding-inline: 14px;
+  border-radius: 2px;
+  background: var(--r-accent);
+  color: var(--accent-ink);
+  border-color: var(--r-accent);
+  font-weight: 600;
+}
+.realm-history form button:hover:not(:disabled) {
+  filter: brightness(1.07);
+  background: var(--r-accent);
+  color: var(--accent-ink);
+  border-color: var(--r-accent);
 }
 .history-candidates {
   border: 1px solid var(--r-line);
   background: var(--r-panel);
   padding: 14px 16px;
-  border-radius: 9px;
+  border-radius: 2px;
 }
 .history-candidates h3 {
   margin: 0 0 10px;
-  font-size: 13px;
+  font-family: var(--r-mono);
+  font-size: 12.5px;
   color: var(--r-warm);
 }
 .history-candidates > div {
@@ -370,6 +426,7 @@
 }
 .history-candidates button {
   font-size: 12px;
+  border-radius: 2px;
 }
 .history-status {
   font-size: 12.5px;
@@ -384,11 +441,12 @@
 }
 .history-sources p {
   background: var(--r-panel);
-  padding: 11px 13px;
+  padding: 10px 13px;
+  font-family: var(--r-mono);
   font-size: 11.5px;
   line-height: 1.75;
   border: 1px solid var(--r-line);
-  border-radius: 8px;
+  border-radius: 2px;
   overflow-wrap: anywhere;
   margin: 0 0 10px;
 }
@@ -398,7 +456,7 @@
 }
 .history-diff {
   border: 1px solid var(--r-line);
-  border-radius: 8px;
+  border-radius: 2px;
   background: var(--r-panel);
   overflow: hidden;
 }
@@ -436,8 +494,9 @@
 .history-gap {
   text-align: center;
   color: var(--r-muted);
-  padding: 7px;
-  font-size: 11.5px;
+  padding: 6px;
+  font-family: var(--r-mono);
+  font-size: 11px;
   background: var(--r-raised);
 }
 .realm-history footer {
