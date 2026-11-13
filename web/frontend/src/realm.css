@@ -1166,6 +1166,9 @@
   overflow-wrap: anywhere;
   color: var(--r-text);
 }
+.realm-document-heading h1:focus {
+  outline: none;
+}
 .doc-seq-prefix {
   font-family: var(--r-mono);
   font-size: 0.78em;
