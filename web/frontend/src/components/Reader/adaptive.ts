@@ -39,7 +39,28 @@ export function readField(line: string): Field | undefined {
 }
 
 function linesOf(text: string): string[] {
-  return text.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g)?.filter(Boolean) || [];
+  const lines = text.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g)?.filter(Boolean) || [];
+  const result: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    if (/^\s*【(?:历史更新\s*[:：]|\d{2,4}[./年-][^：:\r\n]*[:：])/.test(line)) {
+      let depth = 0;
+      let end = i;
+      for (; end < lines.length; end++) {
+        for (const char of lines[end]) {
+          if (char === '【') depth++;
+          if (char === '】') depth--;
+        }
+        if (depth <= 0) break;
+      }
+      if (end < lines.length && end > i) {
+        line = lines.slice(i, end + 1).join('');
+        i = end;
+      }
+    }
+    result.push(line);
+  }
+  return result;
 }
 
 export function splitParts(raw: string): Part[] {
@@ -68,11 +89,23 @@ function heading(line: string): { title: string; kind: Section['kind'] } | undef
     return undefined;
   }
   const text = line.trim();
+  if (text.startsWith('【') && parseChangelogLine(text)) return { title: text.slice(1, -1), kind: 'section' };
   const markdown = text.match(/^#{1,3}\s+(.+)$/);
   if (markdown) return { title: markdown[1], kind: 'section' };
   const bracket = text.match(/^【([^】]{1,100})】$/);
   if (bracket) return { title: bracket[1], kind: 'section' };
   return undefined;
+}
+
+export function parseChangelogLine(text: string): { date: string; note: string; rawLine: string } | null {
+  const trimmed = text.trim();
+  // 旧稿日期不完整时保留原标记，不猜年份或把 427 改成日期。
+  const wrapped = trimmed.match(/^[【\[]([\s\S]*)[】\]]([（(][^\r\n]*)?$/);
+  const body = wrapped ? wrapped[1].trim() : trimmed;
+  const match = body.match(/^(历史更新|\d{2,4}\s*[./年-]\s*\d{1,2}[^：:\r\n]*?)\s*[:：]\s*([\s\S]+)$/)
+    || body.match(/^(\d{2,4}[./-]\d{1,2}(?:[./-]\d{1,2})?)\s+([\s\S]+)$/);
+  if (!match) return null;
+  return { date: match[1].trim(), note: match[2].trim() + (wrapped?.[2] || ''), rawLine: trimmed };
 }
 
 function hash(text: string): string {

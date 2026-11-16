@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Field, Part, Section } from './adaptive';
+import { parseChangelogLine, type Field, type Part, type Section } from './adaptive';
 
 export function MarkedText({ text, query }: { text: string; query: string }) {
   if (!query.trim()) return <>{text}</>;
@@ -22,8 +22,6 @@ const RULE_KEY_RE = /效果|限制|要求|条件|副作用|规则/;
 const STAT_KEY_RE = /^(释放类型|施展时间|施法时间|动作类型|打击类型|攻击类型|伤害类型|属性类型|段位\/等级|等级|段位|阶级|消耗|消耗能量|能力消耗|法力消耗|体力消耗|消耗规则|冷却|冷却时间|技能冷却|持续|持续时间|维持时间|射程|范围|作用范围|距离|目标|恢复方式|充能|次数|使用次数)$/;
 const NONE_VAL_RE = /^(无|无。|暂无|-|—|——|None|N\/A)$/i;
 const CREDIT_TOKEN_RE = /[（(【\[]\s*(制作人|制作者|投稿人|调整人|修改人|重置人|审核人|审核者|复查人|文本优化|作者|协力)\s*[:：]\s*([^）)】\]]+?)\s*[）)】\]]/g;
-const CHANGELOG_BRACKET_RE = /^[【\[]\s*(\d{2,4}\s*[./年-]\s*\d{1,2}[^：:】\]]*)\s*[:：]\s*([^】\]]+?)\s*[】\]]$/;
-const CHANGELOG_BARE_RE = /^(\d{2,4}\s*[./-]\s*\d{1,2}(?:\s*[./-]\s*\d{1,2})?)\s*[:：]\s*(.+)$/;
 const PHASE_NOTE_HINT_RE = /(积分|徽章|消耗|兑换|解锁|前置|条件|习得|购买|视作|需要|仅当|限制|要求|开启|免费|升级)/;
 
 export type RankInfo = { badge: string; tier: 'ex' | 's' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' };
@@ -43,14 +41,6 @@ function isCompactStat(field: Field): boolean {
   if (!val || val.includes('\n') || val.includes('\r') || val.length > 36) return false;
   if (/名称$/.test(key) || RULE_KEY_RE.test(key)) return false;
   return STAT_KEY_RE.test(key);
-}
-
-function parseChangelogLine(trimmed: string): { date: string; note: string; rawLine: string } | null {
-  const m1 = trimmed.match(CHANGELOG_BRACKET_RE);
-  if (m1) return { date: m1[1].trim(), note: m1[2].trim(), rawLine: trimmed };
-  const m2 = trimmed.match(CHANGELOG_BARE_RE);
-  if (m2) return { date: m2[1].trim(), note: m2[2].trim(), rawLine: trimmed };
-  return null;
 }
 
 type IntroParsed = {
@@ -362,12 +352,13 @@ export function AdaptiveSection({
   }
 
   // Standalone 1-line changelog section like 【25.10.5：为所有技能明确词条】
+  const sectionLog = parseChangelogLine(section.raw);
   const isSoloChangelog =
     section.kind === 'section' &&
-    /^\d{2,4}\s*[./年-]\s*\d{1,2}/.test(section.title) &&
+    sectionLog !== null &&
     section.parts.length === 1 &&
     !section.parts[0].field &&
-    section.parts[0].raw.trim() === `【${section.title}】`;
+    section.parts[0].raw.trim() === section.raw.trim();
 
   if (isSoloChangelog) {
     const colonIdx = section.title.search(/[:：]/);
@@ -383,8 +374,8 @@ export function AdaptiveSection({
         <div className="archive-changelog-row">
           {splitLog ? (
             <>
-              <span className="changelog-date"><MarkedText text={section.title.slice(0, colonIdx).trim()} query={query} /></span>
-              <span className="changelog-text"><MarkedText text={section.title.slice(colonIdx + 1).trim()} query={query} /></span>
+              <span className="changelog-date"><MarkedText text={sectionLog!.date} query={query} /></span>
+              <span className="changelog-text"><MarkedText text={sectionLog!.note} query={query} /></span>
             </>
           ) : (
             <span className="changelog-text"><MarkedText text={section.title} query={query} /></span>
