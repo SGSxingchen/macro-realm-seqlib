@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Iterable
 
 from text_encoding import read_text as read_decoded_text
+from .author_aliases import canonical_author
 
 try:
     from pypinyin import lazy_pinyin, Style  # type: ignore
@@ -105,7 +106,7 @@ def extract_authors(content: str) -> tuple[str, ...]:
             for name in re.split(r"[、,，;；]+", match.group("names")):
                 cleaned = name.strip()
                 if cleaned:
-                    authors.add(cleaned)
+                    authors.add(canonical_author(cleaned))
     return tuple(sorted(authors))
 
 
@@ -348,8 +349,9 @@ class SearchIndex:
             if tk in entry.path_norm:
                 best = max(best, 90)
 
+            author_token = normalize(canonical_author(tk))
             for author in entry.authors:
-                if tk in normalize(author):
+                if author_token in normalize(author):
                     best = max(best, 110)
                     break
 
@@ -425,7 +427,7 @@ class SearchIndex:
 
         kinds_set = {k for k in (kinds or []) if k}
         sides_set = {s for s in (sides or []) if s}
-        authors_set = {a for a in (authors or []) if a}
+        authors_set = {canonical_author(a) for a in (authors or []) if a}
         roots_set = {r for r in (roots or []) if r}
         cat = category.strip("/")
 
