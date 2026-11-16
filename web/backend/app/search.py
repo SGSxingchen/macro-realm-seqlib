@@ -58,7 +58,7 @@ AUTHOR_ROLES = (
 )
 AUTHOR_ROLE_PATTERN = "|".join(map(re.escape, AUTHOR_ROLES))
 AUTHOR_LINE_RE = re.compile(
-    rf"[（(]\s*(?:{AUTHOR_ROLE_PATTERN})\s*[：:]\s*(.*?)\s*[)）](?=\s*(?:[（(]\s*(?:{AUTHOR_ROLE_PATTERN})\s*[：:]|$))"
+    rf"[（(]\s*(?P<role>{AUTHOR_ROLE_PATTERN})\s*[：:]\s*(?P<names>.*?)\s*[)）](?=\s*(?:[（(]\s*(?:{AUTHOR_ROLE_PATTERN})\s*[：:]|$))"
 )
 SIDE_NAMES = ("战技侧", "神秘侧", "科技侧", "特殊侧")
 
@@ -95,11 +95,14 @@ def pinyin_of(text: str) -> tuple[str, str]:
 
 
 def extract_authors(content: str) -> tuple[str, ...]:
-    """提取首部元数据中的制作/审核/修改等人员，兼容姓名后的 QQ 括号。"""
+    """提取制作、修改等创作署名，排除审核/复查，兼容姓名后的 QQ 括号。"""
     authors: set[str] = set()
     for line in content.splitlines():
         for match in AUTHOR_LINE_RE.finditer(line):
-            for name in re.split(r"[、,，;；]+", match.group(1)):
+            # 保留审核角色的解析边界，避免同一行的制作署名被漏掉或混入审核人。
+            if match.group("role") in ("审核人", "复查人"):
+                continue
+            for name in re.split(r"[、,，;；]+", match.group("names")):
                 cleaned = name.strip()
                 if cleaned:
                     authors.add(cleaned)
