@@ -214,7 +214,9 @@ def match_any_card_starter(line: str) -> tuple[str, str] | None:
             return m_compat.group(1).strip(), "heavy"
         if m_compat.group(2) is not None:
             return m_compat.group(2).strip(), "fullwidth"
-        return m_compat.group(3).strip(), "lenticular"
+        for g in m_compat.groups()[2:]:
+            if g is not None:
+                return g.strip(), "compat"
     return None
 
 
