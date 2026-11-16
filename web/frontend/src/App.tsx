@@ -277,7 +277,10 @@ function LibraryApp() {
       <Header
         recordCount={recordCount}
         tab={nav.tab}
-        onTab={tab => { setDrawer(false); navigate({ tab }); }}
+        onTab={tab => {
+          setDrawer(false);
+          navigate({ tab, ...(tab === 'board' ? { threadId: undefined } : {}) });
+        }}
         viewer={viewer}
         onOpenAuth={() => setAuthModalOpen(true)}
       />
@@ -286,12 +289,15 @@ function LibraryApp() {
           viewer={viewer}
           recordCount={recordCount || response?.total || 0}
           categories={welcomeHub.categories}
+          activeThreadId={nav.threadId}
+          onSelectThread={tid => navigate({ tab: 'board', threadId: tid || undefined })}
           onOpenAuth={() => setAuthModalOpen(true)}
           onEnterLibrary={(q = '', categoryPath = '') => {
             const category = categoryPath.startsWith('序列库/') ? categoryPath.slice('序列库/'.length) : categoryPath;
             setPanes(v => ({ ...v, results: true }));
             navigate({
               tab: 'read',
+              threadId: undefined,
               openPath: '',
               anchor: '',
               filters: { ...emptyFilters(), q, category },

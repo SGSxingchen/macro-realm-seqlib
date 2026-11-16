@@ -1,6 +1,6 @@
 import type { AppTab, SearchFilters } from './types';
 
-export type LocationState = { tab: AppTab; filters: SearchFilters; openPath: string; anchor: string };
+export type LocationState = { tab: AppTab; filters: SearchFilters; openPath: string; anchor: string; threadId?: number };
 export const emptyFilters = (): SearchFilters => ({ q: '', category: '', kinds: [], sides: [], authors: [] });
 
 export function readLocation(href = window.location.href): LocationState {
@@ -8,6 +8,8 @@ export function readLocation(href = window.location.href): LocationState {
   const sp = url.searchParams;
   const tab = sp.get('tab');
   const openPath = sp.get('open') || '';
+  const rawThread = sp.get('thread');
+  const parsedThread = rawThread && /^\d+$/.test(rawThread) ? Number(rawThread) : 0;
   const filters: SearchFilters = {
     q: sp.get('q') || '',
     category: sp.get('cat') || '',
@@ -26,6 +28,8 @@ export function readLocation(href = window.location.href): LocationState {
   let resolvedTab: AppTab = 'board';
   if (tab === 'admin' || tab === 'updates' || tab === 'stats' || tab === 'read' || tab === 'board') {
     resolvedTab = tab;
+  } else if (parsedThread > 0) {
+    resolvedTab = 'board';
   } else if (hasSearchIntent) {
     resolvedTab = 'read';
   }
@@ -34,6 +38,7 @@ export function readLocation(href = window.location.href): LocationState {
     filters,
     openPath,
     anchor: url.hash.slice(1),
+    ...(parsedThread > 0 ? { threadId: parsedThread } : {}),
   };
 }
 
@@ -51,6 +56,9 @@ export function locationUrl(state: LocationState): string {
     if (!hasSearchIntent) sp.set('tab', 'read');
   } else if (state.tab !== 'board') {
     sp.set('tab', state.tab);
+  }
+  if (state.tab === 'board' && state.threadId && state.threadId > 0) {
+    sp.set('thread', String(state.threadId));
   }
   if (state.filters.q) sp.set('q', state.filters.q);
   if (state.filters.category) sp.set('cat', state.filters.category);

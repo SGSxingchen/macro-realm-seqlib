@@ -1,13 +1,16 @@
-"""QQ 私聊验证码登录、持久会话与社区留言板 / 资源评论模块。
+"""QQ 私聊验证码登录、持久会话、轮回者论坛与跨序号防断链资源评论模块。
 
-严格遵循《TRPG 私聊验证码登录接口》安全契约：
+严格遵循《TRPG 私聊验证码登录接口》安全契约与仓库无损规范：
 1. 网站后端持有 ONEBOT_SEQUENCE_TOKEN，前端永不可见该密钥。
 2. challenge_id 与申请绑定的 QQ 仅保存在服务端 SQLite 会话表中（通过 HttpOnly Cookie 绑定当前浏览器），
    轮询和消费时绝不接受浏览器传入任意 challenge_id 或其他 QQ。
 3. verified 只代表本人已私聊发码；必须调用一次性 consume 接口且同时满足：
    HTTP 200、passed === True、stale === False、auth_type == "qq_private_code"、
-   status == "consumed"、group_id == 672204828、qq 与 challenge_id 与服务端会话一致，才建立登录态。
-4. 全部鉴权与写接口响应头设置 Cache-Control: private, no-store。
+   status == "consumed"、group_id == 672204828（交易群）、qq 与 challenge_id 与服务端会话一致，才建立登录态。
+4. 资源评论抗重排/抗改名存储：
+   - 不绑死易变的 `001】...` 路径，计算去序号稳定标识 `resource_key = <一级大类>::<去序号规范名>`；
+   - 维护 `community_resource_aliases` 历史路径映射表（后台 move/改名/移入荣誉室自动接力，重排编号自动自愈最新物理路径）；
+   - 能力卡锚点同时保存 `anchor_id` 与去除品阶括号后的 `anchor_label`，能力升阶/改品阶后仍自动匹配原卡评论。
 """
 from __future__ import annotations
 
@@ -21,11 +24,11 @@ import sqlite3
 import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterator, Literal, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 
 QQ_RE = re.compile(r"^[1-9][0-9]{4,11}$")
@@ -35,14 +38,13 @@ DEFAULT_AUTH_BASE = "https://trpg.chordvers.org/onebot-sequences"
 
 BROWSER_COOKIE = "seqlib_community_sid"
 BROWSER_TTL_SECONDS = 30 * 86400  # 30 天持久登录会话
-PENDING_TTL_SECONDS = 600
 COMMENT_COOLDOWN_SECONDS = 3
 
 ERROR_MESSAGES: dict[str, str] = {
     "invalid_request": "QQ 号或请求参数格式不合法。",
     "unauthorized": "网站后端访问密钥错误或未配置，请联系站点维护者检查 ONEBOT_SEQUENCE_TOKEN。",
-    "not_in_group": "该 QQ 当前不在宏观界域主群（672204828），无法获取验证码或登录。",
-    "no_uploaded_card": "该 QQ 尚未在群文件指定目录上传过 .xlsx 角色卡，暂未通过发言准入核验。",
+    "not_in_group": "该 QQ 当前不在交易群（672204828），无法获取验证码或登录。",
+    "no_uploaded_card": "该 QQ 尚未在交易群指定目录上传过 .xlsx 角色卡，暂未通过轮回者发言核验。",
     "rate_limited": "验证码请求过于频繁（同 QQ 5 分钟最多 5 次），请稍后再试。",
     "member_cache_unavailable": "群成员与角色卡缓存正在同步或暂不可用，请稍后重试。",
     "receiver_unavailable": "BOT 私聊接收端当前离线，暂不发放新验证码，请稍后再试。",
@@ -92,8 +94,54 @@ def parse_admin_qqs() -> set[str]:
     return result
 
 
-def clean_comment_content(raw: str, *, max_len: int = 1200) -> str:
-    # 去除不可见控制字符（保留换行与制表符），折叠过多连续空行
+def compute_resource_key(rel_path: str) -> str:
+    """提取不受编号重排 (`renumber_resources.py`) 和侧别子目录挪动影响的稳定资源标识。
+
+    例如：
+    - `序列库/职业/神秘侧/001】天师.txt` -> `职业::天师`
+    - `序列库/特质改造/异化改造类/005】从者化《Fate》.txt` -> `特质改造::从者化《Fate》`
+    - `序列库/新过审序列/012】剑圣（职业·战技侧）.txt` -> `剑圣`（剥离新过审括号标注以便入正式库时可归一化关联）
+    """
+    norm = (rel_path or "").replace("\\", "/").strip("/")
+    if not norm:
+        return ""
+    p = PurePosixPath(norm)
+    parts = p.parts
+    top_kind = ""
+    if len(parts) >= 3 and parts[0] in ("序列库", "荣誉室"):
+        top_kind = parts[1]
+    stem = p.stem
+    bare = re.sub(r"^\d+\s*[】\]\.]\s*", "", stem).strip()
+    bare = re.sub(r"\s+", " ", bare)
+    # 兼容新过审目录转正：若位于新过审序列且末尾带（职业·战技侧）类分类标注，提取对应大类
+    if top_kind == "新过审序列":
+        m = re.match(
+            r"^(.+?)[（(]\s*(职业|技能表|特质改造|特质|能量池|公共建筑)(?:[·/\-\s][^）)]*)?[）)]$",
+            bare,
+        )
+        if m:
+            mapped_top = "特质改造" if m.group(2) == "特质" else m.group(2)
+            return f"{mapped_top}::{m.group(1).strip()}"
+    if top_kind == "特质":
+        top_kind = "特质改造"
+    return f"{top_kind}::{bare}" if top_kind else bare
+
+
+def normalize_anchor_label(label: str) -> str:
+    """剥离能力名中的品阶后缀（如 `（A级）`、`[EX]`），防止平衡性调整升降阶后锚点失联。"""
+    cleaned = re.sub(r"[（(\[【]\s*(?:EX|[SABCDEF][+-]?)\s*级?\s*[）)\]】]", "", label or "", flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", cleaned).strip()[:120]
+
+
+def clean_post_title(raw: str, *, max_len: int = 100) -> str:
+    cleaned = re.sub(r"[\x00-\x1f\x7f]+", " ", raw or "")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if len(cleaned) > max_len:
+        raise ValueError(f"标题超出长度上限（最多 {max_len} 字）")
+    return cleaned
+
+
+def clean_comment_content(raw: str, *, max_len: int = 4000) -> str:
     cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", raw or "")
     cleaned = cleaned.replace("\r\n", "\n").replace("\r", "\n").strip()
     cleaned = re.sub(r"\n{4,}", "\n\n\n", cleaned)
@@ -102,6 +150,16 @@ def clean_comment_content(raw: str, *, max_len: int = 1200) -> str:
     if len(cleaned) > max_len:
         raise ValueError(f"内容超出长度上限（最多 {max_len} 字）")
     return cleaned
+
+
+def fallback_thread_title(title: str, content: str) -> str:
+    t = (title or "").strip()
+    if t:
+        return t
+    first_line = next((line.strip() for line in (content or "").splitlines() if line.strip()), "")
+    if len(first_line) <= 44:
+        return first_line or "无题通讯"
+    return first_line[:42] + "…"
 
 
 class UpstreamAuthClient:
@@ -166,7 +224,7 @@ class UpstreamAuthClient:
 
 
 class CommunityStore:
-    """SQLite 持久化存储：浏览器会话、登录成员档案、封禁名单、留言板与资源评论、点赞共鸣。"""
+    """SQLite 持久化存储：浏览器会话、轮回者档案、论坛主题帖、抗改名序列评论与路径别名。"""
 
     def __init__(self, db_path: Path) -> None:
         self.db_path = Path(db_path)
@@ -224,6 +282,8 @@ class CommunityStore:
                 CREATE TABLE IF NOT EXISTS community_posts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     scope TEXT NOT NULL CHECK(scope IN ('board', 'resource')),
+                    title TEXT NOT NULL DEFAULT '',
+                    resource_key TEXT NOT NULL DEFAULT '',
                     resource_path TEXT NOT NULL DEFAULT '',
                     resource_title TEXT NOT NULL DEFAULT '',
                     anchor_id TEXT NOT NULL DEFAULT '',
@@ -239,15 +299,13 @@ class CommunityStore:
                     content TEXT NOT NULL,
                     is_pinned INTEGER NOT NULL DEFAULT 0,
                     like_count INTEGER NOT NULL DEFAULT 0,
+                    last_reply_at INTEGER NOT NULL DEFAULT 0,
+                    last_reply_nickname TEXT NOT NULL DEFAULT '',
                     status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'deleted')),
                     deleted_by TEXT NOT NULL DEFAULT '',
                     created_at INTEGER NOT NULL,
                     updated_at INTEGER NOT NULL
                 );
-                CREATE INDEX IF NOT EXISTS idx_posts_board ON community_posts(scope, status, is_pinned DESC, created_at DESC, id DESC);
-                CREATE INDEX IF NOT EXISTS idx_posts_resource ON community_posts(scope, resource_path, status, is_pinned DESC, created_at ASC, id ASC);
-                CREATE INDEX IF NOT EXISTS idx_posts_parent ON community_posts(parent_id, status, created_at ASC);
-                CREATE INDEX IF NOT EXISTS idx_posts_author ON community_posts(author_qq, created_at DESC);
 
                 CREATE TABLE IF NOT EXISTS community_post_likes (
                     post_id INTEGER NOT NULL,
@@ -256,8 +314,191 @@ class CommunityStore:
                     PRIMARY KEY (post_id, user_qq),
                     FOREIGN KEY (post_id) REFERENCES community_posts(id) ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS community_resource_aliases (
+                    path TEXT PRIMARY KEY,
+                    canonical_key TEXT NOT NULL,
+                    latest_path TEXT NOT NULL DEFAULT '',
+                    latest_title TEXT NOT NULL DEFAULT '',
+                    updated_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_res_alias_key ON community_resource_aliases(canonical_key);
                 """
             )
+            # 在线平滑升级旧表结构（兼容已部署库）
+            cols = {str(r["name"]) for r in conn.execute("PRAGMA table_info(community_posts)").fetchall()}
+            migrations = [
+                ("title", "ALTER TABLE community_posts ADD COLUMN title TEXT NOT NULL DEFAULT ''"),
+                ("resource_key", "ALTER TABLE community_posts ADD COLUMN resource_key TEXT NOT NULL DEFAULT ''"),
+                ("last_reply_at", "ALTER TABLE community_posts ADD COLUMN last_reply_at INTEGER NOT NULL DEFAULT 0"),
+                ("last_reply_nickname", "ALTER TABLE community_posts ADD COLUMN last_reply_nickname TEXT NOT NULL DEFAULT ''"),
+            ]
+            for col_name, ddl in migrations:
+                if col_name not in cols:
+                    conn.execute(ddl)
+
+            sess_cols = {str(r["name"]) for r in conn.execute("PRAGMA table_info(browser_sessions)").fetchall()}
+            if "pending_code" not in sess_cols:
+                conn.execute("ALTER TABLE browser_sessions ADD COLUMN pending_code TEXT")
+
+            conn.executescript(
+                """
+                CREATE INDEX IF NOT EXISTS idx_posts_board ON community_posts(scope, status, is_pinned DESC, last_reply_at DESC, id DESC);
+                CREATE INDEX IF NOT EXISTS idx_posts_res_key ON community_posts(scope, resource_key, status, is_pinned DESC, created_at ASC, id ASC);
+                CREATE INDEX IF NOT EXISTS idx_posts_resource ON community_posts(scope, resource_path, status, is_pinned DESC, created_at ASC, id ASC);
+                CREATE INDEX IF NOT EXISTS idx_posts_parent ON community_posts(parent_id, status, created_at ASC);
+                CREATE INDEX IF NOT EXISTS idx_posts_author ON community_posts(author_qq, created_at DESC);
+                """
+            )
+
+            # 回填旧数据的 last_reply_at、last_reply_nickname 与 resource_key（保护已产生的线上帖子与回复）
+            conn.execute(
+                """
+                UPDATE community_posts
+                SET last_reply_at = COALESCE(
+                        (SELECT MAX(r.created_at) FROM community_posts r WHERE r.parent_id = community_posts.id AND r.status = 'active'),
+                        created_at
+                    ),
+                    last_reply_nickname = COALESCE(
+                        (SELECT r.author_nickname FROM community_posts r WHERE r.parent_id = community_posts.id AND r.status = 'active' ORDER BY r.created_at DESC, r.id DESC LIMIT 1),
+                        author_nickname
+                    )
+                WHERE parent_id IS NULL AND last_reply_at = 0
+                """
+            )
+            legacy_res = conn.execute(
+                "SELECT id, resource_path, resource_title, anchor_label FROM community_posts WHERE scope = 'resource' AND resource_key = '' AND resource_path != ''"
+            ).fetchall()
+            now = now_ts()
+            for r in legacy_res:
+                rk = compute_resource_key(str(r["resource_path"]))
+                norm_label = normalize_anchor_label(str(r["anchor_label"] or ""))
+                conn.execute(
+                    "UPDATE community_posts SET resource_key = ?, anchor_label = ? WHERE id = ?",
+                    (rk, norm_label, int(r["id"])),
+                )
+                if rk:
+                    conn.execute(
+                        """
+                        INSERT INTO community_resource_aliases (path, canonical_key, latest_path, latest_title, updated_at)
+                        VALUES (?, ?, ?, ?, ?)
+                        ON CONFLICT(path) DO UPDATE SET canonical_key = excluded.canonical_key, updated_at = excluded.updated_at
+                        """,
+                        (str(r["resource_path"]), rk, str(r["resource_path"]), str(r["resource_title"] or ""), now),
+                    )
+
+    # ---------------- 资源抗重排 / 抗改名别名与自愈逻辑 ----------------
+
+    def resolve_canonical_key_with_conn(self, conn: sqlite3.Connection, rel_path: str, current_title: str = "") -> str:
+        norm_path = (rel_path or "").replace("\\", "/").strip("/")
+        if not norm_path:
+            return ""
+        now = now_ts()
+        alias_row = conn.execute(
+            "SELECT canonical_key FROM community_resource_aliases WHERE path = ?",
+            (norm_path,),
+        ).fetchone()
+        computed_key = compute_resource_key(norm_path)
+        canonical_key = str(alias_row["canonical_key"]) if alias_row and alias_row["canonical_key"] else computed_key
+        if not canonical_key:
+            return ""
+
+        # 记录当前有效路径，并自愈同 canonical_key 下旧帖子的展示路径与标题（例如 012】天师 -> 015】天师）
+        conn.execute(
+            """
+            INSERT INTO community_resource_aliases (path, canonical_key, latest_path, latest_title, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(path) DO UPDATE SET
+                canonical_key = excluded.canonical_key,
+                latest_path = excluded.latest_path,
+                latest_title = CASE WHEN excluded.latest_title != '' THEN excluded.latest_title ELSE community_resource_aliases.latest_title END,
+                updated_at = excluded.updated_at
+            """,
+            (norm_path, canonical_key, norm_path, current_title, now),
+        )
+        if computed_key and computed_key != canonical_key:
+            # 把去序号键也桥接到最初的 canonical_key，保证重排后无论哪条路径都能命中同一条评论链
+            conn.execute(
+                """
+                UPDATE community_posts
+                SET resource_key = ?
+                WHERE scope = 'resource' AND resource_key = ?
+                """,
+                (canonical_key, computed_key),
+            )
+        if current_title:
+            conn.execute(
+                """
+                UPDATE community_resource_aliases
+                SET latest_path = ?, latest_title = ?, updated_at = ?
+                WHERE canonical_key = ?
+                """,
+                (norm_path, current_title, now, canonical_key),
+            )
+            conn.execute(
+                """
+                UPDATE community_posts
+                SET resource_path = ?, resource_title = ?
+                WHERE scope = 'resource' AND resource_key = ? AND (resource_path != ? OR resource_title != ?)
+                """,
+                (norm_path, current_title, canonical_key, norm_path, current_title),
+            )
+        return canonical_key
+
+    def record_resource_move(self, old_path: str, new_path: str, new_title: str = "") -> None:
+        """当后台发生文件改名、跨目录移动或移入荣誉室时，自动继承原资源的 canonical_key 并刷新评论路径。"""
+        old_norm = (old_path or "").replace("\\", "/").strip("/")
+        new_norm = (new_path or "").replace("\\", "/").strip("/")
+        if not old_norm or not new_norm:
+            return
+        now = now_ts()
+        with self._conn() as conn:
+            old_alias = conn.execute(
+                "SELECT canonical_key, latest_title FROM community_resource_aliases WHERE path = ?",
+                (old_norm,),
+            ).fetchone()
+            canonical_key = (
+                str(old_alias["canonical_key"])
+                if old_alias and old_alias["canonical_key"]
+                else compute_resource_key(old_norm)
+            )
+            if not canonical_key:
+                canonical_key = compute_resource_key(new_norm)
+            title_val = new_title.strip() or (str(old_alias["latest_title"]) if old_alias else "")
+
+            for p in (old_norm, new_norm):
+                conn.execute(
+                    """
+                    INSERT INTO community_resource_aliases (path, canonical_key, latest_path, latest_title, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(path) DO UPDATE SET
+                        canonical_key = excluded.canonical_key,
+                        latest_path = excluded.latest_path,
+                        latest_title = CASE WHEN excluded.latest_title != '' THEN excluded.latest_title ELSE community_resource_aliases.latest_title END,
+                        updated_at = excluded.updated_at
+                    """,
+                    (p, canonical_key, new_norm, title_val, now),
+                )
+            conn.execute(
+                "UPDATE community_resource_aliases SET latest_path = ?, latest_title = CASE WHEN ? != '' THEN ? ELSE latest_title END, updated_at = ? WHERE canonical_key = ?",
+                (new_norm, title_val, title_val, now, canonical_key),
+            )
+            new_computed = compute_resource_key(new_norm)
+            keys_to_unify = {k for k in (canonical_key, compute_resource_key(old_norm), new_computed) if k}
+            if keys_to_unify:
+                placeholders = ",".join("?" for _ in keys_to_unify)
+                conn.execute(
+                    f"""
+                    UPDATE community_posts
+                    SET resource_key = ?,
+                        resource_path = ?,
+                        resource_title = CASE WHEN ? != '' THEN ? ELSE resource_title END
+                    WHERE scope = 'resource' AND (resource_key IN ({placeholders}) OR resource_path = ?)
+                    """,
+                    [canonical_key, new_norm, title_val, title_val, *keys_to_unify, old_norm],
+                )
+
+    # ---------------- 会话与用户管理 ----------------
 
     @staticmethod
     def _hash_sid(raw_sid: str, secret: bytes) -> str:
@@ -285,7 +526,6 @@ class CommunityStore:
                 """,
                 (sid_hash, now, now, exp),
             )
-            # 顺带清理过期很久的无用匿名会话
             conn.execute("DELETE FROM browser_sessions WHERE expires_at <= ?", (now - 3600,))
             row = conn.execute("SELECT * FROM browser_sessions WHERE sid_hash = ?", (sid_hash,)).fetchone()
             return new_sid, dict(row), True
@@ -310,6 +550,7 @@ class CommunityStore:
         challenge_id: str,
         qq: str,
         bot_qq: str,
+        verification_code: str,
         expires_at: str,
     ) -> None:
         now = now_ts()
@@ -321,13 +562,14 @@ class CommunityStore:
                 SET pending_challenge_id = ?,
                     pending_qq = ?,
                     pending_bot_qq = ?,
+                    pending_code = ?,
                     pending_expires_at = ?,
                     pending_created_at = ?,
                     updated_at = ?,
                     expires_at = ?
                 WHERE sid_hash = ?
                 """,
-                (challenge_id, qq, bot_qq, expires_at, now, now, now + BROWSER_TTL_SECONDS, sid_hash),
+                (challenge_id, qq, bot_qq, verification_code, expires_at, now, now, now + BROWSER_TTL_SECONDS, sid_hash),
             )
 
     def clear_pending_challenge(self, raw_sid: str, secret: bytes) -> None:
@@ -340,6 +582,7 @@ class CommunityStore:
                 SET pending_challenge_id = NULL,
                     pending_qq = NULL,
                     pending_bot_qq = NULL,
+                    pending_code = NULL,
                     pending_expires_at = NULL,
                     pending_created_at = NULL,
                     updated_at = ?
@@ -361,7 +604,7 @@ class CommunityStore:
     ) -> dict[str, Any]:
         now = now_ts()
         sid_hash = self._hash_sid(raw_sid, secret)
-        safe_nick = (nickname or "").strip() or f"调查员{qq[-4:]}"
+        safe_nick = (nickname or "").strip() or f"轮回者{qq[-4:]}"
         safe_avatar = (avatar_url or "").strip() or f"https://q1.qlogo.cn/g?b=qq&nk={qq}&s=640"
         with self._conn() as conn:
             existing = conn.execute("SELECT * FROM community_users WHERE qq = ?", (qq,)).fetchone()
@@ -397,6 +640,7 @@ class CommunityStore:
                     pending_challenge_id = NULL,
                     pending_qq = NULL,
                     pending_bot_qq = NULL,
+                    pending_code = NULL,
                     pending_expires_at = NULL,
                     pending_created_at = NULL,
                     updated_at = ?,
@@ -447,7 +691,6 @@ class CommunityStore:
                     """,
                     (qq, nick, avatar, EXPECTED_GROUP_ID, banned_until, reason.strip(), now, now),
                 )
-            # 若永久或当前处于封禁中，可保留会话让其看到被禁言原因，发言时拦截
             row = conn.execute("SELECT * FROM community_users WHERE qq = ?", (qq,)).fetchone()
             return dict(row)
 
@@ -460,6 +703,8 @@ class CommunityStore:
             conn.execute("UPDATE community_users SET role = ?, updated_at = ? WHERE qq = ?", (role, now, qq))
             row = conn.execute("SELECT * FROM community_users WHERE qq = ?", (qq,)).fetchone()
             return dict(row)
+
+    # ---------------- 论坛主题帖与序列评论核心方法 ----------------
 
     def _serialize_post(
         self,
@@ -475,9 +720,19 @@ class CommunityStore:
         author_qq = str(d["author_qq"])
         reply_qq = str(d.get("reply_to_qq") or "")
         is_mine = bool(viewer_qq and viewer_qq == author_qq)
+        raw_title = str(d.get("title") or "")
+        content_active = str(d["content"]) if d["status"] == "active" else ""
+        display_title = (
+            fallback_thread_title(raw_title, content_active)
+            if d["scope"] == "board" and d["parent_id"] is None and d["status"] == "active"
+            else raw_title
+        )
+        last_reply_ts = int(d.get("last_reply_at") or d["created_at"])
         item: dict[str, Any] = {
             "id": pid,
             "scope": d["scope"],
+            "title": display_title,
+            "resource_key": d.get("resource_key") or "",
             "resource_path": d["resource_path"],
             "resource_title": d["resource_title"],
             "anchor_id": d["anchor_id"],
@@ -492,7 +747,8 @@ class CommunityStore:
                 "avatar_url": d["author_avatar"] or f"https://q1.qlogo.cn/g?b=qq&nk={author_qq}&s=640",
                 "badge": d["author_role_badge"] or "",
             },
-            "content": d["content"] if d["status"] == "active" else "",
+            "content": content_active,
+            "excerpt": re.sub(r"\s+", " ", content_active).strip()[:120],
             "is_pinned": bool(d["is_pinned"]),
             "like_count": int(d["like_count"] or 0),
             "liked_by_me": bool(liked_ids and pid in liked_ids),
@@ -501,6 +757,9 @@ class CommunityStore:
             "status": d["status"],
             "created_at": ts_to_iso(d["created_at"]),
             "created_ts": int(d["created_at"]),
+            "last_reply_at": ts_to_iso(last_reply_ts),
+            "last_reply_ts": last_reply_ts,
+            "last_reply_nickname": str(d.get("last_reply_nickname") or d["author_nickname"]),
         }
         if reply_qq and (include_full_qq or viewer_is_mod):
             item["reply_to_qq"] = reply_qq
@@ -523,6 +782,7 @@ class CommunityStore:
         author: dict[str, Any],
         author_badge: str,
         content: str,
+        title: str = "",
         resource_path: str = "",
         resource_title: str = "",
         anchor_id: str = "",
@@ -530,9 +790,11 @@ class CommunityStore:
         reply_to_id: int | None = None,
         bypass_cooldown: bool = False,
     ) -> dict[str, Any]:
-        cleaned = clean_comment_content(content, max_len=1200)
+        cleaned = clean_comment_content(content, max_len=4000 if scope == "board" else 1600)
+        cleaned_title = clean_post_title(title, max_len=100) if title else ""
         now = now_ts()
         author_qq = str(author["qq"])
+        author_nick = str(author["nickname"])
 
         with self._conn() as conn:
             cooldown = comment_cooldown_seconds()
@@ -543,6 +805,10 @@ class CommunityStore:
                 ).fetchone()
                 if recent and now - int(recent["created_at"]) < cooldown:
                     raise HTTPException(429, "发言太快啦，请稍等几秒再发送。")
+
+            res_key = ""
+            if scope == "resource":
+                res_key = self.resolve_canonical_key_with_conn(conn, resource_path, resource_title)
 
             parent_id: int | None = None
             actual_reply_id: int | None = None
@@ -555,105 +821,214 @@ class CommunityStore:
                     (int(reply_to_id),),
                 ).fetchone()
                 if not target:
-                    raise HTTPException(404, "要回复的留言或评论不存在或已被删除")
-                if target["scope"] != scope or (scope == "resource" and target["resource_path"] != resource_path):
-                    raise HTTPException(400, "不能跨版块或跨档案回复评论")
-                # 单层楼中楼归并：如果回复的是子回复，parent_id 归属到根楼层，同时保留 reply_to_nickname
+                    raise HTTPException(404, "要回复的主题或评论不存在或已被删除")
+                if target["scope"] != scope:
+                    raise HTTPException(400, "不能跨版块回复")
+                if scope == "resource":
+                    target_key = str(target["resource_key"] or compute_resource_key(str(target["resource_path"])))
+                    if target_key != res_key and str(target["resource_path"]) != resource_path:
+                        raise HTTPException(400, "不能跨序列档案回复评论")
+
                 parent_id = int(target["parent_id"]) if target["parent_id"] is not None else int(target["id"])
                 actual_reply_id = int(target["id"])
                 reply_to_qq = str(target["author_qq"])
                 reply_to_nickname = str(target["author_nickname"])
+                cleaned_title = ""  # 楼层跟帖不单独带主题标题
                 if not anchor_id and target["anchor_id"]:
                     anchor_id = str(target["anchor_id"])
                     anchor_label = str(target["anchor_label"])
+            elif scope == "board":
+                if not cleaned_title:
+                    cleaned_title = fallback_thread_title("", cleaned)
+
+            norm_anchor_label = normalize_anchor_label(anchor_label) if anchor_label else ""
 
             cursor = conn.execute(
                 """
                 INSERT INTO community_posts (
-                    scope, resource_path, resource_title, anchor_id, anchor_label,
+                    scope, title, resource_key, resource_path, resource_title, anchor_id, anchor_label,
                     parent_id, reply_to_id, reply_to_qq, reply_to_nickname,
                     author_qq, author_nickname, author_avatar, author_role_badge,
-                    content, is_pinned, like_count, status, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 'active', ?, ?)
+                    content, is_pinned, like_count, last_reply_at, last_reply_nickname, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, 'active', ?, ?)
                 """,
                 (
                     scope,
+                    cleaned_title,
+                    res_key,
                     resource_path,
                     resource_title,
                     anchor_id.strip()[:80],
-                    anchor_label.strip()[:120],
+                    norm_anchor_label,
                     parent_id,
                     actual_reply_id,
                     reply_to_qq,
                     reply_to_nickname,
                     author_qq,
-                    str(author["nickname"]),
+                    author_nick,
                     str(author.get("avatar_url") or ""),
                     author_badge,
                     cleaned,
+                    now if parent_id is None else 0,
+                    author_nick if parent_id is None else "",
                     now,
                     now,
                 ),
             )
             post_id = int(cursor.lastrowid)
+
+            # 如果是跟帖回复，更新主楼的最后回复时间与最后回复人（经典论坛顶帖机制，确保同秒回复也严格大于先前时间戳）
+            if parent_id is not None:
+                conn.execute(
+                    """
+                    UPDATE community_posts
+                    SET last_reply_at = MAX(?, last_reply_at + 1), last_reply_nickname = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (now, author_nick, now, parent_id),
+                )
+
             row = conn.execute("SELECT * FROM community_posts WHERE id = ?", (post_id,)).fetchone()
             return self._serialize_post(row, viewer_qq=author_qq, viewer_is_mod=bool(author_badge))
+
+    def get_board_thread_detail(
+        self,
+        *,
+        thread_id: int,
+        viewer_qq: str | None = None,
+        viewer_is_mod: bool = False,
+    ) -> dict[str, Any]:
+        with self._conn() as conn:
+            root = conn.execute(
+                "SELECT * FROM community_posts WHERE id = ? AND scope = 'board' AND parent_id IS NULL AND status = 'active'",
+                (thread_id,),
+            ).fetchone()
+            if not root:
+                raise HTTPException(404, "该论坛主题不存在或已被删除")
+            reply_rows = conn.execute(
+                """
+                SELECT * FROM community_posts
+                WHERE parent_id = ? AND status = 'active'
+                ORDER BY created_at ASC, id ASC
+                """,
+                (thread_id,),
+            ).fetchall()
+            all_ids = [int(root["id"]), *[int(r["id"]) for r in reply_rows]]
+            liked_ids = self._liked_post_ids(conn, viewer_qq, all_ids)
+
+            thread = self._serialize_post(
+                root,
+                viewer_qq=viewer_qq,
+                viewer_is_mod=viewer_is_mod,
+                liked_ids=liked_ids,
+            )
+            thread["floor"] = 1
+            replies = []
+            for idx, r in enumerate(reply_rows, start=2):
+                rep = self._serialize_post(
+                    r,
+                    viewer_qq=viewer_qq,
+                    viewer_is_mod=viewer_is_mod,
+                    liked_ids=liked_ids,
+                )
+                rep["floor"] = idx
+                replies.append(rep)
+            thread["replies"] = replies
+            thread["reply_count"] = len(replies)
+            return {"thread": thread}
 
     def list_threads(
         self,
         *,
         scope: Literal["board", "resource"],
         resource_path: str = "",
+        resource_title: str = "",
         anchor_id: str = "",
+        anchor_label: str = "",
+        q: str = "",
         limit: int = 30,
         offset: int = 0,
-        sort: Literal["latest", "oldest", "hot"] = "latest",
+        sort: Literal["latest", "created", "oldest", "hot"] = "latest",
+        include_replies: bool = True,
         viewer_qq: str | None = None,
         viewer_is_mod: bool = False,
     ) -> dict[str, Any]:
         limit = max(1, min(limit, 100))
         offset = max(0, offset)
-        where = ["scope = ?", "status = 'active'", "parent_id IS NULL"]
-        params: list[Any] = [scope]
-        if scope == "resource":
-            where.append("resource_path = ?")
-            params.append(resource_path)
-            if anchor_id:
-                where.append("anchor_id = ?")
-                params.append(anchor_id)
-
-        where_sql = " AND ".join(where)
-        if sort == "oldest":
-            order_sql = "is_pinned DESC, created_at ASC, id ASC"
-        elif sort == "hot":
-            order_sql = "is_pinned DESC, like_count DESC, created_at DESC, id DESC"
-        else:
-            order_sql = "is_pinned DESC, created_at DESC, id DESC"
 
         with self._conn() as conn:
+            where = ["scope = ?", "status = 'active'", "parent_id IS NULL"]
+            params: list[Any] = [scope]
+
+            canonical_key = ""
+            if scope == "resource":
+                canonical_key = self.resolve_canonical_key_with_conn(conn, resource_path, resource_title)
+                where.append("(resource_key = ? OR resource_path = ?)")
+                params.extend([canonical_key, resource_path])
+                if anchor_id or anchor_label:
+                    norm_lbl = normalize_anchor_label(anchor_label) if anchor_label else ""
+                    if anchor_id and norm_lbl:
+                        where.append("(anchor_id = ? OR (anchor_label != '' AND anchor_label = ?))")
+                        params.extend([anchor_id, norm_lbl])
+                    elif anchor_id:
+                        where.append("anchor_id = ?")
+                        params.append(anchor_id)
+                    elif norm_lbl:
+                        where.append("anchor_label = ?")
+                        params.append(norm_lbl)
+            elif q.strip():
+                needle = f"%{q.strip()}%"
+                where.append("(title LIKE ? OR content LIKE ? OR author_nickname LIKE ?)")
+                params.extend([needle, needle, needle])
+
+            where_sql = " AND ".join(where)
+            if scope == "board":
+                if sort == "created":
+                    order_sql = "is_pinned DESC, created_at DESC, id DESC"
+                elif sort == "oldest":
+                    order_sql = "is_pinned DESC, created_at ASC, id ASC"
+                elif sort == "hot":
+                    order_sql = "is_pinned DESC, like_count DESC, last_reply_at DESC, id DESC"
+                else:
+                    # 默认论坛按最后回复顶帖排序
+                    order_sql = "is_pinned DESC, last_reply_at DESC, id DESC"
+            else:
+                if sort == "oldest":
+                    order_sql = "is_pinned DESC, created_at ASC, id ASC"
+                elif sort == "hot":
+                    order_sql = "is_pinned DESC, like_count DESC, created_at DESC, id DESC"
+                else:
+                    order_sql = "is_pinned DESC, created_at DESC, id DESC"
+
             total_roots = int(
                 conn.execute(f"SELECT COUNT(*) AS c FROM community_posts WHERE {where_sql}", params).fetchone()["c"]
             )
             if scope == "resource":
                 total_all = int(
                     conn.execute(
-                        "SELECT COUNT(*) AS c FROM community_posts WHERE scope = 'resource' AND resource_path = ? AND status = 'active'",
-                        (resource_path,),
+                        "SELECT COUNT(*) AS c FROM community_posts WHERE scope = 'resource' AND (resource_key = ? OR resource_path = ?) AND status = 'active'",
+                        (canonical_key, resource_path),
                     ).fetchone()["c"]
                 )
                 anchor_rows = conn.execute(
                     """
                     SELECT anchor_id, anchor_label, COUNT(*) AS c
                     FROM community_posts
-                    WHERE scope = 'resource' AND resource_path = ? AND status = 'active' AND anchor_id != ''
-                    GROUP BY anchor_id
+                    WHERE scope = 'resource' AND (resource_key = ? OR resource_path = ?) AND status = 'active' AND (anchor_id != '' OR anchor_label != '')
+                    GROUP BY COALESCE(NULLIF(anchor_label, ''), anchor_id)
                     """,
-                    (resource_path,),
+                    (canonical_key, resource_path),
                 ).fetchall()
-                anchor_counts = {
-                    str(r["anchor_id"]): {"count": int(r["c"]), "label": str(r["anchor_label"] or "")}
-                    for r in anchor_rows
-                }
+                anchor_counts: dict[str, dict[str, Any]] = {}
+                label_counts: dict[str, int] = {}
+                for r in anchor_rows:
+                    aid = str(r["anchor_id"] or "")
+                    albl = str(r["anchor_label"] or "")
+                    cnt = int(r["c"])
+                    key = aid or albl
+                    anchor_counts[key] = {"count": cnt, "label": albl or aid, "anchor_id": aid}
+                    if albl:
+                        label_counts[albl] = label_counts.get(albl, 0) + cnt
             else:
                 total_all = int(
                     conn.execute(
@@ -661,6 +1036,7 @@ class CommunityStore:
                     ).fetchone()["c"]
                 )
                 anchor_counts = {}
+                label_counts = {}
 
             root_rows = conn.execute(
                 f"SELECT * FROM community_posts WHERE {where_sql} ORDER BY {order_sql} LIMIT ? OFFSET ?",
@@ -668,44 +1044,61 @@ class CommunityStore:
             ).fetchall()
 
             root_ids = [int(r["id"]) for r in root_rows]
-            reply_rows: list[sqlite3.Row] = []
+            reply_counts_map: dict[int, int] = {}
+            replies_by_parent: dict[int, list[dict[str, Any]]] = {}
+
             if root_ids:
                 placeholders = ",".join("?" for _ in root_ids)
-                reply_rows = conn.execute(
-                    f"""
-                    SELECT * FROM community_posts
-                    WHERE status = 'active' AND parent_id IN ({placeholders})
-                    ORDER BY created_at ASC, id ASC
-                    """,
-                    root_ids,
-                ).fetchall()
-
-            all_ids = root_ids + [int(r["id"]) for r in reply_rows]
-            liked_ids = self._liked_post_ids(conn, viewer_qq, all_ids)
-
-            replies_by_parent: dict[int, list[dict[str, Any]]] = {}
-            for r in reply_rows:
-                pid = int(r["parent_id"])
-                replies_by_parent.setdefault(pid, []).append(
-                    self._serialize_post(
-                        r,
-                        viewer_qq=viewer_qq,
-                        viewer_is_mod=viewer_is_mod,
-                        liked_ids=liked_ids,
-                    )
-                )
+                if include_replies:
+                    reply_rows = conn.execute(
+                        f"""
+                        SELECT * FROM community_posts
+                        WHERE status = 'active' AND parent_id IN ({placeholders})
+                        ORDER BY created_at ASC, id ASC
+                        """,
+                        root_ids,
+                    ).fetchall()
+                    all_ids = root_ids + [int(r["id"]) for r in reply_rows]
+                    liked_ids = self._liked_post_ids(conn, viewer_qq, all_ids)
+                    for r in reply_rows:
+                        pid = int(r["parent_id"])
+                        replies_by_parent.setdefault(pid, []).append(
+                            self._serialize_post(
+                                r,
+                                viewer_qq=viewer_qq,
+                                viewer_is_mod=viewer_is_mod,
+                                liked_ids=liked_ids,
+                            )
+                        )
+                    for pid, reps in replies_by_parent.items():
+                        reply_counts_map[pid] = len(reps)
+                else:
+                    liked_ids = self._liked_post_ids(conn, viewer_qq, root_ids)
+                    cnt_rows = conn.execute(
+                        f"""
+                        SELECT parent_id, COUNT(*) AS c
+                        FROM community_posts
+                        WHERE status = 'active' AND parent_id IN ({placeholders})
+                        GROUP BY parent_id
+                        """,
+                        root_ids,
+                    ).fetchall()
+                    reply_counts_map = {int(r["parent_id"]): int(r["c"]) for r in cnt_rows}
+            else:
+                liked_ids = set()
 
             items = []
             for r in root_rows:
+                pid = int(r["id"])
                 item = self._serialize_post(
                     r,
                     viewer_qq=viewer_qq,
                     viewer_is_mod=viewer_is_mod,
                     liked_ids=liked_ids,
                 )
-                replies = replies_by_parent.get(int(r["id"]), [])
-                item["replies"] = replies
-                item["reply_count"] = len(replies)
+                if include_replies:
+                    item["replies"] = replies_by_parent.get(pid, [])
+                item["reply_count"] = reply_counts_map.get(pid, 0)
                 items.append(item)
 
             return {
@@ -713,7 +1106,9 @@ class CommunityStore:
                 "count": len(items),
                 "total_threads": total_roots,
                 "total_posts": total_all,
+                "resource_key": canonical_key,
                 "anchor_counts": anchor_counts,
+                "label_counts": label_counts,
                 "limit": limit,
                 "offset": offset,
             }
@@ -724,6 +1119,7 @@ class CommunityStore:
         limit: int = 16,
         viewer_qq: str | None = None,
         viewer_is_mod: bool = False,
+        path_resolver: Callable[[str, str], tuple[str, str] | None] | None = None,
     ) -> list[dict[str, Any]]:
         limit = max(1, min(limit, 50))
         with self._conn() as conn:
@@ -738,15 +1134,27 @@ class CommunityStore:
             ).fetchall()
             post_ids = [int(r["id"]) for r in rows]
             liked_ids = self._liked_post_ids(conn, viewer_qq, post_ids)
-            return [
-                self._serialize_post(
+            out: list[dict[str, Any]] = []
+            for r in rows:
+                item = self._serialize_post(
                     r,
                     viewer_qq=viewer_qq,
                     viewer_is_mod=viewer_is_mod,
                     liked_ids=liked_ids,
                 )
-                for r in rows
-            ]
+                if path_resolver:
+                    resolved = path_resolver(str(r["resource_path"]), str(r["resource_key"] or ""))
+                    if resolved:
+                        live_path, live_title = resolved
+                        if live_path != r["resource_path"] or live_title != r["resource_title"]:
+                            conn.execute(
+                                "UPDATE community_posts SET resource_path = ?, resource_title = ? WHERE id = ?",
+                                (live_path, live_title, int(r["id"])),
+                            )
+                            item["resource_path"] = live_path
+                            item["resource_title"] = live_title
+                out.append(item)
+            return out
 
     def toggle_like(self, *, post_id: int, user_qq: str) -> dict[str, Any]:
         now = now_ts()
@@ -756,7 +1164,7 @@ class CommunityStore:
                 (post_id,),
             ).fetchone()
             if not post or post["status"] != "active":
-                raise HTTPException(404, "该留言或评论不存在")
+                raise HTTPException(404, "该帖子或评论不存在")
 
             existing = conn.execute(
                 "SELECT 1 FROM community_post_likes WHERE post_id = ? AND user_qq = ?",
@@ -792,9 +1200,9 @@ class CommunityStore:
         with self._conn() as conn:
             post = conn.execute("SELECT * FROM community_posts WHERE id = ?", (post_id,)).fetchone()
             if not post or post["status"] != "active":
-                raise HTTPException(404, "该留言或评论不存在")
+                raise HTTPException(404, "该帖子或评论不存在")
             if post["parent_id"] is not None:
-                raise HTTPException(400, "只能置顶主楼层，不能置顶楼中楼回复")
+                raise HTTPException(400, "只能置顶主楼层，不能置顶跟帖回复")
             conn.execute(
                 "UPDATE community_posts SET is_pinned = ?, updated_at = ? WHERE id = ?",
                 (1 if pinned else 0, now, post_id),
@@ -807,13 +1215,13 @@ class CommunityStore:
         with self._conn() as conn:
             post = conn.execute("SELECT * FROM community_posts WHERE id = ?", (post_id,)).fetchone()
             if not post:
-                raise HTTPException(404, "该留言或评论不存在")
+                raise HTTPException(404, "该帖子或评论不存在")
             if post["status"] == "deleted":
                 return {"ok": True, "post_id": post_id, "already_deleted": True}
             if not is_mod and (not viewer_qq or str(post["author_qq"]) != viewer_qq):
-                raise HTTPException(403, "只能删除自己发表的留言或评论")
+                raise HTTPException(403, "只能删除自己发表的帖子或评论")
 
-            # 删除主楼时，其楼中楼一并标记删除，避免悬空孤儿回复
+            parent_id = post["parent_id"]
             conn.execute(
                 """
                 UPDATE community_posts
@@ -822,12 +1230,33 @@ class CommunityStore:
                 """,
                 (actor, now, post_id, post_id),
             )
+            # 若删除的是某主题下的最后一楼回复，重新校准主楼的 last_reply_at
+            if parent_id is not None:
+                latest_rep = conn.execute(
+                    "SELECT created_at, author_nickname FROM community_posts WHERE parent_id = ? AND status = 'active' ORDER BY created_at DESC, id DESC LIMIT 1",
+                    (int(parent_id),),
+                ).fetchone()
+                if latest_rep:
+                    conn.execute(
+                        "UPDATE community_posts SET last_reply_at = ?, last_reply_nickname = ? WHERE id = ?",
+                        (int(latest_rep["created_at"]), str(latest_rep["author_nickname"]), int(parent_id)),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE community_posts SET last_reply_at = created_at, last_reply_nickname = author_nickname WHERE id = ?",
+                        (int(parent_id),),
+                    )
             return {"ok": True, "post_id": post_id}
 
     def stats_overview(self) -> dict[str, Any]:
         now = now_ts()
         with self._conn() as conn:
-            board_count = int(
+            board_threads = int(
+                conn.execute(
+                    "SELECT COUNT(*) AS c FROM community_posts WHERE scope = 'board' AND parent_id IS NULL AND status = 'active'"
+                ).fetchone()["c"]
+            )
+            board_posts = int(
                 conn.execute(
                     "SELECT COUNT(*) AS c FROM community_posts WHERE scope = 'board' AND status = 'active'"
                 ).fetchone()["c"]
@@ -845,7 +1274,8 @@ class CommunityStore:
                 ).fetchone()["c"]
             )
             return {
-                "board_post_count": board_count,
+                "board_thread_count": board_threads,
+                "board_post_count": board_posts,
                 "resource_comment_count": resource_comment_count,
                 "member_count": member_count,
                 "banned_count": banned_count,
@@ -876,8 +1306,8 @@ class CommunityStore:
             params.append(qq.strip())
         if q.strip():
             needle = f"%{q.strip()}%"
-            where.append("(content LIKE ? OR author_nickname LIKE ? OR resource_title LIKE ? OR author_qq LIKE ?)")
-            params.extend([needle, needle, needle, needle])
+            where.append("(title LIKE ? OR content LIKE ? OR author_nickname LIKE ? OR resource_title LIKE ? OR author_qq LIKE ?)")
+            params.extend([needle, needle, needle, needle, needle])
 
         where_sql = " AND ".join(where)
         with self._conn() as conn:
@@ -897,7 +1327,6 @@ class CommunityStore:
             for r in rows:
                 d = dict(r)
                 item = self._serialize_post(d, viewer_is_mod=True, include_full_qq=True)
-                # 管理台即使已删除也允许审计原文与删除操作者
                 item["raw_content"] = d["content"]
                 item["deleted_by"] = d["deleted_by"]
                 items.append(item)
@@ -972,13 +1401,14 @@ class BeginChallengeRequest(BaseModel):
 
 
 class CreateBoardPostRequest(BaseModel):
-    content: str = Field(min_length=1, max_length=1200)
+    title: str = Field(default="", max_length=100)
+    content: str = Field(min_length=1, max_length=4000)
     reply_to_id: Optional[int] = None
 
 
 class CreateResourceCommentRequest(BaseModel):
     resource_path: str = Field(min_length=1, max_length=300)
-    content: str = Field(min_length=1, max_length=1200)
+    content: str = Field(min_length=1, max_length=1600)
     anchor_id: str = Field(default="", max_length=80)
     anchor_label: str = Field(default="", max_length=120)
     reply_to_id: Optional[int] = None
@@ -1001,7 +1431,8 @@ class AdminRoleRequest(BaseModel):
 
 
 class AdminAnnouncementRequest(BaseModel):
-    content: str = Field(min_length=1, max_length=1200)
+    title: str = Field(default="", max_length=100)
+    content: str = Field(min_length=1, max_length=4000)
     nickname: str = Field(default="界域终端公告", max_length=40)
     pinned: bool = True
 
@@ -1013,8 +1444,9 @@ def build_community_router(
     secret_getter: Callable[[], bytes],
     is_admin_request: Callable[[Request], bool],
     resolve_public_resource: Callable[[str], tuple[str, str]],
+    find_live_resource_by_key: Callable[[str, str], tuple[str, str] | None] | None = None,
 ) -> APIRouter:
-    """构建挂载在 /api 下的社区与 QQ 登录路由器。"""
+    """构建挂载在 /api 下的轮回者论坛、防断链评论与 QQ 登录路由器。"""
     router = APIRouter(tags=["community"])
 
     def no_store(response: Response) -> None:
@@ -1046,7 +1478,6 @@ def build_community_router(
         return user.get("role") == "moderator"
 
     def viewer_context(request: Request) -> tuple[dict[str, Any] | None, dict[str, Any] | None, bool, bool]:
-        """返回 (session_row, user_row, is_admin_cookie, is_effective_moderator)"""
         raw_sid = request.cookies.get(BROWSER_COOKIE)
         sess = store_getter().get_session(raw_sid, secret_getter())
         user = store_getter().get_user(sess.get("user_qq")) if sess and sess.get("user_qq") else None
@@ -1066,6 +1497,7 @@ def build_community_router(
             pending = {
                 "qq": sess["pending_qq"],
                 "bot_qq": sess.get("pending_bot_qq") or EXPECTED_BOT_QQ,
+                "verification_code": sess.get("pending_code") or "",
                 "expires_at": sess.get("pending_expires_at"),
             }
         if not user:
@@ -1105,20 +1537,18 @@ def build_community_router(
         }
 
     def require_active_member(request: Request) -> tuple[dict[str, Any], bool, str]:
-        """要求已通过 QQ 验证登录且未被封禁。返回 (user, is_mod, author_badge)。"""
         _sess, user, admin_cookie, is_mod = viewer_context(request)
         if not user:
-            raise HTTPException(401, "请先使用群内 QQ 号完成私聊验证码登录后再发言")
+            raise HTTPException(401, "请先使用交易群内 QQ 号完成私聊验证码登录")
         if user_is_banned(user):
             reason = (user.get("ban_reason") or "").strip()
-            detail = f"当前账号已被限制发言（原因：{reason}）" if reason else "当前账号已被限制发言"
+            detail = f"当前轮回者账号已被限制发言（原因：{reason}）" if reason else "当前轮回者账号已被限制发言"
             raise HTTPException(403, detail)
         qq_val = str(user["qq"])
         badge = "维护者" if (qq_val in parse_admin_qqs() or admin_cookie) else ("协管" if user.get("role") == "moderator" else "")
         return user, is_mod, badge
 
     def require_moderator(request: Request) -> tuple[str, dict[str, Any] | None]:
-        """支持 ADMIN_PASSWORD Cookie 或管理员 QQ 白名单/协管身份。"""
         _sess, user, admin_cookie, is_mod = viewer_context(request)
         if not is_mod:
             raise HTTPException(403, "需要管理员或社区协管权限")
@@ -1189,9 +1619,9 @@ def build_community_router(
             challenge_id=challenge_id,
             qq=proposed_qq,
             bot_qq=bot_qq,
+            verification_code=verification_code,
             expires_at=expires_at,
         )
-        # 原码仅在此响应交给当前浏览器页面，绝不返回 Bearer 密钥或 challenge_id
         return {
             "ok": True,
             "qq": proposed_qq,
@@ -1240,10 +1670,8 @@ def build_community_router(
             raise HTTPException(503, ERROR_MESSAGES.get(err_code, f"暂时无法查询验证状态（HTTP {http_status}）"))
 
         status = str(data.get("status") or "pending")
-        if status in {"expired", "denied", "consumed"}:
-            # 若已经终态失效，清理挂起引用以便前端引导重新发码
-            if status in {"expired", "denied"}:
-                store_getter().clear_pending_challenge(raw_sid, secret_getter())
+        if status in {"expired", "denied"}:
+            store_getter().clear_pending_challenge(raw_sid, secret_getter())
         return {
             "qq": bound_qq,
             "bot_qq": str(data.get("bot_qq") or EXPECTED_BOT_QQ),
@@ -1277,7 +1705,6 @@ def build_community_router(
         except HTTPException:
             raise
         except Exception:
-            # 超时或响应丢失绝不放行
             raise HTTPException(503, ERROR_MESSAGES["unable_to_verify"])
 
         if http_status != 200:
@@ -1287,7 +1714,6 @@ def build_community_router(
             mapped = http_status if http_status in {400, 403, 404, 409, 410, 503} else 503
             raise HTTPException(mapped, ERROR_MESSAGES.get(err_code, ERROR_MESSAGES["unable_to_verify"]))
 
-        # 严格按文档核对全部 8 项不变量
         if (
             data.get("passed") is not True
             or data.get("stale") is not False
@@ -1327,24 +1753,27 @@ def build_community_router(
         response.delete_cookie(BROWSER_COOKIE, path="/")
         return {"ok": True}
 
-    # ---------------- 2. 独立主页留言板与全站评论动态流 ----------------
+    # ---------------- 2. 轮回者公共论坛（纯主题列表 + 楼层详情） ----------------
 
     @router.get("/community/home")
     def community_home(
         request: Request,
         response: Response,
-        limit: int = 25,
+        q: str = "",
+        limit: int = 35,
         offset: int = 0,
-        sort: Literal["latest", "oldest", "hot"] = "latest",
+        sort: Literal["latest", "created", "oldest", "hot"] = "latest",
     ):
         no_store(response)
         _sess, user, _admin_cookie, is_mod = viewer_context(request)
         viewer_qq = str(user["qq"]) if user else None
         board = store_getter().list_threads(
             scope="board",
+            q=q,
             limit=limit,
             offset=offset,
             sort=sort,
+            include_replies=False,
             viewer_qq=viewer_qq,
             viewer_is_mod=is_mod,
         )
@@ -1352,6 +1781,7 @@ def build_community_router(
             limit=15,
             viewer_qq=viewer_qq,
             viewer_is_mod=is_mod,
+            path_resolver=find_live_resource_by_key,
         )
         stats = store_getter().stats_overview()
         return {
@@ -1360,15 +1790,29 @@ def build_community_router(
             "stats": stats,
         }
 
+    @router.get("/community/threads/{thread_id}")
+    def get_board_thread(thread_id: int, request: Request, response: Response):
+        no_store(response)
+        _sess, user, _admin_cookie, is_mod = viewer_context(request)
+        viewer_qq = str(user["qq"]) if user else None
+        return store_getter().get_board_thread_detail(
+            thread_id=thread_id,
+            viewer_qq=viewer_qq,
+            viewer_is_mod=is_mod,
+        )
+
     @router.post("/community/board")
     def create_board_post(body: CreateBoardPostRequest, request: Request, response: Response):
         no_store(response)
         user, _is_mod, badge = require_active_member(request)
+        if body.reply_to_id is None and not (body.title or "").strip() and len((body.content or "").strip()) < 2:
+            raise HTTPException(400, "请输入主题标题与正文内容")
         try:
             post = store_getter().create_post(
                 scope="board",
                 author=user,
                 author_badge=badge,
+                title=body.title,
                 content=body.content,
                 reply_to_id=body.reply_to_id,
             )
@@ -1376,7 +1820,7 @@ def build_community_router(
             raise HTTPException(400, str(exc)) from exc
         return {"ok": True, "post": post}
 
-    # ---------------- 3. 序列档案评论、能力卡锚点关联与点赞共鸣 ----------------
+    # ---------------- 3. 序列档案评论（抗序号重排 + 能力卡双重锚点） ----------------
 
     @router.get("/community/comments")
     def list_resource_comments(
@@ -1384,6 +1828,7 @@ def build_community_router(
         response: Response,
         path: str = Query(..., min_length=1),
         anchor_id: str = "",
+        anchor_label: str = "",
         limit: int = 50,
         offset: int = 0,
         sort: Literal["latest", "oldest", "hot"] = "latest",
@@ -1395,10 +1840,13 @@ def build_community_router(
         data = store_getter().list_threads(
             scope="resource",
             resource_path=rel_path,
+            resource_title=title,
             anchor_id=anchor_id.strip(),
+            anchor_label=anchor_label.strip(),
             limit=limit,
             offset=offset,
             sort=sort,
+            include_replies=True,
             viewer_qq=viewer_qq,
             viewer_is_mod=is_mod,
         )
@@ -1519,7 +1967,6 @@ def build_community_router(
     @router.post("/community/moderation/users/{qq}/role")
     def moderation_set_role(qq: str, body: AdminRoleRequest, request: Request, response: Response):
         no_store(response)
-        # 任命/撤销协管仅允许 ADMIN_PASSWORD 控制台或环境变量白名单维护者执行
         _sess, user, admin_cookie, _is_mod = viewer_context(request)
         is_super = admin_cookie or bool(user and str(user["qq"]) in parse_admin_qqs())
         if not is_super:
@@ -1533,7 +1980,6 @@ def build_community_router(
     def moderation_post_announcement(body: AdminAnnouncementRequest, request: Request, response: Response):
         no_store(response)
         _actor, user = require_moderator(request)
-        # 允许 ADMIN_PASSWORD 后台在不登录个人 QQ 的情况下直接发布置顶站点公告
         if user:
             author_info = user
         else:
@@ -1547,6 +1993,7 @@ def build_community_router(
                 scope="board",
                 author=author_info,
                 author_badge="系统公告" if not user else "维护者",
+                title=body.title.strip() or fallback_thread_title("", body.content),
                 content=body.content,
                 bypass_cooldown=True,
             )

@@ -279,7 +279,18 @@ function ReaderContent({
     if (!node) return;
     node.scrollTop += element.getBoundingClientRect().top - node.getBoundingClientRect().top - 20;
   };
-  const getSection = (id: string) => scroll.current?.querySelector<HTMLElement>(`#${CSS.escape(idPrefix + id)}`);
+  const getSection = (id: string) => {
+    if (!id) return null;
+    const direct = scroll.current?.querySelector<HTMLElement>(`#${CSS.escape(idPrefix + id)}`);
+    if (direct) return direct;
+    // 兼容能力卡升降阶后按去品阶名称回退定位（例如 #label:雷法精通）
+    const lookupLabel = id.startsWith('label:') ? id.slice('label:'.length).trim() : id.trim();
+    const byTitle = sections.find(s => cleanOutlineTitle(s.title) === lookupLabel || s.title === lookupLabel);
+    if (byTitle) {
+      return scroll.current?.querySelector<HTMLElement>(`#${CSS.escape(idPrefix + byTitle.id)}`) || null;
+    }
+    return null;
+  };
   const jump = (id: string) => {
     const target = getSection(id);
     if (target) reveal(target);

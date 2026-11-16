@@ -97,7 +97,8 @@ test('real sequence-library TXT corpus is lossless when available', t => {
 });
 test('URL round-trip retains multi-facets, Unicode path and section anchor', () => {
   global.window = { location: { href: 'https://example.test/library', pathname: '/library' } };
-  assert.equal(readLocation('https://example.test/library').tab, 'board', 'Bare root defaults to independent home message board');
+  assert.equal(readLocation('https://example.test/library').tab, 'board', 'Bare root defaults to independent home forum');
+  assert.equal(readLocation('https://example.test/library?thread=42').threadId, 42, 'Thread URL opens specific forum thread');
   assert.equal(readLocation('https://example.test/library?tab=read').tab, 'read', 'Explicit read tab opens archive browser');
   const state = { tab: 'read', filters: { q: '锚定 空间', category: '技能表/科技侧', kinds: ['技能表', '职业'], sides: ['科技侧'], authors: ['甲', '乙'] }, openPath: '序列库/001】空 格#号?.txt', anchor: 'entry-a-1' };
   const url = new URL(locationUrl(state), window.location.href).href;

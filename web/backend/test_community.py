@@ -16,7 +16,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app import main as app_main
-from app.community import CommunityStore, UpstreamAuthClient
+from app.community import CommunityStore, UpstreamAuthClient, compute_resource_key
 
 
 class CommunityAndQqAuthTests(unittest.TestCase):
@@ -175,10 +175,14 @@ class CommunityAndQqAuthTests(unittest.TestCase):
         # 3. 不在群返回 403
         self.assertEqual(client_a.post("/api/auth/qq/challenges", json={"qq": "99999999"}).status_code, 403)
 
-        # 4. 正常创建后未私聊直接 consume 返回 409 且不登录
+        # 4. 正常创建后：页面若在 QQ 内置 WebView 被切后台刷新，/api/auth/me 能恢复 pending_challenge 与原验证码
         r = client_a.post("/api/auth/qq/challenges", json={"qq": "12345678"})
         self.assertEqual(r.status_code, 200)
-        self.assertTrue(r.json()["verification_code"].startswith("TRPG-"))
+        code_issued = r.json()["verification_code"]
+        self.assertTrue(code_issued.startswith("TRPG-"))
+        me_pending = client_a.get("/api/auth/me").json()["pending_challenge"]
+        self.assertEqual(me_pending["qq"], "12345678")
+        self.assertEqual(me_pending["verification_code"], code_issued)
         self.assertEqual(client_a.post("/api/auth/qq/challenges/consume").status_code, 409)
 
         # 5. 另一个浏览器 client_b 无法替 client_a 轮询或抢先消费
@@ -291,6 +295,82 @@ class CommunityAndQqAuthTests(unittest.TestCase):
         self.assertEqual(del_res.status_code, 200)
         after = anon.get("/api/community/comments", params={"path": self.sample_path}).json()
         self.assertEqual(after["total_posts"], 0)
+
+    def test_forum_threads_and_resource_rename_resilience(self) -> None:
+        store = app_main.COMMUNITY_STORE
+        assert store is not None
+
+        # 1. 验证 compute_resource_key 剥离编号、侧别子目录与新过审括号
+        self.assertEqual(compute_resource_key("序列库/职业/神秘侧/001】天师.txt"), "职业::天师")
+        self.assertEqual(compute_resource_key("序列库/职业/战技侧/099】天师.txt"), "职业::天师")
+        self.assertEqual(compute_resource_key("序列库/新过审序列/012】剑圣（职业·战技侧）.txt"), "职业::剑圣")
+
+        user = {"qq": "23456789", "nickname": "轮回者甲", "avatar_url": ""}
+        user2 = {"qq": "34567890", "nickname": "轮回者乙", "avatar_url": ""}
+
+        # 2. 模拟旧路径 `001】天师.txt` 下的评论（带品阶括号的能力名）
+        c_old = store.create_post(
+            scope="resource",
+            author=user,
+            author_badge="",
+            content="旧序号 001 时期留下的天师评论",
+            resource_path="序列库/职业/神秘侧/001】天师.txt",
+            resource_title="001】天师",
+            anchor_id="entry-old-hash-1",
+            anchor_label="雷法精通（B级）",
+        )
+        self.assertEqual(c_old["anchor_label"], "雷法精通")
+
+        # 3. 模拟 renumber_resources.py 把文件重排成 `018】天师.txt`，且能力升为 A 级导致前端 hash 变化：
+        # 无需手工迁移，直接用新路径查询即可命中并自愈路径与标题
+        after_renumber = store.list_threads(
+            scope="resource",
+            resource_path="序列库/职业/神秘侧/018】天师.txt",
+            resource_title="018】天师",
+        )
+        self.assertEqual(after_renumber["total_posts"], 1)
+        self.assertEqual(after_renumber["items"][0]["resource_path"], "序列库/职业/神秘侧/018】天师.txt")
+        self.assertEqual(after_renumber["label_counts"]["雷法精通"], 1)
+
+        # 按新能力名过滤（即使 anchor_id 变成 entry-new-hash-1）依然能筛出原卡评论
+        filtered_by_label = store.list_threads(
+            scope="resource",
+            resource_path="序列库/职业/神秘侧/018】天师.txt",
+            resource_title="018】天师",
+            anchor_id="entry-new-hash-1",
+            anchor_label="雷法精通（A级）",
+        )
+        self.assertEqual(filtered_by_label["total_threads"], 1)
+
+        # 4. 模拟后台彻底改名（如 `018】天师.txt` -> `020】张天师《道门》.txt`），record_resource_move 自动接力
+        store.record_resource_move(
+            "序列库/职业/神秘侧/018】天师.txt",
+            "序列库/职业/神秘侧/020】张天师《道门》.txt",
+            "020】张天师《道门》",
+        )
+        after_rename = store.list_threads(
+            scope="resource",
+            resource_path="序列库/职业/神秘侧/020】张天师《道门》.txt",
+            resource_title="020】张天师《道门》",
+        )
+        self.assertEqual(after_rename["total_posts"], 1)
+        self.assertEqual(after_rename["items"][0]["resource_title"], "020】张天师《道门》")
+
+        # 5. 论坛主题标题、楼层编号与最后回复顶帖排序
+        t1 = store.create_post(scope="board", author=user, author_badge="", title="第一帖：求推荐科技侧前排", content="如题，团队缺主坦", bypass_cooldown=True)
+        t2 = store.create_post(scope="board", author=user2, author_badge="", title="第二帖：今晚八点模组发车", content="缺1奶妈", bypass_cooldown=True)
+        # 回复第一帖后，第一帖应被顶到最前，且详情页楼层为 1F + 2F
+        store.create_post(scope="board", author=user2, author_badge="", content="动力装甲或者义体改造都很顶", reply_to_id=t1["id"], bypass_cooldown=True)
+
+        board_list = store.list_threads(scope="board", sort="latest", include_replies=False)
+        self.assertEqual(board_list["items"][0]["id"], t1["id"])
+        self.assertEqual(board_list["items"][0]["reply_count"], 1)
+        self.assertEqual(board_list["items"][0]["last_reply_nickname"], "轮回者乙")
+        self.assertEqual(board_list["items"][1]["id"], t2["id"])
+
+        detail = store.get_board_thread_detail(thread_id=t1["id"])["thread"]
+        self.assertEqual(detail["floor"], 1)
+        self.assertEqual(detail["replies"][0]["floor"], 2)
 
 
 if __name__ == "__main__":

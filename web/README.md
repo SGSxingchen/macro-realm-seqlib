@@ -116,21 +116,22 @@ npm run dev
 
 审核任务以 JSON 文件保存在 `web/normalization_reviews/`。每个任务记录规范化前文本、规范化后文本、签名列表和状态；当前规则为凑齐 1 个签名即通过。
 
-### QQ 私聊验证码登录与社区（界域留言板 / 序列评论区）
+### QQ 私聊验证码登录与社区（轮回者论坛 / 抗改名序列评论区）
 
-独立持久化于 `web/data/community.sqlite`（不改动任何 `序列库/`、`荣誉室/` TXT 源文件）：
+独立持久化于 `web/data/community.sqlite`（不改动任何 `序列库/`、`荣誉室/` TXT 源文件，在线自动兼容存量表升级）：
 
-- **QQ 私聊验证码三步登录**（服务端持有 `ONEBOT_SEQUENCE_TOKEN`，`challenge_id` 与绑定 QQ 仅保存在服务端会话库，绝不暴露给浏览器或接受任意 `challenge_id` 兑换）：
-  - `GET /api/auth/me`：读取当前浏览器登录身份、管理员权限与挂起验证信息。
-  - `POST /api/auth/qq/challenges`：`{ "qq": "123456789" }`，先核验在主群 `672204828` 再发 `TRPG-...` 验证码。
+- **QQ 私聊验证码三步登录**（服务端持有 `ONEBOT_SEQUENCE_TOKEN`，`challenge_id` 与绑定 QQ 仅保存在服务端会话库，绝不暴露给浏览器或接受任意 `challenge_id` 兑换；支持 QQ 内置 WebView 切后台重载自动续接验证）：
+  - `GET /api/auth/me`：读取当前浏览器轮回者身份、管理员权限与挂起验证信息。
+  - `POST /api/auth/qq/challenges`：`{ "qq": "123456789" }`，先核验在交易群 `672204828` 再发 `TRPG-...` 验证码。
   - `GET /api/auth/qq/challenges/current`：轮询当前浏览器已绑定的验证状态（`pending` / `verified` / `expired` / `denied`）。
-  - `POST /api/auth/qq/challenges/consume`：状态变为 `verified` 后一次性原子消费，同时核验在群与 `.xlsx` 角色卡上传资格，通过后建立 30 天 HttpOnly 会话。
+  - `POST /api/auth/qq/challenges/consume`：状态变为 `verified` 后一次性原子消费，同时核验在交易群与 `.xlsx` 角色卡上传资格，通过后建立 30 天 HttpOnly 会话。
   - `POST /api/auth/logout`：销毁当前浏览器会话。
-- **独立主页留言板与序列评论区**（未登录公开只读，群成员登录后发言、回复、点赞共鸣、关联能力卡锚点）：
-  - `GET /api/community/home`：主页公共留言流（置顶优先 + 楼中楼）与右侧全站最新序列评论动态流。
-  - `POST /api/community/board`：发表主页留言或回复。
-  - `GET /api/community/comments?path=序列库/...&anchor_id=&sort=latest|hot|oldest`：读取指定序列评论与各能力卡锚点评论计数。
-  - `POST /api/community/comments`：发表序列评论（可选绑定 `anchor_id` / `anchor_label` 到具体能力卡，或 `reply_to_id` 楼中楼回复）。
+- **轮回者论坛与抗重排序列评论区**（未登录公开只读，交易群轮回者登录后发帖、跟帖、点赞共鸣、关联能力卡锚点）：
+  - `GET /api/community/home`：论坛紧凑主题列表（置顶优先 + 最后回复顶帖排序）与右侧全站最新序列评论动态流。
+  - `GET /api/community/threads/{id}`：读取单帖 `1F / 2F / 3F` 楼层详情（直达链接 `?thread={id}`）。
+  - `POST /api/community/board`：发布新论坛主题（`title + content`）或跟帖回复（`reply_to_id`）。
+  - `GET /api/community/comments?path=序列库/...&anchor_id=&anchor_label=&sort=latest|hot|oldest`：按去序号稳定键 `resource_key` + `community_resource_aliases` 历史路径映射表读取序列评论（经历 `renumber_resources.py` 批量重排、跨侧别移动或后台重命名均不断链，能力卡升降阶按去品阶名称回退关联）。
+  - `POST /api/community/comments`：发表序列评论（可选绑定 `anchor_id` / `anchor_label` 到具体能力卡，或 `reply_to_id` 回复）。
   - `POST /api/community/posts/{id}/like`：切换点赞/共鸣。
   - `DELETE /api/community/posts/{id}`：作者本人或管理员删除发言（主楼删除时同步归档下属回复）。
   - `POST /api/community/posts/{id}/pin`：管理员置顶/取消置顶主楼。

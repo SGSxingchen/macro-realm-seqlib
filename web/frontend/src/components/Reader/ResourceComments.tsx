@@ -37,7 +37,7 @@ export function ResourceComments({
   const [data, setData] = useState<CommunityThreadsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [sort, setSort] = useState<'latest' | 'hot' | 'oldest'>('latest');
-  const [filterAnchor, setFilterAnchor] = useState('');
+  const [filterAnchor, setFilterAnchor] = useState<{ id: string; label: string } | null>(null);
   const [selectedAnchorId, setSelectedAnchorId] = useState('');
   const [replyTarget, setReplyTarget] = useState<CommunityPost | null>(null);
   const [content, setContent] = useState('');
@@ -55,13 +55,22 @@ export function ResourceComments({
   }, [sections]);
 
   const anchorMap = useMemo(() => new Map(anchorOptions.map(a => [a.id, a.label])), [anchorOptions]);
+  const labelToIdMap = useMemo(() => new Map(anchorOptions.map(a => [a.label, a.id])), [anchorOptions]);
+
+  const resolveLiveAnchorId = useCallback((anchorId: string, anchorLabel: string) => {
+    if (anchorId && anchorMap.has(anchorId)) return anchorId;
+    const clean = cleanCardLabel(anchorLabel || '');
+    if (clean && labelToIdMap.has(clean)) return labelToIdMap.get(clean)!;
+    return anchorId;
+  }, [anchorMap, labelToIdMap]);
 
   const loadComments = useCallback(async () => {
     setLoading(true);
     try {
       const qs = buildQuery({
         path: resourcePath,
-        anchor_id: filterAnchor || undefined,
+        anchor_id: filterAnchor?.id || undefined,
+        anchor_label: filterAnchor?.label || undefined,
         sort,
         limit: 60,
       });
@@ -69,8 +78,12 @@ export function ResourceComments({
       setData(res);
       if (onAnchorCountsChange) {
         const counts: Record<string, number> = {};
-        for (const [aid, info] of Object.entries(res.anchor_counts || {})) {
-          counts[aid] = info.count;
+        const labelCounts = res.label_counts || {};
+        for (const opt of anchorOptions) {
+          const byLabel = labelCounts[opt.label] || 0;
+          const byId = res.anchor_counts?.[opt.id]?.count || 0;
+          const finalCnt = Math.max(byLabel, byId);
+          if (finalCnt > 0) counts[opt.id] = finalCnt;
         }
         onAnchorCountsChange(counts);
       }
@@ -80,10 +93,10 @@ export function ResourceComments({
     } finally {
       setLoading(false);
     }
-  }, [resourcePath, filterAnchor, sort, onAnchorCountsChange]);
+  }, [resourcePath, filterAnchor, sort, anchorOptions, onAnchorCountsChange]);
 
   useEffect(() => {
-    setFilterAnchor('');
+    setFilterAnchor(null);
     setSelectedAnchorId('');
     setReplyTarget(null);
     setContent('');
@@ -221,20 +234,25 @@ export function ResourceComments({
           <button
             type="button"
             className={!filterAnchor ? 'active' : ''}
-            onClick={() => setFilterAnchor('')}
+            onClick={() => setFilterAnchor(null)}
           >
             全部评论 ({data?.total_posts ?? 0})
           </button>
-          {activeAnchorTags.map(([aid, info]) => (
-            <button
-              key={aid}
-              type="button"
-              className={filterAnchor === aid ? 'active' : ''}
-              onClick={() => setFilterAnchor(prev => (prev === aid ? '' : aid))}
-            >
-              #{info.label || anchorMap.get(aid) || aid} ({info.count})
-            </button>
-          ))}
+          {activeAnchorTags.map(([key, info]) => {
+            const label = info.label || anchorMap.get(key) || key;
+            const liveId = resolveLiveAnchorId(info.anchor_id || key, label);
+            const isActive = Boolean(filterAnchor && (filterAnchor.label === label || filterAnchor.id === liveId));
+            return (
+              <button
+                key={key}
+                type="button"
+                className={isActive ? 'active' : ''}
+                onClick={() => setFilterAnchor(prev => (prev && prev.label === label ? null : { id: liveId, label }))}
+              >
+                #{label} ({info.count})
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -291,23 +309,23 @@ export function ResourceComments({
         <textarea
           ref={textareaRef}
           rows={3}
-          maxLength={1200}
+          maxLength={1600}
           disabled={!viewer?.authenticated || Boolean(viewer.user?.is_banned)}
           placeholder={
             !viewer?.authenticated
-              ? '通过群内 QQ 私聊验证码登录后即可参与本序列讨论…'
+              ? '通过交易群 QQ 私聊验证码登录后即可参与本序列研讨…'
               : viewer.user?.is_banned
                 ? `发言受限：${viewer.user.ban_reason || '请联系管理员'}`
                 : selectedAnchorId
-                  ? `针对「${anchorMap.get(selectedAnchorId) || '所选能力卡'}」写下实战评价、联动思路或疑问…`
-                  : '写下对本序列的实战体验、构筑搭配或规则讨论…'
+                  ? `针对「${anchorMap.get(selectedAnchorId) || '所选能力卡'}」写下实战评价、构筑联动或疑问…`
+                  : '写下对本序列的实战体验、轮回构筑搭配或规则讨论…'
           }
           value={content}
           onChange={e => setContent(e.target.value)}
         />
 
         <div className="comm-composer-foot">
-          <span className="comm-char-count">{content.length} / 1200</span>
+          <span className="comm-char-count">{content.length} / 1600</span>
           {viewer?.authenticated ? (
             <button
               type="submit"
@@ -342,11 +360,11 @@ export function ResourceComments({
                     <span className="comm-qq-tag">
                       {viewer?.is_moderator && post.author.qq ? `QQ ${post.author.qq}` : post.author.qq_masked}
                     </span>
-                    {post.anchor_id && (
+                    {(post.anchor_id || post.anchor_label) && (
                       <button
                         type="button"
                         className="comm-anchor-pill"
-                        onClick={() => onJumpToAnchor(post.anchor_id)}
+                        onClick={() => onJumpToAnchor(resolveLiveAnchorId(post.anchor_id, post.anchor_label))}
                         title="点击定位到正文对应能力卡"
                       >
                         #{post.anchor_label || anchorMap.get(post.anchor_id) || '定位能力卡'} ↵

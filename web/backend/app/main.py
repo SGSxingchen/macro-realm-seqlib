@@ -28,7 +28,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from text_encoding import decode_text_bytes, read_text as read_decoded_text
-from .community import CommunityStore, UpstreamAuthClient, build_community_router
+from .community import CommunityStore, UpstreamAuthClient, build_community_router, compute_resource_key
 from .search import SearchIndex
 from .session_stats import SessionStatsService, SessionTextFile
 
@@ -186,6 +186,27 @@ def is_admin_cookie_valid(request: Request) -> bool:
 def resolve_public_resource_meta(rel_path: str) -> tuple[str, str]:
     full = public_resource_path(rel_path, must_exist=True)
     return rel_posix(full), title_for(full)
+
+
+def find_live_public_resource(saved_path: str, resource_key: str) -> tuple[str, str] | None:
+    """当某条序列因 renumber_resources.py 重排序号或移动子目录导致旧路径变化时，按稳定 resource_key 自动找回现行路径。"""
+    try:
+        full = public_resource_path(saved_path, must_exist=True)
+        return rel_posix(full), title_for(full)
+    except Exception:
+        pass
+    target_key = resource_key or compute_resource_key(saved_path)
+    if not target_key:
+        return None
+    try:
+        SEARCH_INDEX.refresh()
+        for entry in SEARCH_INDEX.all_entries():
+            p = str(entry.get("path") or "")
+            if p and compute_resource_key(p) == target_key:
+                return p, str(entry.get("title") or "")
+    except Exception:
+        return None
+    return None
 
 
 def sign_payload(payload: dict) -> str:
@@ -928,9 +949,14 @@ def move_resource(req: MoveRequest, _admin: None = Depends(require_admin)):
     before = git("status", "--short", "--", req.old_path, req.new_path)
     new.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(old), str(new))
+    new_rel = rel_posix(new)
     SEARCH_INDEX.invalidate(req.old_path)
-    SEARCH_INDEX.invalidate(rel_posix(new))
-    return {"ok": True, "old_path": req.old_path, "new_path": rel_posix(new), "git_status_before": before, "git_status_after": git("status", "--short", "--", req.old_path, req.new_path)}
+    SEARCH_INDEX.invalidate(new_rel)
+    try:
+        community_store().record_resource_move(req.old_path, new_rel, title_for(new))
+    except Exception:
+        pass
+    return {"ok": True, "old_path": req.old_path, "new_path": new_rel, "git_status_before": before, "git_status_after": git("status", "--short", "--", req.old_path, req.new_path)}
 
 
 @app.post("/api/admin/delete")
@@ -1054,6 +1080,10 @@ def move_to_honor(req: MoveToHonorRequest, _admin: None = Depends(require_admin)
     cleanup_empty_dirs_after_move(old)
     SEARCH_INDEX.invalidate(req.path)
     new_path = rel_posix(new)
+    try:
+        community_store().record_resource_move(req.path, new_path, title_for(new))
+    except Exception:
+        pass
     return {
         "ok": True,
         "old_path": req.path,
@@ -1495,6 +1525,7 @@ app.include_router(
         secret_getter=secret_key,
         is_admin_request=is_admin_cookie_valid,
         resolve_public_resource=resolve_public_resource_meta,
+        find_live_resource_by_key=find_live_public_resource,
     ),
     prefix="/api",
 )

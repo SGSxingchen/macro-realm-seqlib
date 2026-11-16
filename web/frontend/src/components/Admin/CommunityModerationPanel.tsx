@@ -25,6 +25,7 @@ export function CommunityModerationPanel({ onOpenResource }: Props) {
   const [notice, setNotice] = useState('');
 
   // 置顶公告表单
+  const [annTitle, setAnnTitle] = useState('');
   const [announcement, setAnnouncement] = useState('');
   const [annNickname, setAnnNickname] = useState('界域终端公告');
 
@@ -76,13 +77,15 @@ export function CommunityModerationPanel({ onOpenResource }: Props) {
       await api('/api/community/moderation/announcement', {
         method: 'POST',
         body: JSON.stringify({
+          title: annTitle.trim(),
           content: announcement.trim(),
           nickname: annNickname.trim() || '界域终端公告',
           pinned: true,
         }),
       });
+      setAnnTitle('');
       setAnnouncement('');
-      flash('置顶公告已发布到主页留言板');
+      flash('置顶公告已发布到轮回者论坛顶部');
       await loadPosts();
     } catch (err) {
       flash(err instanceof Error ? err.message : '发布公告失败');
@@ -211,18 +214,25 @@ export function CommunityModerationPanel({ onOpenResource }: Props) {
       </section>
 
       <section className="console-card">
-        <h3>发布主页置顶公告</h3>
-        <p className="hint">无需绑定个人 QQ，直接以系统身份在主页留言板顶部置顶展示。</p>
+        <h3>发布论坛置顶公告</h3>
+        <p className="hint">无需绑定个人 QQ，直接以系统身份在轮回者论坛顶部置顶展示。</p>
         <form onSubmit={handlePublishAnnouncement} style={{ display: 'grid', gap: '8px' }}>
-          <input
-            placeholder="署名（默认：界域终端公告）"
-            value={annNickname}
-            onChange={e => setAnnNickname(e.target.value)}
-          />
+          <div className="row">
+            <input
+              placeholder="公告标题（如：轮回者论坛版规与交易群说明）"
+              value={annTitle}
+              onChange={e => setAnnTitle(e.target.value)}
+            />
+            <input
+              placeholder="署名（默认：界域终端公告）"
+              value={annNickname}
+              onChange={e => setAnnNickname(e.target.value)}
+            />
+          </div>
           <textarea
             rows={4}
-            maxLength={1200}
-            placeholder="输入要置顶的公告正文（如版本更新提示、跑团招募导航、留言板版规）…"
+            maxLength={4000}
+            placeholder="输入要置顶的公告正文（如版本更新提示、跑团招募导航、版规说明）…"
             value={announcement}
             onChange={e => setAnnouncement(e.target.value)}
           />
@@ -310,6 +320,9 @@ export function CommunityModerationPanel({ onOpenResource }: Props) {
                           <span>{item.resource_title || item.resource_path}</span>
                         )}
                       </div>
+                    )}
+                    {item.title && item.scope === 'board' && !item.parent_id && (
+                      <div style={{ fontWeight: 600, fontSize: '13.5px' }}>标题：{item.title}</div>
                     )}
                     <pre className="comm-admin-content">{item.raw_content || item.content}</pre>
                     <div className="row">

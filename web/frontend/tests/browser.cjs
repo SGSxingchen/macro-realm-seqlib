@@ -77,9 +77,9 @@ async function shot(page, name) { await page.screenshot({ path: path.join(out, n
     const { context, page, control } = await setup(browser, { width: 1440, height: 1000 });
     activePage = page;
     await page.goto(base, { waitUntil: 'domcontentloaded' });
-    await page.getByRole('heading', { name: '界域公共留言板' }).waitFor();
+    await page.getByRole('heading', { name: '轮回者终端论坛' }).waitFor();
     await noOverflow(page);
-    await page.getByRole('button', { name: '进入序列库 →' }).click();
+    await page.getByRole('button', { name: '序列检索', exact: true }).click();
     await page.locator('[data-resource-index="0"]').waitFor();
     await noOverflow(page);
     await shot(page, 'desktop-dark-overview');

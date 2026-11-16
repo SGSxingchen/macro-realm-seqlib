@@ -314,6 +314,7 @@ export type CommunityViewerState = {
   pending_challenge?: {
     qq: string;
     bot_qq: string;
+    verification_code?: string;
     expires_at?: string | null;
   } | null;
   user: CommunityUserProfile | null;
@@ -349,6 +350,10 @@ export type CommunityPostAuthor = {
 export type CommunityPost = {
   id: number;
   scope: 'board' | 'resource';
+  title?: string;
+  excerpt?: string;
+  floor?: number;
+  resource_key?: string;
   resource_path: string;
   resource_title: string;
   anchor_id: string;
@@ -369,6 +374,9 @@ export type CommunityPost = {
   status: 'active' | 'deleted';
   created_at: string;
   created_ts: number;
+  last_reply_at?: string;
+  last_reply_ts?: number;
+  last_reply_nickname?: string;
   replies?: CommunityPost[];
   reply_count?: number;
 };
@@ -378,17 +386,24 @@ export type CommunityThreadsResponse = {
   count: number;
   total_threads: number;
   total_posts: number;
-  anchor_counts: Record<string, { count: number; label: string }>;
+  resource_key?: string;
+  anchor_counts: Record<string, { count: number; label: string; anchor_id?: string }>;
+  label_counts?: Record<string, number>;
   limit: number;
   offset: number;
   resource_path?: string;
   resource_title?: string;
 };
 
+export type CommunityThreadDetailResponse = {
+  thread: CommunityPost;
+};
+
 export type CommunityHomeResponse = {
   board: CommunityThreadsResponse;
   recent_resource_comments: CommunityPost[];
   stats: {
+    board_thread_count?: number;
     board_post_count: number;
     resource_comment_count: number;
     member_count: number;

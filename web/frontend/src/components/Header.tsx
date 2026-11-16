@@ -14,7 +14,7 @@ export function Header({ recordCount, tab, onTab, viewer, onOpenAuth }: Props) {
   const user = viewer?.user;
   return (
     <header className="topbar realm-topbar">
-      <button type="button" className="realm-brand" onClick={() => onTab('board')} aria-label="宏观界域 · 返回首页留言板">
+      <button type="button" className="realm-brand" onClick={() => onTab('board')} aria-label="宏观界域 · 返回轮回者论坛">
         <span className="realm-brand-mark" aria-hidden="true">∞</span>
         <span className="realm-brand-text">
           <strong>宏观界域<span>强化序列库</span></strong>
@@ -24,7 +24,7 @@ export function Header({ recordCount, tab, onTab, viewer, onOpenAuth }: Props) {
       <ResponsiveMenu label="导航" className="realm-nav-menu" closeOnSelect>
         <nav aria-label="主导航">
           {([
-            ['board', '界域留言板'],
+            ['board', '轮回者论坛'],
             ['read', '序列检索'],
             ['updates', '最近更新'],
             ['stats', '结团统计'],
