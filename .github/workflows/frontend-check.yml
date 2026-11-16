@@ -44,6 +44,7 @@ jobs:
             if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then break; fi
             sleep 1
           done
+          node tests/community-browser.cjs
           node tests/browser.cjs
           node tests/workbench-browser.cjs
           node tests/reading-layout-browser.cjs

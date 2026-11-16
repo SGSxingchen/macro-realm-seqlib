@@ -28,6 +28,9 @@ async function setup(browser, viewport, colorScheme = 'dark') {
     let status = 200;
     let body;
     if (url.pathname === '/api/tree') body = { items: [{ name: '序列库', path: '序列库', count: 620, children: [{ name: '技能表', path: '序列库/技能表', count: 620, children: [{ name: '科技侧', path: '序列库/技能表/科技侧', count: 620, children: [] }] }] }] };
+    else if (url.pathname === '/api/auth/me') body = { authenticated: false, auth_configured: true, bot_qq: '3239195029', group_id: 672204828, admin_authenticated: false, is_moderator: false, user: null };
+    else if (url.pathname === '/api/community/home') body = { board: { items: [], count: 0, total_threads: 0, total_posts: 0, anchor_counts: {}, limit: 25, offset: 0 }, recent_resource_comments: [], stats: { board_post_count: 0, resource_comment_count: 0, member_count: 0, banned_count: 0 } };
+    else if (url.pathname === '/api/community/comments') body = { items: [], count: 0, total_threads: 0, total_posts: 0, anchor_counts: {}, limit: 50, offset: 0 };
     else if (url.pathname === '/api/resources') {
       const q = url.searchParams.get('q') || '';
       control.queries.push(q);
@@ -74,6 +77,9 @@ async function shot(page, name) { await page.screenshot({ path: path.join(out, n
     const { context, page, control } = await setup(browser, { width: 1440, height: 1000 });
     activePage = page;
     await page.goto(base, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: '界域公共留言板' }).waitFor();
+    await noOverflow(page);
+    await page.getByRole('button', { name: '进入序列库 →' }).click();
     await page.locator('[data-resource-index="0"]').waitFor();
     await noOverflow(page);
     await shot(page, 'desktop-dark-overview');
@@ -173,7 +179,7 @@ async function shot(page, name) { await page.screenshot({ path: path.join(out, n
     for (const width of [390, 320, 1024]) {
       const mobile = await setup(browser, { width, height: width === 1024 ? 768 : 844 });
       activePage = mobile.page;
-      await mobile.page.goto(base);
+      await mobile.page.goto(base + '/?tab=read');
       await mobile.page.locator('[data-resource-index="0"]').waitFor();
       await noOverflow(mobile.page);
       await shot(mobile.page, `${width}-results`);

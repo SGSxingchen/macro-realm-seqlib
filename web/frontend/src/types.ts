@@ -15,7 +15,7 @@ export type Resource = {
 
 export type Detail = Resource & { content: string; encoding: string };
 
-export type AppTab = 'read' | 'updates' | 'stats' | 'admin';
+export type AppTab = 'board' | 'read' | 'updates' | 'stats' | 'admin';
 
 export type TreeNode = { name: string; path: string; count: number; children: TreeNode[] };
 
@@ -104,7 +104,7 @@ export type GitInfo = {
 };
 
 export type PublishResult = { ok: boolean; version: string; steps: CmdResult[] };
-export type AdminTab = 'overview' | 'edit' | 'package' | 'changes' | 'publish' | 'wiki';
+export type AdminTab = 'overview' | 'edit' | 'package' | 'changes' | 'publish' | 'wiki' | 'community';
 export type HonorCategory = { category: string; count: number; next_number: number; next_prefix: string };
 export type HonorCategoriesResponse = { items: HonorCategory[]; suggested_category?: string };
 export type PackageFile = {
@@ -289,3 +289,139 @@ export type SessionStatsErrorsResponse = {
   count: number;
   month: string;
 };
+
+/* ---------- QQ 私聊验证码登录与社区留言板 / 资源评论类型 ---------- */
+
+export type CommunityUserProfile = {
+  qq: string;
+  qq_masked: string;
+  nickname: string;
+  avatar_url: string;
+  card_count: number;
+  badge: string;
+  is_banned: boolean;
+  banned_until?: string | number | null;
+  ban_reason?: string;
+};
+
+export type CommunityViewerState = {
+  authenticated: boolean;
+  auth_configured: boolean;
+  bot_qq: string;
+  group_id: number;
+  admin_authenticated: boolean;
+  is_moderator: boolean;
+  pending_challenge?: {
+    qq: string;
+    bot_qq: string;
+    expires_at?: string | null;
+  } | null;
+  user: CommunityUserProfile | null;
+};
+
+export type QqChallengeBeginResponse = {
+  ok: boolean;
+  qq: string;
+  group_id: number;
+  bot_qq: string;
+  verification_code: string;
+  message_to_send: string;
+  expires_at: string;
+  status: 'pending';
+};
+
+export type QqChallengePollResponse = {
+  qq: string;
+  bot_qq: string;
+  status: 'pending' | 'verified' | 'consumed' | 'denied' | 'expired';
+  expires_at?: string | null;
+  verified_at?: string | null;
+};
+
+export type CommunityPostAuthor = {
+  qq_masked: string;
+  qq?: string | null;
+  nickname: string;
+  avatar_url: string;
+  badge: string;
+};
+
+export type CommunityPost = {
+  id: number;
+  scope: 'board' | 'resource';
+  resource_path: string;
+  resource_title: string;
+  anchor_id: string;
+  anchor_label: string;
+  parent_id?: number | null;
+  reply_to_id?: number | null;
+  reply_to_nickname: string;
+  reply_to_qq?: string;
+  author: CommunityPostAuthor;
+  content: string;
+  raw_content?: string;
+  deleted_by?: string;
+  is_pinned: boolean;
+  like_count: number;
+  liked_by_me: boolean;
+  can_delete: boolean;
+  can_pin: boolean;
+  status: 'active' | 'deleted';
+  created_at: string;
+  created_ts: number;
+  replies?: CommunityPost[];
+  reply_count?: number;
+};
+
+export type CommunityThreadsResponse = {
+  items: CommunityPost[];
+  count: number;
+  total_threads: number;
+  total_posts: number;
+  anchor_counts: Record<string, { count: number; label: string }>;
+  limit: number;
+  offset: number;
+  resource_path?: string;
+  resource_title?: string;
+};
+
+export type CommunityHomeResponse = {
+  board: CommunityThreadsResponse;
+  recent_resource_comments: CommunityPost[];
+  stats: {
+    board_post_count: number;
+    resource_comment_count: number;
+    member_count: number;
+    banned_count: number;
+  };
+};
+
+export type AdminModerationPostsResponse = {
+  stats: CommunityHomeResponse['stats'];
+  items: CommunityPost[];
+  count: number;
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type AdminModerationUser = {
+  qq: string;
+  nickname: string;
+  avatar_url: string;
+  card_count: number;
+  role: 'member' | 'moderator' | 'env_admin';
+  is_banned: boolean;
+  banned_until?: string | number | null;
+  ban_reason: string;
+  post_count: number;
+  first_login_at?: string | null;
+  last_login_at?: string | null;
+};
+
+export type AdminModerationUsersResponse = {
+  items: AdminModerationUser[];
+  count: number;
+  total: number;
+};
+

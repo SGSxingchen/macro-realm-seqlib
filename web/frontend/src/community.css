@@ -1,0 +1,920 @@
+/* =====================================================================
+   宏观界域 · QQ 私聊验证码登录、界域公共留言板与序列评论区
+   严格对齐 Void Prism / Daylight Terminal 设计规范：2px 微切角、1px 细线、零气泡阴影
+   ===================================================================== */
+
+/* ---------- 1. 顶栏 QQ 用户态按钮 ---------- */
+.realm-topbar nav button.comm-topbar-auth {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px !important;
+  padding: 0 10px !important;
+  margin-left: 2px;
+  border: 1px solid var(--r-strong-line) !important;
+  border-radius: 2px !important;
+  background: var(--r-raised) !important;
+  color: var(--r-accent) !important;
+  font-size: 12px;
+  font-weight: 500;
+}
+.realm-topbar nav button.comm-topbar-auth:hover {
+  border-color: var(--r-accent) !important;
+  background: var(--r-accent-wash) !important;
+  color: var(--r-text) !important;
+}
+.realm-topbar nav button.comm-topbar-auth.is-logged {
+  color: var(--r-text) !important;
+}
+.comm-topbar-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.comm-topbar-nick {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.comm-topbar-badge,
+.comm-role-badge {
+  display: inline-block;
+  font-style: normal;
+  font-family: var(--r-mono);
+  font-size: 10.5px;
+  line-height: 1.3;
+  padding: 1px 5px;
+  border: 1px solid var(--r-warm);
+  color: var(--r-warm);
+  background: var(--r-warm-wash);
+  border-radius: 2px;
+}
+
+/* ---------- 2. 通用标签与主次按钮 ---------- */
+.comm-kicker {
+  display: block;
+  font-family: var(--r-mono);
+  font-size: 11.5px;
+  color: var(--r-accent);
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.comm-primary-btn {
+  border-color: var(--r-accent) !important;
+  background: var(--r-accent-wash) !important;
+  color: var(--r-accent) !important;
+  font-weight: 600;
+}
+.comm-primary-btn:hover:not(:disabled) {
+  background: var(--r-accent) !important;
+  color: var(--accent-ink) !important;
+}
+.comm-danger-btn,
+button.is-danger {
+  color: var(--red) !important;
+  border-color: rgba(244, 104, 118, 0.35) !important;
+}
+
+/* ---------- 3. QQ 私聊验证码登录弹窗 ---------- */
+.comm-auth-dialog {
+  border: 1px solid var(--r-strong-line);
+  border-radius: 2px;
+  background: var(--r-panel);
+  color: var(--r-text);
+  padding: 0;
+  width: min(500px, calc(100vw - 24px));
+  max-width: 100%;
+  box-shadow: var(--shadow);
+}
+.comm-auth-dialog::backdrop {
+  background: rgba(5, 8, 12, 0.72);
+}
+.comm-auth-card {
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.comm-auth-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--r-line);
+}
+.comm-auth-head h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.35;
+}
+.comm-dialog-close {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 8px;
+  font-size: 18px;
+  line-height: 1;
+  background: transparent;
+}
+.comm-auth-desc {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--r-text-soft);
+  line-height: 1.65;
+}
+.comm-auth-desc code,
+.comm-auth-tips code,
+.comm-auth-waiting code {
+  font-family: var(--r-mono);
+  padding: 1px 5px;
+  background: var(--code-bg);
+  color: var(--r-accent);
+  border-radius: 2px;
+}
+.comm-field-label {
+  display: block;
+  font-size: 12.5px;
+  color: var(--r-muted);
+  margin: 8px 0 6px;
+}
+.comm-input-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.comm-input-row input {
+  flex: 1 1 200px;
+  min-height: 40px;
+  padding: 0 12px;
+  font-size: 16px;
+  font-family: var(--r-mono);
+  border: 1px solid var(--r-strong-line);
+  border-radius: 2px;
+  background: var(--input-bg);
+  color: var(--r-text);
+}
+.comm-input-row button {
+  min-height: 40px;
+  padding-inline: 16px;
+}
+.comm-auth-tips {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--r-muted);
+  line-height: 1.65;
+  display: grid;
+  gap: 4px;
+}
+.comm-auth-error,
+.comm-ban-alert {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--red);
+  background: var(--red-bg);
+  color: var(--r-text);
+  font-size: 13px;
+}
+.comm-auth-warn {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--r-warm);
+  background: var(--r-warm-wash);
+  font-size: 12.5px;
+}
+.comm-code-panel {
+  border: 1px solid var(--r-strong-line);
+  background: var(--r-bg);
+  padding: 12px 14px;
+  display: grid;
+  gap: 10px;
+}
+.comm-code-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--r-muted);
+  font-family: var(--r-mono);
+}
+.comm-code-meta .is-urgent {
+  color: var(--red);
+  font-weight: 600;
+}
+.comm-code-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px dashed var(--r-accent);
+  background: var(--r-accent-wash);
+}
+.comm-code-box code {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  background: transparent;
+  padding: 0;
+  word-break: break-all;
+}
+.comm-bot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--r-text-soft);
+}
+.comm-poll-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--r-accent);
+}
+.comm-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  background: var(--r-accent);
+  flex-shrink: 0;
+}
+.comm-auth-subnote {
+  margin: 8px 0;
+  font-size: 12.5px;
+  color: var(--r-muted);
+  line-height: 1.6;
+}
+.comm-copied-hint {
+  margin: 4px 0;
+  font-size: 12px;
+  color: var(--green);
+}
+.comm-auth-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.comm-profile-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.comm-avatar-lg {
+  width: 52px;
+  height: 52px;
+  border-radius: 2px;
+  border: 1px solid var(--r-line);
+  object-fit: cover;
+}
+.comm-profile-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+}
+.comm-profile-meta p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--r-muted);
+}
+
+/* ---------- 4. 独立主页首屏：界域公共留言板 ---------- */
+.comm-board-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--r-bg);
+}
+.comm-board-container {
+  max-width: 1260px;
+  margin: 0 auto;
+  padding: 22px 24px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.comm-hero-bar {
+  border: 1px solid var(--r-line);
+  border-left: 3px solid var(--r-accent);
+  background: var(--r-panel);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.comm-hero-main h1 {
+  margin: 0 0 6px;
+  font-size: 24px;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+}
+.comm-hero-main p {
+  margin: 0;
+  color: var(--r-muted);
+  font-size: 13.5px;
+}
+.comm-hero-search {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.comm-hero-search input {
+  flex: 1 1 240px;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 16px;
+  border: 1px solid var(--r-strong-line);
+  border-radius: 2px;
+  background: var(--input-bg);
+  color: var(--r-text);
+}
+.comm-hero-search button {
+  min-height: 38px;
+  padding-inline: 14px;
+  white-space: nowrap;
+}
+.comm-cat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--r-line);
+}
+.comm-cat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  background: var(--r-raised);
+  border: 1px solid var(--r-line);
+}
+.comm-cat-chip b {
+  font-family: var(--r-mono);
+  color: var(--r-accent);
+  font-weight: 600;
+}
+.comm-stat-summary {
+  margin-left: auto;
+  font-family: var(--r-mono);
+  font-size: 11.5px;
+  color: var(--r-muted);
+}
+.comm-stat-summary b {
+  color: var(--r-text);
+}
+
+.comm-mobile-tabs {
+  display: none;
+}
+
+.comm-board-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  align-items: start;
+}
+.comm-board-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ---------- 5. 发帖与评论编辑器 ---------- */
+.comm-composer {
+  border: 1px solid var(--r-line);
+  background: var(--r-panel);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.comm-composer.is-compact {
+  background: var(--r-bg);
+}
+.comm-composer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.comm-composer-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.comm-composer-guest {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--r-muted);
+  font-size: 12.5px;
+}
+.comm-avatar-sm {
+  width: 22px;
+  height: 22px;
+  border-radius: 2px;
+  object-fit: cover;
+}
+.comm-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 2px;
+  border: 1px solid var(--r-line);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.comm-anchor-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--r-muted);
+  max-width: 100%;
+}
+.comm-anchor-picker select {
+  max-width: 240px;
+  min-height: 28px;
+  padding: 2px 8px;
+  font-size: 12.5px;
+  border: 1px solid var(--r-strong-line);
+  border-radius: 2px;
+  background: var(--input-bg);
+  color: var(--r-text);
+}
+.comm-reply-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  border-left: 2px solid var(--r-accent);
+  background: var(--r-accent-wash);
+}
+.comm-composer textarea {
+  width: 100%;
+  min-height: 76px;
+  padding: 10px 12px;
+  font-size: 16px;
+  line-height: 1.6;
+  border: 1px solid var(--r-strong-line);
+  border-radius: 2px;
+  background: var(--input-bg);
+  color: var(--r-text);
+  resize: vertical;
+}
+.comm-composer textarea:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+.comm-composer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.comm-char-count {
+  font-family: var(--r-mono);
+  font-size: 11.5px;
+  color: var(--r-muted);
+}
+
+/* ---------- 6. 帖子 / 评论列表与楼中楼 ---------- */
+.comm-stream-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--r-line);
+}
+.comm-stream-toolbar h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.comm-sort-switch {
+  display: inline-flex;
+  gap: 4px;
+}
+.comm-sort-switch button {
+  padding: 3px 9px;
+  font-size: 12px;
+  background: transparent;
+  border-color: var(--r-line);
+  color: var(--r-muted);
+}
+.comm-sort-switch button[aria-pressed="true"] {
+  border-color: var(--r-accent);
+  color: var(--r-accent);
+  background: var(--r-accent-wash);
+}
+
+.comm-thread-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.comm-post-card {
+  border: 1px solid var(--r-line);
+  background: var(--r-panel);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.comm-post-card.is-pinned {
+  border-left: 3px solid var(--r-warm);
+}
+.comm-post-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.comm-post-meta {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.comm-author-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13.5px;
+}
+.comm-pin-tag {
+  font-family: var(--r-mono);
+  font-size: 10.5px;
+  padding: 1px 5px;
+  color: var(--r-warm);
+  border: 1px solid var(--r-warm);
+  background: var(--r-warm-wash);
+}
+.comm-qq-tag {
+  font-family: var(--r-mono);
+  font-size: 11px;
+  color: var(--r-muted);
+}
+.comm-post-meta time {
+  display: block;
+  font-family: var(--r-mono);
+  font-size: 11px;
+  color: var(--r-faint);
+  margin-top: 2px;
+}
+.comm-anchor-pill {
+  padding: 1px 7px;
+  font-size: 11.5px;
+  border-color: var(--r-accent-rail);
+  background: var(--r-accent-wash);
+  color: var(--r-accent);
+}
+.comm-post-actions,
+.comm-reply-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: auto;
+}
+.comm-post-actions button,
+.comm-reply-actions button {
+  padding: 2px 8px;
+  min-height: 24px;
+  font-size: 11.5px;
+  background: transparent;
+  border-color: var(--r-line);
+  color: var(--r-muted);
+}
+.comm-post-actions button:hover,
+.comm-reply-actions button:hover {
+  color: var(--r-text);
+  border-color: var(--r-strong-line);
+}
+.comm-like-btn.is-liked {
+  color: var(--r-accent) !important;
+  border-color: var(--r-accent) !important;
+  background: var(--r-accent-wash) !important;
+}
+.comm-post-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14.5px;
+  line-height: 1.72;
+  color: var(--r-text);
+}
+
+.comm-replies {
+  margin-top: 2px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--r-strong-line);
+  background: var(--r-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.comm-reply-item {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--r-line);
+}
+.comm-reply-item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.comm-reply-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12.5px;
+  margin-bottom: 4px;
+}
+.comm-reply-target {
+  color: var(--r-accent);
+  font-size: 12px;
+}
+.comm-reply-head time {
+  font-family: var(--r-mono);
+  font-size: 11px;
+  color: var(--r-faint);
+}
+.comm-reply-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--r-text-soft);
+}
+
+/* ---------- 7. 右侧最新档案评论动态流 ---------- */
+.comm-side-panel {
+  border: 1px solid var(--r-line);
+  background: var(--r-panel);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.comm-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--r-line);
+}
+.comm-side-head h2 {
+  margin: 0;
+  font-size: 14.5px;
+}
+.comm-side-head button {
+  padding: 2px 8px;
+  font-size: 12px;
+  background: transparent;
+  border: 0;
+  color: var(--r-accent);
+}
+.comm-side-empty,
+.comm-empty-state {
+  padding: 20px 14px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--r-muted);
+  border: 1px dashed var(--r-line);
+}
+.comm-recent-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.comm-feed-item {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--r-line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.comm-feed-item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.comm-feed-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--r-muted);
+}
+.comm-feed-meta strong {
+  color: var(--r-text);
+}
+.comm-feed-target {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 3px 6px;
+  text-align: left;
+  border: 1px solid var(--r-line);
+  background: var(--r-bg);
+  font-size: 12px;
+}
+.comm-feed-doc {
+  color: var(--r-accent);
+  font-weight: 600;
+}
+.comm-feed-anchor {
+  color: var(--r-warm);
+  font-family: var(--r-mono);
+  font-size: 11px;
+}
+.comm-feed-excerpt {
+  margin: 0;
+  font-size: 13px;
+  color: var(--r-text-soft);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- 8. 阅读器底部序列评论区与能力卡动作高亮 ---------- */
+.archive-card-actions button.has-comments {
+  color: var(--r-accent);
+  border-color: var(--r-accent-rail);
+}
+.comm-resource-section {
+  margin-top: 28px;
+  padding: 20px 28px 8px;
+  border-top: 1px solid var(--r-strong-line);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+@container (min-width: 920px) {
+  .realm-reader-layout.has-outline .comm-resource-section {
+    padding-inline: 0;
+  }
+}
+.comm-res-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.comm-res-head h2 {
+  margin: 0;
+  font-size: 18px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.comm-res-head h2 span {
+  font-family: var(--r-mono);
+  font-size: 13px;
+  color: var(--r-accent);
+}
+.comm-anchor-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.comm-anchor-filter-bar button {
+  padding: 3px 9px;
+  font-size: 12px;
+}
+.comm-anchor-filter-bar button.active {
+  border-color: var(--r-accent);
+  color: var(--r-accent);
+  background: var(--r-accent-wash);
+}
+.comm-inline-toast {
+  padding: 7px 12px;
+  border-left: 3px solid var(--r-accent);
+  background: var(--r-accent-wash);
+  font-size: 13px;
+}
+.comm-error-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--red);
+  background: var(--red-bg);
+  font-size: 13px;
+}
+
+/* ---------- 9. 后台社区管理列表 ---------- */
+.comm-admin-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.comm-admin-row {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.comm-admin-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+}
+.comm-admin-target {
+  font-size: 12px;
+  color: var(--muted);
+}
+.comm-link-inline {
+  border: 0;
+  padding: 0 4px;
+  background: transparent;
+  color: var(--accent);
+  text-decoration: underline;
+}
+.comm-admin-content {
+  margin: 2px 0;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--sans);
+  font-size: 13px;
+}
+
+/* ---------- 10. 平板与手机端自适应 (<= 960px / <= 820px) ---------- */
+@media (max-width: 960px) {
+  .comm-board-container {
+    padding: 14px 12px 40px;
+  }
+  .comm-mobile-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .comm-mobile-tabs button {
+    min-height: 38px;
+    font-weight: 600;
+  }
+  .comm-mobile-tabs button.active {
+    border-color: var(--r-accent);
+    color: var(--r-accent);
+    background: var(--r-accent-wash);
+  }
+  .comm-board-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .comm-board-grid.mobile-board .comm-board-side {
+    display: none;
+  }
+  .comm-board-grid.mobile-recent .comm-board-main {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .realm-topbar nav button.comm-topbar-auth {
+    width: 100%;
+    justify-content: flex-start;
+    min-height: 44px !important;
+    margin-left: 0;
+  }
+  .comm-resource-section {
+    padding: 16px 12px 8px;
+  }
+  .comm-anchor-picker select {
+    max-width: 180px;
+  }
+  .comm-hero-bar {
+    padding: 14px 12px;
+  }
+  .comm-hero-main h1 {
+    font-size: 20px;
+  }
+}

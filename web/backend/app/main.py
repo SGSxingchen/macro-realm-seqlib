@@ -18,7 +18,7 @@ import uuid
 from pathlib import Path
 from typing import Annotated, Iterable, Literal
 
-from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
@@ -28,6 +28,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from text_encoding import decode_text_bytes, read_text as read_decoded_text
+from .community import CommunityStore, UpstreamAuthClient, build_community_router
 from .search import SearchIndex
 from .session_stats import SessionStatsService, SessionTextFile
 
@@ -38,6 +39,9 @@ SESSION_COOKIE = "seqlib_admin"
 NORMALIZATION_REVIEW_DIR = REPO_ROOT / "web" / "normalization_reviews"
 NORMALIZATION_SIGNATURES_REQUIRED = 1
 SESSION_STATS_DB = REPO_ROOT / "web" / "data" / "session_stats.sqlite"
+COMMUNITY_DB = Path(os.getenv("COMMUNITY_DB_PATH") or (REPO_ROOT / "web" / "data" / "community.sqlite"))
+COMMUNITY_STORE: CommunityStore | None = None
+UPSTREAM_AUTH_CLIENT: UpstreamAuthClient | None = None
 SESSION_STATS_SERVICE: SessionStatsService | None = None
 SESSION_STATS_EXTRACTOR = None
 SESSION_IMPORT_JOBS: dict[str, dict] = {}
@@ -154,8 +158,34 @@ def admin_password() -> str | None:
 
 
 def secret_key() -> bytes:
-    seed = os.getenv("ADMIN_SECRET") or admin_password() or "dev-unconfigured-secret"
+    seed = os.getenv("COMMUNITY_SECRET") or os.getenv("ADMIN_SECRET") or admin_password() or "dev-unconfigured-secret"
     return hashlib.sha256(seed.encode("utf-8")).digest()
+
+
+def community_store() -> CommunityStore:
+    global COMMUNITY_STORE
+    if COMMUNITY_STORE is None:
+        db_path = Path(os.getenv("COMMUNITY_DB_PATH") or COMMUNITY_DB)
+        COMMUNITY_STORE = CommunityStore(db_path)
+    return COMMUNITY_STORE
+
+
+def upstream_auth_client() -> UpstreamAuthClient:
+    global UPSTREAM_AUTH_CLIENT
+    if UPSTREAM_AUTH_CLIENT is None:
+        UPSTREAM_AUTH_CLIENT = UpstreamAuthClient()
+    return UPSTREAM_AUTH_CLIENT
+
+
+def is_admin_cookie_valid(request: Request) -> bool:
+    if not admin_password():
+        return False
+    return verify_token(request.cookies.get(SESSION_COOKIE))
+
+
+def resolve_public_resource_meta(rel_path: str) -> tuple[str, str]:
+    full = public_resource_path(rel_path, must_exist=True)
+    return rel_posix(full), title_for(full)
 
 
 def sign_payload(payload: dict) -> str:
@@ -452,7 +482,12 @@ def review_summary(review: dict) -> dict:
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "admin_configured": bool(admin_password()), "wiki_configured": wiki_credentials_configured()}
+    return {
+        "ok": True,
+        "admin_configured": bool(admin_password()),
+        "wiki_configured": wiki_credentials_configured(),
+        "qq_auth_configured": upstream_auth_client().configured(),
+    }
 
 
 @app.get("/api/session-stats/overview")
@@ -1451,3 +1486,15 @@ def publish(req: PublishRequest, _admin: None = Depends(require_admin)):
 # Independent tactical desk; does not modify the archive data model.
 from .tabletop import router as tabletop_router
 app.include_router(tabletop_router)
+
+# QQ 私聊验证码登录与社区留言板 / 资源评论模块（独立存储于 web/data/community.sqlite，不改动 TXT 资源文件）
+app.include_router(
+    build_community_router(
+        store_getter=community_store,
+        upstream_getter=upstream_auth_client,
+        secret_getter=secret_key,
+        is_admin_request=is_admin_cookie_valid,
+        resolve_public_resource=resolve_public_resource_meta,
+    ),
+    prefix="/api",
+)

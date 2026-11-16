@@ -225,6 +225,8 @@ export function AdaptiveSection({
   docTitle,
   onCopy,
   onShare,
+  onCommentAnchor,
+  commentCount = 0,
   idPrefix = '',
 }: {
   section: Section;
@@ -234,6 +236,8 @@ export function AdaptiveSection({
   idPrefix?: string;
   onCopy: (raw: string) => void;
   onShare: (id: string) => void;
+  onCommentAnchor?: (id: string, label: string) => void;
+  commentCount?: number;
 }) {
   const [showSource, setShowSource] = useState(false);
 
@@ -441,6 +445,15 @@ export function AdaptiveSection({
           <div className="archive-phase-actions archive-card-actions">
             <button type="button" onClick={() => onCopy(section.raw)}>复制原文</button>
             <button type="button" onClick={() => onShare(section.id)} aria-label={`分享定位：${section.title}`}>定位链接</button>
+            {onCommentAnchor && (
+              <button
+                type="button"
+                className={commentCount > 0 ? 'has-comments' : undefined}
+                onClick={() => onCommentAnchor(section.id, headingText)}
+              >
+                评论{commentCount > 0 ? ` (${commentCount})` : '此节'}
+              </button>
+            )}
             <button type="button" aria-expanded={showSource} onClick={() => setShowSource(v => !v)}>
               {showSource ? '关闭对照' : '原文对照'}
             </button>
@@ -512,6 +525,15 @@ export function AdaptiveSection({
         <div className="archive-card-actions">
           <button type="button" onClick={() => onCopy(section.raw)}>复制原文</button>
           <button type="button" onClick={() => onShare(section.id)} aria-label={`分享定位：${section.title}`}>定位链接</button>
+          {onCommentAnchor && (
+            <button
+              type="button"
+              className={commentCount > 0 ? 'has-comments' : undefined}
+              onClick={() => onCommentAnchor(section.id, displayEntryTitle)}
+            >
+              评论{commentCount > 0 ? ` (${commentCount})` : '此卡'}
+            </button>
+          )}
           <button type="button" aria-expanded={showSource} onClick={() => setShowSource(v => !v)}>
             {showSource ? '关闭对照' : '原文对照'}
           </button>

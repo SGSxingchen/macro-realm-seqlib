@@ -7,17 +7,51 @@ export function readLocation(href = window.location.href): LocationState {
   const url = new URL(href);
   const sp = url.searchParams;
   const tab = sp.get('tab');
+  const openPath = sp.get('open') || '';
+  const filters: SearchFilters = {
+    q: sp.get('q') || '',
+    category: sp.get('cat') || '',
+    kinds: sp.getAll('kinds').filter(Boolean),
+    sides: sp.getAll('sides').filter(Boolean),
+    authors: sp.getAll('authors').filter(Boolean),
+  };
+  const hasSearchIntent = Boolean(
+    openPath ||
+    filters.q ||
+    filters.category ||
+    filters.kinds.length ||
+    filters.sides.length ||
+    filters.authors.length
+  );
+  let resolvedTab: AppTab = 'board';
+  if (tab === 'admin' || tab === 'updates' || tab === 'stats' || tab === 'read' || tab === 'board') {
+    resolvedTab = tab;
+  } else if (hasSearchIntent) {
+    resolvedTab = 'read';
+  }
   return {
-    tab: tab === 'admin' || tab === 'updates' || tab === 'stats' ? tab : 'read',
-    filters: { q: sp.get('q') || '', category: sp.get('cat') || '', kinds: sp.getAll('kinds').filter(Boolean), sides: sp.getAll('sides').filter(Boolean), authors: sp.getAll('authors').filter(Boolean) },
-    openPath: sp.get('open') || '',
+    tab: resolvedTab,
+    filters,
+    openPath,
     anchor: url.hash.slice(1),
   };
 }
 
 export function locationUrl(state: LocationState): string {
   const sp = new URLSearchParams();
-  if (state.tab !== 'read') sp.set('tab', state.tab);
+  const hasSearchIntent = Boolean(
+    state.openPath ||
+    state.filters.q ||
+    state.filters.category ||
+    state.filters.kinds.length ||
+    state.filters.sides.length ||
+    state.filters.authors.length
+  );
+  if (state.tab === 'read') {
+    if (!hasSearchIntent) sp.set('tab', 'read');
+  } else if (state.tab !== 'board') {
+    sp.set('tab', state.tab);
+  }
   if (state.filters.q) sp.set('q', state.filters.q);
   if (state.filters.category) sp.set('cat', state.filters.category);
   for (const key of ['kinds', 'sides', 'authors'] as const) state.filters[key].forEach(value => sp.append(key, value));

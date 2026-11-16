@@ -1,13 +1,20 @@
 import { ThemeToggle } from './ThemeToggle';
 import { ResponsiveMenu } from './ResponsiveMenu';
-import type { AppTab } from '../types';
+import type { AppTab, CommunityViewerState } from '../types';
 
-type Props = { recordCount: number; tab: AppTab; onTab: (tab: AppTab) => void };
+type Props = {
+  recordCount: number;
+  tab: AppTab;
+  onTab: (tab: AppTab) => void;
+  viewer?: CommunityViewerState | null;
+  onOpenAuth?: () => void;
+};
 
-export function Header({ recordCount, tab, onTab }: Props) {
+export function Header({ recordCount, tab, onTab, viewer, onOpenAuth }: Props) {
+  const user = viewer?.user;
   return (
     <header className="topbar realm-topbar">
-      <button type="button" className="realm-brand" onClick={() => onTab('read')} aria-label="宏观界域 · 返回查阅">
+      <button type="button" className="realm-brand" onClick={() => onTab('board')} aria-label="宏观界域 · 返回首页留言板">
         <span className="realm-brand-mark" aria-hidden="true">∞</span>
         <span className="realm-brand-text">
           <strong>宏观界域<span>强化序列库</span></strong>
@@ -17,7 +24,8 @@ export function Header({ recordCount, tab, onTab }: Props) {
       <ResponsiveMenu label="导航" className="realm-nav-menu" closeOnSelect>
         <nav aria-label="主导航">
           {([
-            ['read', '查阅档案'],
+            ['board', '界域留言板'],
+            ['read', '序列检索'],
             ['updates', '最近更新'],
             ['stats', '结团统计'],
             ['admin', '后台'],
@@ -33,6 +41,24 @@ export function Header({ recordCount, tab, onTab }: Props) {
             </button>
           ))}
           <a href="/tabletop.html" className="tabletop-entry">战术桌 ↗</a>
+          {onOpenAuth && (
+            <button
+              type="button"
+              className={`comm-topbar-auth${user ? ' is-logged' : ''}`}
+              onClick={onOpenAuth}
+              title={user ? `${user.nickname}（QQ: ${user.qq}）` : '使用群内 QQ 私聊验证码登录'}
+            >
+              {user ? (
+                <>
+                  <img src={user.avatar_url} alt="" className="comm-topbar-avatar" referrerPolicy="no-referrer" />
+                  <span className="comm-topbar-nick">{user.nickname}</span>
+                  {user.badge && <em className="comm-topbar-badge">{user.badge}</em>}
+                </>
+              ) : (
+                'QQ 登录'
+              )}
+            </button>
+          )}
           <ThemeToggle />
         </nav>
       </ResponsiveMenu>

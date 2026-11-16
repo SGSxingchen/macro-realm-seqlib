@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Detail } from '../../types';
+import type { CommunityViewerState, Detail } from '../../types';
 import { copyText } from '../../library-state';
 import { buildDocument, resourceLink } from './adaptive';
 import { AdaptiveSection, extractRank } from './AdaptiveDocument';
+import { ResourceComments } from './ResourceComments';
+import type { AnchorTarget } from './ResourceComments';
 import { ResponsiveMenu } from '../ResponsiveMenu';
 import { sideKey } from '../ResourceCard';
 
@@ -33,6 +35,8 @@ type Props = {
   instance?: string;
   idPrefix?: string;
   welcome?: WelcomeHubData;
+  viewer?: CommunityViewerState | null;
+  onOpenAuth?: () => void;
 };
 
 type ReadingPreferences = { mode: 'adaptive' | 'raw'; find: string; findOpen: boolean; initialQuery: string };
@@ -244,6 +248,8 @@ function ReaderContent({
   onSave,
   instance = 'primary',
   idPrefix = '',
+  viewer,
+  onOpenAuth,
 }: Props & { detail: Detail }) {
   const sections = useMemo(() => buildDocument(detail.content), [detail.content]);
   const identity = `${instance}:${detail.path}`;
@@ -256,6 +262,8 @@ function ReaderContent({
   const [matchIndex, setMatchIndex] = useState(0);
   const [notice, setNotice] = useState('');
   const [activeSectionId, setActiveSectionId] = useState(() => anchor || sections[0]?.id || '');
+  const [pendingCommentAnchor, setPendingCommentAnchor] = useState<AnchorTarget | null>(null);
+  const [anchorCommentCounts, setAnchorCommentCounts] = useState<Record<string, number>>({});
   const scroll = useRef<HTMLDivElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
   const toc = useRef<HTMLDetailsElement>(null);
@@ -419,6 +427,12 @@ function ReaderContent({
   if (detail.side && detail.side !== detail.top_kind) kickerParts.push({ text: detail.side, side: sKey });
   if (!kickerParts.length && detail.category) kickerParts.push({ text: detail.category });
 
+  const jumpToComments = (anchorTarget?: AnchorTarget) => {
+    if (anchorTarget) setPendingCommentAnchor(anchorTarget);
+    const panel = scroll.current?.querySelector<HTMLElement>('#resource-comments-panel');
+    if (panel) reveal(panel);
+  };
+
   const showDesktopOutline = instance === 'primary' && mode === 'adaptive' && sections.length >= 2;
 
   return (
@@ -549,6 +563,9 @@ function ReaderContent({
                   <button type="button" onClick={() => copy(detail.content, '已复制完整原文')}>复制全文</button>
                   <button type="button" onClick={downloadTxt}>下载 TXT</button>
                   <button type="button" onClick={() => copy(resourceLink(detail.path), '已复制档案链接')}>分享档案</button>
+                  {instance === 'primary' && (
+                    <button type="button" onClick={() => jumpToComments()}>评论讨论</button>
+                  )}
                   <details className="doc-info-disclosure">
                     <summary>档案信息</summary>
                     <div className="doc-info-popover">
@@ -572,12 +589,30 @@ function ReaderContent({
                     query={activeQuery}
                     onCopy={text => copy(text)}
                     onShare={id => copy(resourceLink(detail.path, id), '已复制条目定位链接')}
+                    onCommentAnchor={
+                      instance === 'primary'
+                        ? (id, label) => jumpToComments({ id, label })
+                        : undefined
+                    }
+                    commentCount={anchorCommentCounts[section.id] || 0}
                   />
                 ))
               ) : (
                 <p>这份档案暂无正文。</p>
               )}
             </div>
+            {instance === 'primary' && (
+              <ResourceComments
+                resourcePath={detail.path}
+                sections={sections}
+                viewer={viewer}
+                onOpenAuth={onOpenAuth}
+                onJumpToAnchor={jump}
+                pendingAnchor={pendingCommentAnchor}
+                onClearPendingAnchor={() => setPendingCommentAnchor(null)}
+                onAnchorCountsChange={setAnchorCommentCounts}
+              />
+            )}
             <footer className="realm-document-footer">
               <span>
                 {mode === 'adaptive'

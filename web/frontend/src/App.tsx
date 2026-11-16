@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, buildQuery, routePath } from './api';
-import type { Detail, ResourceListResponse, SearchFilters, TreeNode } from './types';
+import type { CommunityViewerState, Detail, ResourceListResponse, SearchFilters, TreeNode } from './types';
 import { Header } from './components/Header';
 import { SearchBar } from './components/SearchBar';
 import { FilterRail } from './components/FilterRail';
@@ -11,6 +11,8 @@ import { AdminPanel } from './components/Admin';
 import { RecentUpdates } from './components/RecentUpdates';
 import { NormalizationReviewPage } from './components/NormalizationReview';
 import { SessionStats } from './components/SessionStats';
+import { CommunityBoard } from './components/CommunityBoard';
+import { QqLoginModal } from './components/QqLoginModal';
 import { emptyFilters, loadSaved, locationUrl, readLocation, saveResources } from './library-state';
 import type { LocationState } from './library-state';
 import { readPanePreferences, storePanePreferences } from './workbench-state';
@@ -38,6 +40,8 @@ function LibraryApp() {
   const [focus, setFocus] = useState(false);
   const [compareFocus, setCompareFocus] = useState(false);
   const [searchFocusTick, setSearchFocusTick] = useState(0);
+  const [viewer, setViewer] = useState<CommunityViewerState | null>(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
   // Comparison can free the sidebars without pretending to be explicit focus.
   // With no document open, always leave a usable search surface.
   const readingFocus = Boolean(nav.openPath) && focus;
@@ -116,6 +120,14 @@ function LibraryApp() {
   }, [refresh]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    api<CommunityViewerState>('/api/auth/me', { signal: controller.signal })
+      .then(setViewer)
+      .catch(() => { /* 无后端或测试 Mock 未覆盖时保持匿名只读状态 */ });
+    return () => controller.abort();
+  }, [refresh]);
+
+  useEffect(() => {
     const path = nav.openPath;
     const controller = new AbortController(); setDetailError(null);
     if (!path) { setDetail(null); setDetailLoading(false); return () => controller.abort(); }
@@ -176,21 +188,25 @@ function LibraryApp() {
   }, [nav.openPath, nav.tab, showResults, searchFocusTick]);
   useEffect(() => {
     const searchShortcut = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && navRef.current.tab === 'read') {
-        event.preventDefault(); revealSearch();
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        if (navRef.current.tab === 'board') {
+          navigate({ tab: 'read' });
+        }
+        revealSearch();
       }
     };
     window.addEventListener('keydown', searchShortcut);
     return () => window.removeEventListener('keydown', searchShortcut);
-  }, [revealSearch]);
+  }, [revealSearch, navigate]);
 
   const backToResults = () => {
     setFocus(false); setCompareFocus(false); setPanes(value => ({ ...value, results: true }));
     if (window.history.state?.realmFromResults) window.history.back();
     else navigate({ openPath: '', anchor: '' }, true);
   };
-  const openResource = useCallback((path: string) => {
-    navigate({ tab: 'read', openPath: path, anchor: '' });
+  const openResource = useCallback((path: string, anchor = '') => {
+    navigate({ tab: 'read', openPath: path, anchor });
     setDrawer(false);
   }, [navigate]);
   const changeFilters = useCallback((filters: SearchFilters) => {
@@ -258,8 +274,36 @@ function LibraryApp() {
 
   return (
     <main className={`app realm-app ${nav.tab === 'read' ? `realm-library${readingFocus ? ' realm-focus-reading' : ''}` : `realm-subpage ${nav.tab === 'admin' ? 'admin-mode' : ''}`}`}>
-      <Header recordCount={recordCount} tab={nav.tab} onTab={tab => { setDrawer(false); navigate({ tab }); }} />
-      {nav.tab === 'read' ? (
+      <Header
+        recordCount={recordCount}
+        tab={nav.tab}
+        onTab={tab => { setDrawer(false); navigate({ tab }); }}
+        viewer={viewer}
+        onOpenAuth={() => setAuthModalOpen(true)}
+      />
+      {nav.tab === 'board' ? (
+        <CommunityBoard
+          viewer={viewer}
+          recordCount={recordCount || response?.total || 0}
+          categories={welcomeHub.categories}
+          onOpenAuth={() => setAuthModalOpen(true)}
+          onEnterLibrary={(q = '', categoryPath = '') => {
+            const category = categoryPath.startsWith('序列库/') ? categoryPath.slice('序列库/'.length) : categoryPath;
+            setPanes(v => ({ ...v, results: true }));
+            navigate({
+              tab: 'read',
+              openPath: '',
+              anchor: '',
+              filters: { ...emptyFilters(), q, category },
+            });
+            if (!q && !category) {
+              focusSearchAfterNavigation.current = true;
+              setSearchFocusTick(v => v + 1);
+            }
+          }}
+          onOpenResource={(path, anchor) => openResource(path, anchor || '')}
+        />
+      ) : nav.tab === 'read' ? (
         <div className={`realm-reading-shell${nav.openPath ? ' is-reading' : ' is-browsing'}${showResults ? ' search-open' : ' search-collapsed'}`}>
           <div className="realm-layout-controls" aria-label="阅读布局">
             <button className="realm-index-toggle" aria-expanded={showIndex} aria-controls="realm-index-panel" onClick={() => togglePane('index')}>
@@ -374,6 +418,8 @@ function LibraryApp() {
               onAnchor={anchor => navigate({ anchor }, true)}
               onBrowse={revealSearch}
               welcome={welcomeHub}
+              viewer={viewer}
+              onOpenAuth={() => setAuthModalOpen(true)}
               saved={saved.some(item => item.path === nav.openPath)}
               onSave={() => {
                 if (!currentDetail) return;
@@ -445,8 +491,21 @@ function LibraryApp() {
           reload={reload}
           onResourceMoved={() => { navigate({ openPath: '', anchor: '' }, true); reload(); }}
           onBackToRead={() => navigate({ tab: 'read' })}
+          onOpenResource={(path, anchor) => openResource(path, anchor || '')}
+          isQqModerator={Boolean(viewer?.is_moderator)}
         />
       )}
+      <QqLoginModal
+        open={authModalOpen}
+        viewer={viewer}
+        onClose={() => setAuthModalOpen(false)}
+        onLoggedIn={nextViewer => {
+          setViewer(nextViewer);
+        }}
+        onLoggedOut={() => {
+          setViewer(prev => (prev ? { ...prev, authenticated: false, is_moderator: prev.admin_authenticated, user: null } : null));
+        }}
+      />
     </main>
   );
 }

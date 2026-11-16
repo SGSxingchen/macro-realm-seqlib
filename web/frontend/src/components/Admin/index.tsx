@@ -8,15 +8,23 @@ import { kb, suggestHonorCategory } from '../../utils';
 import { StatusBadge } from '../ui/StatusBadge';
 import { CommandSteps } from './CommandSteps';
 import { ChangeSummaryPanel } from './ChangeSummaryPanel';
+import { CommunityModerationPanel } from './CommunityModerationPanel';
 
 function HumanLog({ title, data }: { title: string; data: unknown }) {
   if (!data) return null;
   return <details className="raw-details admin-raw"><summary>{title}</summary><pre className="log terminal-scroll">{typeof data === 'string' ? data : JSON.stringify(data, null, 2)}</pre></details>;
 }
 
-type Props = { detail: Detail | null; reload: () => void; onResourceMoved: () => void; onBackToRead: () => void };
+type Props = {
+  detail: Detail | null;
+  reload: () => void;
+  onResourceMoved: () => void;
+  onBackToRead: () => void;
+  onOpenResource?: (path: string, anchor?: string) => void;
+  isQqModerator?: boolean;
+};
 
-export function AdminPanel({ detail, reload, onResourceMoved, onBackToRead }: Props) {
+export function AdminPanel({ detail, reload, onResourceMoved, onBackToRead, onOpenResource, isQqModerator }: Props) {
   const [me, setMe] = useState<AdminState>({ admin_configured: false, authenticated: false });
   const [password, setPassword] = useState('');
   const [tab, setTab] = useState<AdminTab>('overview');
@@ -88,13 +96,13 @@ export function AdminPanel({ detail, reload, onResourceMoved, onBackToRead }: Pr
     return data;
   };
 
-  if (!me.authenticated) return (
+  if (!me.authenticated && !isQqModerator) return (
     <section className="admin-card auth-panel console-auth">
       <div className="section-head">
         <div><p className="eyebrow">系统维护</p><h2>维护控制台接入</h2></div>
         <button type="button" className="ghost-toggle" onClick={onBackToRead}>返回查阅</button>
       </div>
-      <p className="hint">{me.admin_configured ? '输入 ADMIN_PASSWORD 后进入维护控制台。' : '未配置 ADMIN_PASSWORD，后台写操作禁用。'}</p>
+      <p className="hint">{me.admin_configured ? '输入 ADMIN_PASSWORD 进入全量控制台；或使用管理员白名单 QQ 登录后直接管理社区发言。' : '未配置 ADMIN_PASSWORD，后台文件写操作禁用；管理员白名单 QQ 登录后仍可管理社区。'}</p>
       <div className="row">
         <input type="password" placeholder="ADMIN_PASSWORD" value={password} onChange={e => setPassword(e.target.value)} />
         <button type="button" onClick={() => runAction('登录', async () => { const r = await api('/api/admin/login', { method: 'POST', body: JSON.stringify({ password }) }); setMe({ ...me, authenticated: true }); return r; })}>解锁控制台</button>
@@ -103,13 +111,36 @@ export function AdminPanel({ detail, reload, onResourceMoved, onBackToRead }: Pr
     </section>
   );
 
+  // 如果仅通过管理员 QQ 登录（未解锁 ADMIN_PASSWORD），仅展示安全的社区管理面板，不开放 git/文件写接口
+  if (!me.authenticated && isQqModerator) {
+    return (
+      <section className="admin-console">
+        <aside className="admin-nav">
+          <p className="eyebrow">社区管理</p>
+          <h2>QQ 管理员工作台</h2>
+          <button type="button" className="back-read" onClick={onBackToRead}>← 返回前台</button>
+          <button type="button" className="active">社区与留言管理</button>
+          <div className="console-mini">
+            <StatusBadge ok>QQ 管理员已认证</StatusBadge>
+          </div>
+        </aside>
+        <div className="admin-main terminal-scroll">
+          <div className="console-top">
+            <div><p className="eyebrow">社区治理</p><h2>留言板与评论管理</h2></div>
+          </div>
+          <CommunityModerationPanel onOpenResource={onOpenResource} />
+        </div>
+      </section>
+    );
+  }
+
   const dirty = !!gitInfo?.is_dirty;
   const ab = gitInfo?.ahead_behind;
   const normalizedVersion = version.startsWith('v') ? version : `v${version}`;
   const tagExists = !!gitInfo?.latest_tag && gitInfo.latest_tag === normalizedVersion;
   const headHasVersionTag = !!gitInfo?.head_tags?.includes(normalizedVersion);
   const tabs: Array<[AdminTab, string]> = [
-    ['overview', '总览'], ['edit', '资源编辑'], ['package', '发行文件'],
+    ['overview', '总览'], ['community', '社区管理'], ['edit', '资源编辑'], ['package', '发行文件'],
     ['changes', '变更摘要'], ['publish', '发布版本'], ['wiki', 'Wiki 同步'],
   ];
 
@@ -305,6 +336,9 @@ export function AdminPanel({ detail, reload, onResourceMoved, onBackToRead }: Pr
               {wikiResult ? <CommandSteps steps={[wikiResult]} /> : <p className="hint">尚未执行同步。</p>}
             </section>
           </div>
+        )}
+        {tab === 'community' && (
+          <CommunityModerationPanel onOpenResource={onOpenResource} />
         )}
         <HumanLog title="查看原始日志 / API 响应" data={rawLog} />
       </div>

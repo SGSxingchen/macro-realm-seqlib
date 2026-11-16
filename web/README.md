@@ -33,6 +33,15 @@ export ADMIN_PASSWORD='change-me'
 # 可选：独立 cookie 签名密钥；默认从 ADMIN_PASSWORD 派生
 export ADMIN_SECRET='long-random-secret'
 
+# QQ 私聊验证码登录与社区留言板必需：后端调用 https://trpg.chordvers.org/onebot-sequences 的 Bearer 密钥
+export ONEBOT_SEQUENCE_TOKEN='your-onebot-sequence-bearer-token'
+# 可选：自定义验证码服务基址（默认 https://trpg.chordvers.org/onebot-sequences）
+# export ONEBOT_SEQUENCE_BASE_URL='https://trpg.chordvers.org/onebot-sequences'
+# 可选：社区管理员 QQ 白名单（逗号或空格分隔），使用对应 QQ 登录后可在前台直接置顶/删评/禁言及访问社区管理台
+export COMMUNITY_ADMIN_QQS='1348697221,853304398'
+# 可选：独立社区会话 HMAC 密钥与 SQLite 存储路径（默认 web/data/community.sqlite）
+# export COMMUNITY_SECRET='long-random-community-secret'
+
 # Wiki 真实同步才需要；dry-run 可不配置（后端会传入占位参数满足脚本 argparse）
 export WIKI_USER='BotName'
 export WIKI_PASSWORD='...'
@@ -106,6 +115,31 @@ npm run dev
 - `POST /api/normalization/reviews/{id}/sign`：签名通过。body: `{ signer, note? }`
 
 审核任务以 JSON 文件保存在 `web/normalization_reviews/`。每个任务记录规范化前文本、规范化后文本、签名列表和状态；当前规则为凑齐 1 个签名即通过。
+
+### QQ 私聊验证码登录与社区（界域留言板 / 序列评论区）
+
+独立持久化于 `web/data/community.sqlite`（不改动任何 `序列库/`、`荣誉室/` TXT 源文件）：
+
+- **QQ 私聊验证码三步登录**（服务端持有 `ONEBOT_SEQUENCE_TOKEN`，`challenge_id` 与绑定 QQ 仅保存在服务端会话库，绝不暴露给浏览器或接受任意 `challenge_id` 兑换）：
+  - `GET /api/auth/me`：读取当前浏览器登录身份、管理员权限与挂起验证信息。
+  - `POST /api/auth/qq/challenges`：`{ "qq": "123456789" }`，先核验在主群 `672204828` 再发 `TRPG-...` 验证码。
+  - `GET /api/auth/qq/challenges/current`：轮询当前浏览器已绑定的验证状态（`pending` / `verified` / `expired` / `denied`）。
+  - `POST /api/auth/qq/challenges/consume`：状态变为 `verified` 后一次性原子消费，同时核验在群与 `.xlsx` 角色卡上传资格，通过后建立 30 天 HttpOnly 会话。
+  - `POST /api/auth/logout`：销毁当前浏览器会话。
+- **独立主页留言板与序列评论区**（未登录公开只读，群成员登录后发言、回复、点赞共鸣、关联能力卡锚点）：
+  - `GET /api/community/home`：主页公共留言流（置顶优先 + 楼中楼）与右侧全站最新序列评论动态流。
+  - `POST /api/community/board`：发表主页留言或回复。
+  - `GET /api/community/comments?path=序列库/...&anchor_id=&sort=latest|hot|oldest`：读取指定序列评论与各能力卡锚点评论计数。
+  - `POST /api/community/comments`：发表序列评论（可选绑定 `anchor_id` / `anchor_label` 到具体能力卡，或 `reply_to_id` 楼中楼回复）。
+  - `POST /api/community/posts/{id}/like`：切换点赞/共鸣。
+  - `DELETE /api/community/posts/{id}`：作者本人或管理员删除发言（主楼删除时同步归档下属回复）。
+  - `POST /api/community/posts/{id}/pin`：管理员置顶/取消置顶主楼。
+- **社区管理后台**（支持 `ADMIN_PASSWORD` 维护控制台「社区管理」页签，以及 `COMMUNITY_ADMIN_QQS` 白名单/协管 QQ）：
+  - `GET /api/community/moderation/posts`：按版块、状态（含已删归档）、关键词/QQ 审计全部发言。
+  - `GET /api/community/moderation/users`：查看已登录群成员、角色卡数、发言数与封禁状态。
+  - `POST /api/community/moderation/ban`：按时长（24h / 72h / 7d / 永久）禁言或解封指定 QQ（支持未登录过的 QQ 预先拉黑）。
+  - `POST /api/community/moderation/users/{qq}/role`：授予或撤销社区协管身份。
+  - `POST /api/community/moderation/announcement`：直接以系统或维护者身份发布主页置顶公告。
 
 ### 后台鉴权
 

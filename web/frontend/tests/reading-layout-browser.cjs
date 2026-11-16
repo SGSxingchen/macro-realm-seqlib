@@ -32,6 +32,8 @@ async function setup(browser, width, height = 844, storedPanes) {
     const url = new URL(route.request().url());
     let data, status = 200;
     if (url.pathname === '/api/tree') data = { items: [{ name: '序列库', path: '序列库', count: 3, children: [] }] };
+    else if (url.pathname === '/api/auth/me') data = { authenticated: false, auth_configured: true, bot_qq: '3239195029', group_id: 672204828, admin_authenticated: false, is_moderator: false, user: null };
+    else if (url.pathname === '/api/community/comments') data = { items: [], count: 0, total_threads: 0, total_posts: 0, anchor_counts: {}, limit: 50, offset: 0 };
     else if (url.pathname === '/api/resources') {
       const items = resources.filter(item => !url.searchParams.get('q') || item.title.includes(url.searchParams.get('q')));
       data = { items, count: items.length, total: items.length, offset: 0, limit: 100, tokens: [], facets: { kinds: [], sides: [], authors: [] } };
@@ -44,7 +46,7 @@ async function setup(browser, width, height = 844, storedPanes) {
   });
   const page = await context.newPage();
   page.setDefaultTimeout(12000);
-  await page.goto(base);
+  await page.goto(base + '/?tab=read');
   await page.locator('[data-resource-index="0"]').waitFor();
   return { page, context, errors };
 }
