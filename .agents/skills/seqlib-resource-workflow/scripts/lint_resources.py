@@ -43,13 +43,14 @@ NUMBERED_PREFIX_RE = re.compile(r"^\d{3}】.+")
 
 STANDARD_ROLES = {"制作人", "调整人", "修改人", "重置人", "审核人"}
 COMPAT_ROLES = STANDARD_ROLES | {
-    "制作者", "投稿人", "作者", "二次制作", "审核", "审核者", "复查人", "文本优化", "更新人", "翻修人", "协力"
+    "制作者", "投稿人", "作者", "创作者", "码字者", "二次制作",
+    "审核", "审核者", "审核员", "复查人", "文本优化", "优化人", "加强人", "更新人", "翻修人", "协力",
 }
 ROLE_GROUP = "|".join(sorted(COMPAT_ROLES, key=len, reverse=True))
 
 PAREN_CREDIT_RE = re.compile(rf"^[ \t]*[（(]\s*({ROLE_GROUP})\s*[：:][^）)\r\n]+[）)][ \t]*$")
 BARE_CREDIT_RE = re.compile(rf"^[ \t]*({ROLE_GROUP})\s*[：:]\s*\S+")
-BRACKET_CREDIT_RE = re.compile(rf"^[ \t]*[\[［【〖]\s*({ROLE_GROUP})\s*[：:]([^\]］】〗\r\n]+)[\]］】〗][ \t]*$")
+BRACKET_CREDIT_RE = re.compile(rf"^[ \t]*[\[［【〖〔]\s*({ROLE_GROUP})\s*[：:]([^\]］】〗〕\r\n]+)[\]］】〗〕][ \t]*$")
 
 CHANGELOG_STD_RE = re.compile(
     r"^[ \t]*【\s*(\d{2,4}[./-]\d{1,2}(?:[./-]\d{1,2})?)\s*[：:](.+?)】(?:\s*[（(].*[）)])?[ \t]*$"
@@ -72,10 +73,10 @@ CHANGELOG_UNDATED_RAW_RE = re.compile(
 
 CARD_STARTER_STD_RE = re.compile(r"^[ \t]*\[([^\]\r\n]{0,12}名称)\][ \t]*[：:][ \t]*(.*)$")
 CARD_STARTER_COMPAT_RE = re.compile(
-    r"^[ \t]*(?:【([^】\r\n]{0,12}名称)】|［([^］\r\n]{0,12}名称)］|〖([^〗\r\n]{0,12}名称)〗)[ \t]*[：:][ \t]*(.*)$"
+    r"^[ \t]*(?:【([^】\r\n]{0,12}名称)】|［([^］\r\n]{0,12}名称)］|〖([^〗\r\n]{0,12}名称)〗|〔([^〕\r\n]{0,12}名称)〕)[ \t]*[：:][ \t]*(.*)$"
 )
 
-LENTICULAR_FIELD_RE = re.compile(r"^[ \t]*〖([^〗\r\n]{1,24})〗[ \t]*[：:]?")
+LENTICULAR_FIELD_RE = re.compile(r"^[ \t]*[〖〔]([^〗〕\r\n]{1,24})[〗〕][ \t]*[：:]?")
 MIXED_BRACKET_FIELD_RE = re.compile(
     r"^[ \t]*(?:\[([^\]］】\r\n]{1,24})[］】]|[［【]([^\]］】\r\n]{1,24})\])[ \t]*[：:]"
 )
@@ -213,7 +214,9 @@ def match_any_card_starter(line: str) -> tuple[str, str] | None:
             return m_compat.group(1).strip(), "heavy"
         if m_compat.group(2) is not None:
             return m_compat.group(2).strip(), "fullwidth"
-        return m_compat.group(3).strip(), "lenticular"
+        for g in m_compat.groups()[2:]:
+            if g is not None:
+                return g.strip(), "compat"
     return None
 
 
@@ -397,7 +400,12 @@ def check_txt_file(path: Path, rel_path: str, strict: bool, new_submission: bool
     is_trait_file = "特质改造" in path.parts
     is_energy_pool_file = "能量池" in path.parts
     is_public_building = "公共建筑" in path.parts
-    is_annotation_only = "注解" in path.stem or "详解" in path.stem
+    parent_body = re.sub(r"^\d+】", "", path.parent.name)
+    self_body = re.sub(r"^\d+】", "", path.stem)
+    is_series_overview = bool(re.match(r"^\d+】", path.parent.name)) and (
+        self_body == parent_body or any(kw in path.stem for kw in ("规则", "总纲", "简介", "目录"))
+    )
+    is_annotation_only = "注解" in path.stem or "详解" in path.stem or is_series_overview
 
     first_non_empty_idx = next((i for i, l in enumerate(lines) if l.strip()), 0)
     first_line = lines[first_non_empty_idx].strip()
