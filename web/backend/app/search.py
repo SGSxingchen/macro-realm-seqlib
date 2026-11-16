@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable
 
 from text_encoding import read_text as read_decoded_text
-from .author_aliases import canonical_author
+from .author_aliases import NON_AUTHOR_CREDITS, canonical_author, is_known_author
 
 try:
     from pypinyin import lazy_pinyin, Style  # type: ignore
@@ -61,6 +61,7 @@ AUTHOR_ROLE_PATTERN = "|".join(map(re.escape, AUTHOR_ROLES))
 AUTHOR_LINE_RE = re.compile(
     rf"[（(]\s*(?P<role>{AUTHOR_ROLE_PATTERN})\s*[：:]\s*(?P<names>.*?)\s*[)）](?=\s*(?:[（(]\s*(?:{AUTHOR_ROLE_PATTERN})\s*[：:]|$))"
 )
+INLINE_ROLE_RE = re.compile(rf"^({AUTHOR_ROLE_PATTERN})\s*[：:]\s*(.*)$")
 SIDE_NAMES = ("战技侧", "神秘侧", "科技侧", "特殊侧")
 
 
@@ -95,17 +96,44 @@ def pinyin_of(text: str) -> tuple[str, str]:
     return (full, initials)
 
 
+def _split_credit_names(text: str) -> list[str]:
+    """只切最外层分隔符，保留括号内的名字、QQ 与备注。"""
+    names: list[str] = []
+    depth = 0
+    start = 0
+    for i, char in enumerate(text):
+        if char in "（([【":
+            depth += 1
+        elif char in "）)]】":
+            depth = max(0, depth - 1)
+        elif depth == 0 and char in "、,，;；":
+            names.append(text[start:i].strip())
+            start = i + 1
+    names.append(text[start:].strip())
+    return names
+
+
 def extract_authors(content: str) -> tuple[str, ...]:
     """提取制作、修改等创作署名，排除审核/复查，兼容姓名后的 QQ 括号。"""
     authors: set[str] = set()
     for line in content.splitlines():
         for match in AUTHOR_LINE_RE.finditer(line):
-            # 保留审核角色的解析边界，避免同一行的制作署名被漏掉或混入审核人。
-            if match.group("role") in ("审核人", "复查人"):
+            # 同一括号可能混写制作与审核角色，逐段判断，不跳过整行。
+            role = match.group("role")
+            # 已登记的复合署名可能自带逗号，先整体查词典，避免拆成两个人。
+            full_name = match.group("names").strip()
+            canonical = canonical_author(full_name)
+            if role not in ("审核人", "复查人") and is_known_author(full_name):
+                authors.add(canonical)
                 continue
-            for name in re.split(r"[、,，;；]+", match.group("names")):
+            for name in _split_credit_names(match.group("names")):
+                inline_role = INLINE_ROLE_RE.match(name)
+                if inline_role:
+                    role, name = inline_role.groups()
                 cleaned = name.strip()
-                if cleaned:
+                if role in ("审核人", "复查人"):
+                    continue
+                if cleaned and cleaned not in NON_AUTHOR_CREDITS:
                     authors.add(canonical_author(cleaned))
     return tuple(sorted(authors))
 
