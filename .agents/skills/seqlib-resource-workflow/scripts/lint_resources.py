@@ -397,7 +397,12 @@ def check_txt_file(path: Path, rel_path: str, strict: bool, new_submission: bool
     is_trait_file = "特质改造" in path.parts
     is_energy_pool_file = "能量池" in path.parts
     is_public_building = "公共建筑" in path.parts
-    is_annotation_only = "注解" in path.stem or "详解" in path.stem
+    parent_body = re.sub(r"^\d+】", "", path.parent.name)
+    self_body = re.sub(r"^\d+】", "", path.stem)
+    is_series_overview = bool(re.match(r"^\d+】", path.parent.name)) and (
+        self_body == parent_body or any(kw in path.stem for kw in ("规则", "总纲", "简介", "目录"))
+    )
+    is_annotation_only = "注解" in path.stem or "详解" in path.stem or is_series_overview
 
     first_non_empty_idx = next((i for i, l in enumerate(lines) if l.strip()), 0)
     first_line = lines[first_non_empty_idx].strip()
