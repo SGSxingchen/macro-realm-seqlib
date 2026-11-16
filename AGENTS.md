@@ -46,6 +46,10 @@ macro-realm-seqlib/
 2. **`seqlib-release`**（`.agents/skills/seqlib-release/SKILL.md`）：
    - 准备版本发布、批量重排编号、更新编者注/更新日志/`build_config.json`、构建 CHM/ZIP 及同步 Wiki 与在线站时激活。
 
+## 功能维护说明
+
+- [创作者别名词典](docs/creator-aliases.md)：标准名、明确别名、同资源去重与旧筛选链接兼容。
+
 ## 构建系统
 
 ### 构建命令
