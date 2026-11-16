@@ -52,6 +52,9 @@ def test_create_zip_uses_configured_root_files(tmp_path: Path):
     touch(tmp_path, "第八批下架名单.txt")
     (tmp_path / "序列库").mkdir()
     touch(tmp_path / "序列库", "001】示例.txt")
+    (tmp_path / "序列库" / ".obsidian").mkdir()
+    touch(tmp_path / "序列库" / ".obsidian", "workspace.json")
+    touch(tmp_path / "序列库", "desktop.ini")
     output_path = tmp_path / "out.zip"
     root_files_config = {
         "6.5序列库编者注.txt",
@@ -74,6 +77,8 @@ def test_create_zip_uses_configured_root_files(tmp_path: Path):
     assert "6.4序列库编者注.txt" not in names
     assert "第八批下架名单.txt" not in names
     assert "序列库/001】示例.txt" in names
+    assert "序列库/.obsidian/workspace.json" not in names
+    assert "序列库/desktop.ini" not in names
 
 
 def test_repository_has_independent_v66_release_files():
@@ -90,3 +95,19 @@ def test_repository_has_independent_v66_release_files():
     }
     assert all((repo_root / name).is_file() for name in root_files_config)
     assert "V6.5序列库更新日志.txt" not in root_files_config
+
+
+def test_repository_has_independent_v68_release_files():
+    repo_root = Path(__file__).resolve().parents[1]
+    config = load_build_config(repo_root)
+    root_files_config = configured_root_files(config, "v6.8")
+
+    assert root_files_config == {
+        "6.8序列库编者注.txt",
+        "V6.8序列库更新日志.txt",
+        "第十三批下架名单.txt",
+        "第十四批下架名单.txt",
+        "资源标准模板.txt",
+    }
+    assert all((repo_root / name).is_file() for name in root_files_config)
+    assert "V6.7序列库更新日志.txt" not in root_files_config

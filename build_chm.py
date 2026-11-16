@@ -39,6 +39,7 @@ CHM_CONTENT_DIRS = ["序列库"]
 # ZIP 包含全部
 ZIP_CONTENT_DIRS = ["序列库", "荣誉室"]
 ROOT_EXTENSIONS = {".txt", ".html", ".htm", ".docx", ".doc", ".xlsx"}
+IGNORED_SYSTEM_FILENAMES = {"desktop.ini", "thumbs.db", ".ds_store"}
 DEFAULT_TITLE = "序列库"
 BUILD_CONFIG_FILE = "build_config.json"
 VERSIONED_ROOT_FILE_RE = re.compile(r"^(?:V)?(?P<version>\d+(?:\.\d+)*)序列库(?:编者注|更新日志)\.", re.IGNORECASE)
@@ -280,6 +281,14 @@ def make_fallback_html(name: str, ext: str) -> str:
 # ============================================================
 
 
+def is_ignored_content_path(rel_path: Path) -> bool:
+    """过滤隐藏目录/文件（如 .obsidian、.DS_Store）及系统脏文件（desktop.ini、Thumbs.db）。"""
+    for part in rel_path.parts:
+        if part.startswith(".") or part.lower() in IGNORED_SYSTEM_FILENAMES:
+            return True
+    return False
+
+
 def scan_source_files(
     source_dir: Path,
     content_dirs: list,
@@ -302,8 +311,9 @@ def scan_source_files(
             print(f"  [!] 目录不存在，跳过: {dir_name}")
             continue
         for f in sorted(content_dir.rglob("*"), key=lambda p: sort_key(p.name)):
-            if f.is_file() and f.suffix.lower() in supported:
-                files[f.relative_to(source_dir)] = f
+            rel = f.relative_to(source_dir)
+            if f.is_file() and not is_ignored_content_path(rel) and f.suffix.lower() in supported:
+                files[rel] = f
 
     return files
 
@@ -634,8 +644,9 @@ def create_zip(
             if not content_dir.is_dir():
                 continue
             for f in sorted(content_dir.rglob("*")):
-                if f.is_file():
-                    zf.write(f, str(f.relative_to(source_dir)))
+                rel = f.relative_to(source_dir)
+                if f.is_file() and not is_ignored_content_path(rel):
+                    zf.write(f, str(rel))
                     count += 1
 
         for f in sorted(source_dir.iterdir(), key=lambda p: sort_key(p.name)):
