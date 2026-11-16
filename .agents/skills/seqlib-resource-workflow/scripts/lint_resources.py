@@ -43,13 +43,14 @@ NUMBERED_PREFIX_RE = re.compile(r"^\d{3}】.+")
 
 STANDARD_ROLES = {"制作人", "调整人", "修改人", "重置人", "审核人"}
 COMPAT_ROLES = STANDARD_ROLES | {
-    "制作者", "投稿人", "作者", "二次制作", "审核", "审核者", "复查人", "文本优化", "更新人", "翻修人", "协力"
+    "制作者", "投稿人", "作者", "创作者", "码字者", "二次制作",
+    "审核", "审核者", "审核员", "复查人", "文本优化", "优化人", "加强人", "更新人", "翻修人", "协力",
 }
 ROLE_GROUP = "|".join(sorted(COMPAT_ROLES, key=len, reverse=True))
 
 PAREN_CREDIT_RE = re.compile(rf"^[ \t]*[（(]\s*({ROLE_GROUP})\s*[：:][^）)\r\n]+[）)][ \t]*$")
 BARE_CREDIT_RE = re.compile(rf"^[ \t]*({ROLE_GROUP})\s*[：:]\s*\S+")
-BRACKET_CREDIT_RE = re.compile(rf"^[ \t]*[\[［【〖]\s*({ROLE_GROUP})\s*[：:]([^\]］】〗\r\n]+)[\]］】〗][ \t]*$")
+BRACKET_CREDIT_RE = re.compile(rf"^[ \t]*[\[［【〖〔]\s*({ROLE_GROUP})\s*[：:]([^\]］】〗〕\r\n]+)[\]］】〗〕][ \t]*$")
 
 CHANGELOG_STD_RE = re.compile(
     r"^[ \t]*【\s*(\d{2,4}[./-]\d{1,2}(?:[./-]\d{1,2})?)\s*[：:](.+?)】(?:\s*[（(].*[）)])?[ \t]*$"
@@ -72,10 +73,10 @@ CHANGELOG_UNDATED_RAW_RE = re.compile(
 
 CARD_STARTER_STD_RE = re.compile(r"^[ \t]*\[([^\]\r\n]{0,12}名称)\][ \t]*[：:][ \t]*(.*)$")
 CARD_STARTER_COMPAT_RE = re.compile(
-    r"^[ \t]*(?:【([^】\r\n]{0,12}名称)】|［([^］\r\n]{0,12}名称)］|〖([^〗\r\n]{0,12}名称)〗)[ \t]*[：:][ \t]*(.*)$"
+    r"^[ \t]*(?:【([^】\r\n]{0,12}名称)】|［([^］\r\n]{0,12}名称)］|〖([^〗\r\n]{0,12}名称)〗|〔([^〕\r\n]{0,12}名称)〕)[ \t]*[：:][ \t]*(.*)$"
 )
 
-LENTICULAR_FIELD_RE = re.compile(r"^[ \t]*〖([^〗\r\n]{1,24})〗[ \t]*[：:]?")
+LENTICULAR_FIELD_RE = re.compile(r"^[ \t]*[〖〔]([^〗〕\r\n]{1,24})[〗〕][ \t]*[：:]?")
 MIXED_BRACKET_FIELD_RE = re.compile(
     r"^[ \t]*(?:\[([^\]］】\r\n]{1,24})[］】]|[［【]([^\]］】\r\n]{1,24})\])[ \t]*[：:]"
 )
