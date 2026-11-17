@@ -28,7 +28,14 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from text_encoding import decode_text_bytes, read_text as read_decoded_text
-from .community import CommunityStore, UpstreamAuthClient, build_community_router, compute_resource_key
+from .community import (
+    BROWSER_COOKIE,
+    CommunityStore,
+    UpstreamAuthClient,
+    build_community_router,
+    compute_resource_key,
+    parse_admin_qqs,
+)
 from .search import SearchIndex
 from .session_stats import SessionStatsService, SessionTextFile
 
@@ -46,6 +53,16 @@ SESSION_STATS_SERVICE: SessionStatsService | None = None
 SESSION_STATS_EXTRACTOR = None
 SESSION_IMPORT_JOBS: dict[str, dict] = {}
 SESSION_IMPORT_JOBS_LOCK = threading.Lock()
+SESSION_AUTO_SYNC_STOP = threading.Event()
+SESSION_AUTO_SYNC_STATE: dict[str, object] = {
+    "enabled": False,
+    "interval_seconds": 300,
+    "last_run_at": None,
+    "last_success_at": None,
+    "last_error": "",
+    "last_synced_months": [],
+    "last_imported_count": 0,
+}
 
 app = FastAPI(title="宏观界域强化序列库 Web API", version="0.2.0")
 app.add_middleware(
@@ -67,6 +84,12 @@ def _warm_index() -> None:
     except Exception:
         # 启动期失败不阻塞服务，首个查询会再尝试构建
         pass
+    _maybe_start_session_report_auto_sync()
+
+
+@app.on_event("shutdown")
+def _stop_auto_sync() -> None:
+    SESSION_AUTO_SYNC_STOP.set()
 
 
 def read_text(path: Path) -> tuple[str, str]:
@@ -238,6 +261,31 @@ def require_admin(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)
         raise HTTPException(401, "需要管理员登录")
 
 
+def is_stats_manager_request(request: Request) -> bool:
+    if is_admin_cookie_valid(request):
+        return True
+    raw_sid = request.cookies.get(BROWSER_COOKIE)
+    sess = community_store().get_session(raw_sid, secret_key())
+    if not sess or not sess.get("user_qq"):
+        return False
+    user = community_store().get_user(str(sess["user_qq"]))
+    if not user:
+        return False
+    until = int(user.get("banned_until") or 0)
+    if until == -1 or until > int(time.time()):
+        return False
+    qq = str(user["qq"])
+    return qq in parse_admin_qqs() or user.get("role") == "moderator"
+
+
+def require_stats_manager(request: Request) -> None:
+    if is_stats_manager_request(request):
+        return
+    if not admin_password() and not parse_admin_qqs():
+        raise HTTPException(503, "未配置 ADMIN_PASSWORD，后台写操作已禁用")
+    raise HTTPException(401, "需要管理员登录或使用社区管理 QQ 登录")
+
+
 def session_stats_service() -> SessionStatsService:
     global SESSION_STATS_SERVICE
     if SESSION_STATS_SERVICE is None:
@@ -330,6 +378,240 @@ def run_session_import_job(job_id: str, month: str, files: list[SessionTextFile]
         current_filename="",
         error="",
     )
+
+
+SESSION_SYNC_RUN_LOCK = threading.Lock()
+
+
+def fetch_group_report_months() -> dict:
+    client = upstream_auth_client()
+    if not client.configured():
+        return {"configured": False, "items": [], "stale": True, "last_error": "未配置 ONEBOT_SEQUENCE_TOKEN"}
+    try:
+        code, data = client.request("/v1/session-reports/months", method="GET")
+    except Exception as exc:
+        return {"configured": True, "items": [], "stale": True, "last_error": str(exc) or "无法连接缓存服务"}
+    if code != 200:
+        return {
+            "configured": True,
+            "items": [],
+            "stale": True,
+            "last_error": str(data.get("message") or data.get("error") or f"HTTP {code}"),
+        }
+    return {
+        "configured": True,
+        "items": data.get("items") or [],
+        "stale": bool(data.get("stale")),
+        "last_success": data.get("last_success"),
+        "last_error": data.get("last_error"),
+        "revision": data.get("revision"),
+    }
+
+
+def collect_pending_group_report_files(month: str, *, force_retry_errors: bool = False) -> tuple[list[SessionTextFile], int]:
+    """从 onebot-sequence-cache 拉取指定月份的结团文件元数据与正文；仅下载尚未成功入库或内容已变更的文件。
+    返回 (待解析文件列表, 已入库直接跳过数)。
+    """
+    client = upstream_auth_client()
+    if not client.configured():
+        raise RuntimeError("服务器未配置 ONEBOT_SEQUENCE_TOKEN")
+
+    svc = session_stats_service()
+    error_hashes: set[str] = set()
+    if not force_retry_errors:
+        # 自动增量轮询时不反复重跑同一份已记录失败的坏文件，避免空烧 LLM token；网页手动勾选重试时可强刷
+        error_hashes = {str(e.get("content_hash") or "") for e in svc.list_errors(month) if e.get("content_hash")}
+
+    all_meta: list[dict] = []
+    offset = 0
+    while True:
+        code, page = client.request(
+            "/v1/session-reports",
+            method="GET",
+            params={"month": month, "limit": 200, "offset": offset},
+        )
+        if code != 200:
+            msg = str(page.get("message") or page.get("error") or f"HTTP {code}")
+            raise RuntimeError(f"无法读取群结团文件缓存：{msg}")
+        batch = page.get("items") or []
+        all_meta.extend(batch)
+        offset += len(batch)
+        if not batch or offset >= int(page.get("total") or 0):
+            break
+
+    pending_files: list[SessionTextFile] = []
+    pre_skipped = 0
+    for item in all_meta:
+        if not item.get("text_available"):
+            continue
+        rep_id = str(item.get("id") or "")
+        file_id = str(item.get("file_id") or "") or None
+        file_name = str(item.get("file_name") or "未命名.txt")
+        if not rep_id:
+            continue
+        c_code, detail = client.request(f"/v1/session-reports/{rep_id}/content", method="GET")
+        if c_code != 200 or not isinstance(detail.get("content"), str):
+            continue
+        content = detail["content"]
+        content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        if svc.has_imported_report(month=month, source_file_id=file_id, content_hash=content_hash):
+            pre_skipped += 1
+            continue
+        if not force_retry_errors and content_hash in error_hashes:
+            pre_skipped += 1
+            continue
+        pending_files.append(
+            SessionTextFile(
+                filename=file_name,
+                content=content,
+                source_file_id=file_id,
+                uploader_qq=str(item.get("uploader_qq") or "") or None,
+                uploader_name=str(item.get("uploader_name") or "") or None,
+            )
+        )
+    return pending_files, pre_skipped
+
+
+def run_group_report_sync_job(
+    job_id: str,
+    month: str,
+    model_name: str,
+    concurrency: int,
+    force_retry_errors: bool,
+) -> None:
+    if not SESSION_SYNC_RUN_LOCK.acquire(blocking=False):
+        update_import_job(job_id, status="failed", error="当前已有结团同步任务正在执行，请稍候")
+        return
+    try:
+        update_import_job(job_id, status="running", current_filename="正在从群文件缓存检查新增结团报告…")
+        files, pre_skipped = collect_pending_group_report_files(month, force_retry_errors=force_retry_errors)
+        total = len(files) + pre_skipped
+        update_import_job(
+            job_id,
+            total_count=total,
+            processed_count=pre_skipped,
+            skip_count=pre_skipped,
+            current_filename="",
+        )
+        if not files:
+            update_import_job(
+                job_id,
+                status="completed",
+                total_count=total,
+                processed_count=total,
+                success_count=0,
+                failure_count=0,
+                skip_count=pre_skipped,
+                current_filename="",
+                error="",
+            )
+            return
+
+        def on_progress(item: dict, processed_count: int, success_count: int, failure_count: int) -> None:
+            current = str(item.get("filename") or "")
+            with SESSION_IMPORT_JOBS_LOCK:
+                job = SESSION_IMPORT_JOBS.get(job_id)
+                if not job:
+                    return
+                job["processed_count"] = pre_skipped + processed_count
+                job["success_count"] = success_count
+                job["failure_count"] = failure_count
+                if item.get("skipped") is True:
+                    job["skip_count"] = int(job.get("skip_count") or 0) + 1
+                job["current_filename"] = current
+                job.setdefault("items", []).append(item)
+                job["updated_at"] = now_iso()
+
+        result = session_stats_service().import_text_files(
+            month,
+            files,
+            extractor=session_stats_extractor(),
+            model_name=model_name,
+            concurrency=concurrency,
+            progress_callback=on_progress,
+        )
+        update_import_job(
+            job_id,
+            status="completed",
+            total_count=total,
+            processed_count=total,
+            success_count=result["success_count"],
+            failure_count=result["failure_count"],
+            skip_count=pre_skipped + int(result.get("skip_count") or 0),
+            items=result["items"],
+            current_filename="",
+            error="",
+        )
+    except Exception as exc:
+        update_import_job(job_id, status="failed", error=str(exc) or exc.__class__.__name__, current_filename="")
+    finally:
+        SESSION_SYNC_RUN_LOCK.release()
+
+
+def _auto_sync_loop(interval_seconds: int) -> None:
+    # 启动后稍等 15 秒再首次检查，避免阻塞冷启动
+    if SESSION_AUTO_SYNC_STOP.wait(15):
+        return
+    while not SESSION_AUTO_SYNC_STOP.is_set():
+        SESSION_AUTO_SYNC_STATE["last_run_at"] = now_iso()
+        try:
+            months_info = fetch_group_report_months()
+            items = months_info.get("items") or []
+            # 自动跟进最新 2 个月份目录（随月份增长自动切换到新月份目录，同时兼顾月初补交上月尾团）
+            target_months = [str(m["month"]) for m in items[:2] if isinstance(m, dict) and m.get("month")]
+            imported_total = 0
+            ran_sync = True
+            for m in target_months:
+                if SESSION_AUTO_SYNC_STOP.is_set():
+                    break
+                if not SESSION_SYNC_RUN_LOCK.acquire(blocking=False):
+                    ran_sync = False
+                    break
+                try:
+                    model_name = os.getenv("OPENAI_MODEL", "deepseek-v4-pro")
+                    files, _skipped = collect_pending_group_report_files(m, force_retry_errors=False)
+                    if files:
+                        res = session_stats_service().import_text_files(
+                            m,
+                            files,
+                            extractor=session_stats_extractor(),
+                            model_name=model_name,
+                            concurrency=2,
+                        )
+                        imported_total += int(res.get("success_count") or 0)
+                finally:
+                    SESSION_SYNC_RUN_LOCK.release()
+            if ran_sync:
+                SESSION_AUTO_SYNC_STATE["last_success_at"] = now_iso()
+                SESSION_AUTO_SYNC_STATE["last_error"] = str(months_info.get("last_error") or "")
+                SESSION_AUTO_SYNC_STATE["last_synced_months"] = target_months
+                if imported_total:
+                    SESSION_AUTO_SYNC_STATE["last_imported_count"] = imported_total
+        except Exception as exc:
+            SESSION_AUTO_SYNC_STATE["last_error"] = str(exc) or exc.__class__.__name__
+        SESSION_AUTO_SYNC_STOP.wait(interval_seconds)
+
+
+def _maybe_start_session_report_auto_sync() -> None:
+    flag = (os.getenv("SESSION_REPORT_AUTO_SYNC") or "1").strip().lower()
+    if flag in {"0", "false", "off", "no"}:
+        SESSION_AUTO_SYNC_STATE["enabled"] = False
+        return
+    if not upstream_auth_client().configured():
+        SESSION_AUTO_SYNC_STATE["enabled"] = False
+        return
+    if not (os.getenv("OPENAI_API_KEY") or os.getenv("THIRD_PARTY_API_KEY")):
+        SESSION_AUTO_SYNC_STATE["enabled"] = False
+        return
+    try:
+        interval = max(60, int(os.getenv("SESSION_REPORT_AUTO_SYNC_SECONDS") or "300"))
+    except ValueError:
+        interval = 300
+    SESSION_AUTO_SYNC_STATE["enabled"] = True
+    SESSION_AUTO_SYNC_STATE["interval_seconds"] = interval
+    SESSION_AUTO_SYNC_STOP.clear()
+    t = threading.Thread(target=_auto_sync_loop, args=(interval,), name="session-report-auto-sync", daemon=True)
+    t.start()
 
 
 def run_cmd(args: list[str], timeout: int = 120) -> dict:
@@ -437,9 +719,22 @@ class MoveToHonorRequest(BaseModel):
     overwrite: bool = False
 
 
+class SessionParticipantInput(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    qq: str | None = Field(default=None, max_length=20)
+
+
 class SessionStatsSessionUpdateRequest(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     duration_hours: float | None = Field(default=None, gt=0)
+    kp: SessionParticipantInput | None = None
+    players: list[SessionParticipantInput] | None = None
+
+
+class SessionStatsGroupSyncRequest(BaseModel):
+    month: str
+    concurrency: int = Field(default=2, ge=1, le=6)
+    force_retry_errors: bool = False
 
 
 class PublishRequest(BaseModel):
@@ -540,17 +835,66 @@ def session_stats_sessions(month: str):
 
 
 @app.get("/api/session-stats/errors")
-def session_stats_errors(month: str, _admin: None = Depends(require_admin)):
+def session_stats_errors(month: str, _mgr: None = Depends(require_stats_manager)):
     month = validate_stats_month(month)
     items = session_stats_service().list_errors(month)
     return {"items": items, "count": len(items), "month": month}
+
+
+@app.get("/api/session-stats/group-source")
+def session_stats_group_source(request: Request):
+    months_info = fetch_group_report_months()
+    return {
+        **months_info,
+        "can_manage": is_stats_manager_request(request),
+        "auto_sync": dict(SESSION_AUTO_SYNC_STATE),
+    }
+
+
+@app.post("/api/session-stats/sync-group")
+def session_stats_sync_group(body: SessionStatsGroupSyncRequest, _mgr: None = Depends(require_stats_manager)):
+    month = validate_stats_month(body.month)
+    concurrency = validate_import_concurrency(body.concurrency)
+    if not upstream_auth_client().configured():
+        raise HTTPException(503, "服务器未配置 ONEBOT_SEQUENCE_TOKEN，无法拉取群结团文件")
+
+    job_id = uuid.uuid4().hex
+    now = now_iso()
+    job = {
+        "job_id": job_id,
+        "source": "group_cache",
+        "status": "running",
+        "month": month,
+        "total_count": 0,
+        "processed_count": 0,
+        "success_count": 0,
+        "failure_count": 0,
+        "skip_count": 0,
+        "concurrency": concurrency,
+        "current_filename": "正在连接群文件缓存…",
+        "items": [],
+        "error": "",
+        "created_at": now,
+        "updated_at": now,
+    }
+    with SESSION_IMPORT_JOBS_LOCK:
+        SESSION_IMPORT_JOBS[job_id] = job
+
+    model_name = os.getenv("OPENAI_MODEL", "deepseek-v4-pro")
+    thread = threading.Thread(
+        target=run_group_report_sync_job,
+        args=(job_id, month, model_name, concurrency, bool(body.force_retry_errors)),
+        daemon=True,
+    )
+    thread.start()
+    return import_job_snapshot(job_id)
 
 
 @app.post("/api/session-stats/import")
 async def session_stats_import(
     month: str = Form(...),
     files: list[UploadFile] = File(...),
-    _admin: None = Depends(require_admin),
+    _mgr: None = Depends(require_stats_manager),
 ):
     month = validate_stats_month(month)
     text_files: list[SessionTextFile] = []
@@ -572,7 +916,7 @@ async def session_stats_import_job_create(
     month: str = Form(...),
     concurrency: int = Form(1),
     files: list[UploadFile] = File(...),
-    _admin: None = Depends(require_admin),
+    _mgr: None = Depends(require_stats_manager),
 ):
     month = validate_stats_month(month)
     concurrency = validate_import_concurrency(concurrency)
@@ -621,12 +965,12 @@ async def session_stats_import_job_create(
 
 
 @app.get("/api/session-stats/import-jobs/{job_id}")
-def session_stats_import_job_get(job_id: str, _admin: None = Depends(require_admin)):
+def session_stats_import_job_get(job_id: str, _mgr: None = Depends(require_stats_manager)):
     return import_job_snapshot(job_id)
 
 
 @app.post("/api/session-stats/dedupe")
-def session_stats_dedupe(month: str, _admin: None = Depends(require_admin)):
+def session_stats_dedupe(month: str, _mgr: None = Depends(require_stats_manager)):
     month = validate_stats_month(month)
     result = session_stats_service().cleanup_exact_duplicate_sessions_for_month(month)
     return {"ok": True, "month": month, **result}
@@ -641,11 +985,21 @@ def session_stats_session_detail(session_id: int):
 
 
 @app.patch("/api/session-stats/sessions/{session_id}")
-def session_stats_update_session(session_id: int, body: SessionStatsSessionUpdateRequest, _admin: None = Depends(require_admin)):
-    if body.title is None and body.duration_hours is None:
+def session_stats_update_session(
+    session_id: int,
+    body: SessionStatsSessionUpdateRequest,
+    _mgr: None = Depends(require_stats_manager),
+):
+    if body.title is None and body.duration_hours is None and body.kp is None and body.players is None:
         raise HTTPException(400, "没有可更新字段")
     try:
-        detail = session_stats_service().update_session(session_id, title=body.title, duration_hours=body.duration_hours)
+        detail = session_stats_service().update_session(
+            session_id,
+            title=body.title,
+            duration_hours=body.duration_hours,
+            kp=body.kp.model_dump() if body.kp is not None else None,
+            players=[p.model_dump() for p in body.players] if body.players is not None else None,
+        )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     if not detail:
@@ -654,7 +1008,7 @@ def session_stats_update_session(session_id: int, body: SessionStatsSessionUpdat
 
 
 @app.delete("/api/session-stats/sessions/{session_id}")
-def session_stats_delete_session(session_id: int, _admin: None = Depends(require_admin)):
+def session_stats_delete_session(session_id: int, _mgr: None = Depends(require_stats_manager)):
     deleted = session_stats_service().delete_session(session_id)
     if not deleted:
         raise HTTPException(404, "团记录不存在")

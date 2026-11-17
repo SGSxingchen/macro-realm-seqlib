@@ -181,11 +181,18 @@ class UpstreamAuthClient:
     def configured(self) -> bool:
         return bool((self._token_getter() or "").strip())
 
-    def request(self, path: str, *, method: str = "GET", body: dict[str, Any] | None = None) -> tuple[int, dict[str, Any]]:
+    def request(
+        self,
+        path: str,
+        *,
+        method: str = "GET",
+        body: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> tuple[int, dict[str, Any]]:
         token = (self._token_getter() or "").strip()
         if not token:
             raise HTTPException(503, ERROR_MESSAGES["unauthorized"])
-        if "?" in path:
+        if params is None and "?" in path:
             raise ValueError("上游验证码接口不允许携带 URL 查询参数")
         headers = {
             "Authorization": f"Bearer {token}",
@@ -207,7 +214,7 @@ class UpstreamAuthClient:
                 follow_redirects=False,
                 transport=self._transport,
             ) as client:
-                resp = client.request(method=method, url=url, headers=headers, content=content_bytes)
+                resp = client.request(method=method, url=url, headers=headers, content=content_bytes, params=params)
         except httpx.HTTPError as exc:
             raise RuntimeError("upstream_network_error") from exc
 

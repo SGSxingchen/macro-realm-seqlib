@@ -5,6 +5,7 @@ import {
   SessionStatsDedupeResponse,
   SessionStatsErrorItem,
   SessionStatsErrorsResponse,
+  SessionStatsGroupSourceResponse,
   SessionStatsImportFileResult,
   SessionStatsImportJob,
   SessionStatsImportResponse,
@@ -130,6 +131,11 @@ export function SessionStats() {
   const [detailError, setDetailError] = useState('');
   const [editTitle, setEditTitle] = useState('');
   const [editDuration, setEditDuration] = useState('');
+  const [editKpName, setEditKpName] = useState('');
+  const [editKpQq, setEditKpQq] = useState('');
+  const [editPlayers, setEditPlayers] = useState<Array<{ name: string; qq: string }>>([]);
+  const [groupSource, setGroupSource] = useState<SessionStatsGroupSourceResponse | null>(null);
+  const [forceRetryErrors, setForceRetryErrors] = useState(false);
   const reqIdRef = useRef(0);
   const pollRef = useRef<number | undefined>(undefined);
 
@@ -142,9 +148,13 @@ export function SessionStats() {
     const sessionsReq = api<SessionStatsSessionsResponse>(`/api/session-stats/sessions${buildQuery({ month })}`);
     const errorsReq = readErrors(month);
     const prevOverviewReq = api<SessionStatsOverview>(`/api/session-stats/overview${buildQuery({ month: shiftMonth(month, -1) })}`);
+    const groupSourceReq = api<SessionStatsGroupSourceResponse>('/api/session-stats/group-source');
 
-    const [overviewRes, playersRes, sessionsRes, errorsRes, prevOverviewRes] = await Promise.allSettled([overviewReq, playersReq, sessionsReq, errorsReq, prevOverviewReq]);
+    const [overviewRes, playersRes, sessionsRes, errorsRes, prevOverviewRes, groupSourceRes] = await Promise.allSettled([
+      overviewReq, playersReq, sessionsReq, errorsReq, prevOverviewReq, groupSourceReq,
+    ]);
     if (reqId !== reqIdRef.current) return;
+    if (groupSourceRes.status === 'fulfilled') setGroupSource(groupSourceRes.value);
 
     const messages: string[] = [];
     if (overviewRes.status === 'fulfilled') setOverview(overviewRes.value);
@@ -255,6 +265,31 @@ export function SessionStats() {
     }
   };
 
+  const startGroupSync = async (targetMonth = month) => {
+    setImporting(true);
+    setImportOpen(true);
+    setImportNotice(`正在从群文件缓存拉取 ${monthLabel(targetMonth)} 新增结团文件并调用 LLM 解析…`);
+    setImportResult(null);
+    setImportJob(null);
+    if (pollRef.current) clearTimeout(pollRef.current);
+    try {
+      const job = await api<SessionStatsImportJob>('/api/session-stats/sync-group', {
+        method: 'POST',
+        body: JSON.stringify({
+          month: targetMonth,
+          concurrency,
+          force_retry_errors: forceRetryErrors,
+        }),
+      });
+      if (targetMonth !== month) setMonth(targetMonth);
+      setImportJob(job);
+      pollImportJob(job.job_id);
+    } catch (e: unknown) {
+      setImportNotice(e instanceof Error ? e.message : String(e));
+      setImporting(false);
+    }
+  };
+
   const retryFailedFiles = async () => {
     const failedNames = new Set((importResult?.items || []).filter(item => !importItemStatus(item)).map(importItemName));
     if (!failedNames.size) {
@@ -327,6 +362,13 @@ export function SessionStats() {
       setSessionDetail(detail);
       setEditTitle(detail.title || '');
       setEditDuration(typeof detail.duration_hours === 'number' ? String(detail.duration_hours) : '');
+      setEditKpName(detail.kp?.name || '');
+      setEditKpQq(detail.kp?.qq || '');
+      setEditPlayers(
+        detail.participants
+          .filter(p => !p.is_host)
+          .map(p => ({ name: p.name || '', qq: p.qq || '' }))
+      );
     } catch (e: unknown) {
       setDetailError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -342,8 +384,19 @@ export function SessionStats() {
   const saveSessionDetail = async () => {
     if (!sessionDetail) return;
     const duration = Number(editDuration);
-    if (!Number.isFinite(duration) || duration < 0) {
-      setDetailError('时长必须是大于等于 0 的数字。');
+    if (!Number.isFinite(duration) || duration <= 0) {
+      setDetailError('时长必须是大于 0 的数字。');
+      return;
+    }
+    if (!editKpName.trim()) {
+      setDetailError('KP 名称不能为空。');
+      return;
+    }
+    const cleanPls = editPlayers
+      .map(p => ({ name: p.name.trim(), qq: p.qq.trim() || null }))
+      .filter(p => p.name.length > 0);
+    if (!cleanPls.length) {
+      setDetailError('至少需要保留 1 名参团玩家（PL）。');
       return;
     }
     setDetailSaving(true);
@@ -351,11 +404,23 @@ export function SessionStats() {
     try {
       const result = await api<SessionStatsSessionPatchResponse>(`/api/session-stats/sessions/${routePath(String(sessionDetail.id))}`, {
         method: 'PATCH',
-        body: JSON.stringify({ title: editTitle.trim(), duration_hours: duration }),
+        body: JSON.stringify({
+          title: editTitle.trim(),
+          duration_hours: duration,
+          kp: { name: editKpName.trim(), qq: editKpQq.trim() || null },
+          players: cleanPls,
+        }),
       });
       setSessionDetail(result.session);
       setEditTitle(result.session.title || '');
       setEditDuration(typeof result.session.duration_hours === 'number' ? String(result.session.duration_hours) : '');
+      setEditKpName(result.session.kp?.name || '');
+      setEditKpQq(result.session.kp?.qq || '');
+      setEditPlayers(
+        result.session.participants
+          .filter(p => !p.is_host)
+          .map(p => ({ name: p.name || '', qq: p.qq || '' }))
+      );
       await loadStats();
     } catch (e: unknown) {
       setDetailError(e instanceof Error ? e.message : String(e));
@@ -378,28 +443,82 @@ export function SessionStats() {
           <button type="button" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="下一月">›</button>
         </div>
         <span className="stats-head-spacer" />
+        {groupSource?.auto_sync?.enabled && (
+          <span className="status-badge ok" title="后端每 5 分钟自动跟进最新群结团目录并增量入库">
+            群文件自动同步中
+          </span>
+        )}
         <button
           type="button"
           className={importing || importOpen ? 'import-toggle active' : 'import-toggle'}
           onClick={() => setImportOpen(open => importing ? true : !open)}
         >
-          {importing ? `导入中 ${importProgress}%` : '⬆ 导入战报'}
+          {importing ? `同步/导入中 ${importProgress}%` : '⟳ 群文件拉取 / 导入'}
         </button>
         <button type="button" className="icon-btn" onClick={loadStats} disabled={loading} aria-label="刷新">↻</button>
       </div>
 
+      {groupSource && groupSource.items.length > 0 && (
+        <div className="stats-group-months" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+          <span className="stats-muted" style={{ fontSize: '12px' }}>已识别群结团目录：</span>
+          {groupSource.items.map(item => (
+            <button
+              key={item.month}
+              type="button"
+              className={month === item.month ? 'on' : ''}
+              style={{ fontSize: '12px', padding: '3px 9px', borderColor: month === item.month ? 'var(--accent)' : undefined }}
+              onClick={() => setMonth(item.month)}
+              title={item.folders.map(f => f.folder_name).join('、')}
+            >
+              {item.month}（群文件 {item.text_count} 份）
+            </button>
+          ))}
+        </div>
+      )}
+
       {(importOpen || importing) && (
         <section className="stats-card import-panel">
           <div className="section-head">
-            <h3>导入战报</h3>
+            <h3>自动从 QQ 群拉取结团文件 / 手动上传 TXT</h3>
             <label className="stats-sort">
-              <span>并发</span>
+              <span>LLM 并发</span>
               <select value={concurrency} onChange={e => setConcurrency(Number(e.target.value) || 1)} disabled={importing}>
                 {[1, 2, 3, 4, 5, 6].map(value => <option key={value} value={value}>{value}</option>)}
               </select>
             </label>
             <button type="button" className="danger" onClick={dedupeMonth} disabled={deduping || importing}>{deduping ? '去重中' : '去重'}</button>
             <button type="button" className="icon-btn" onClick={() => !importing && setImportOpen(false)} disabled={importing} aria-label="收起">×</button>
+          </div>
+
+          <div style={{ padding: '10px 12px', border: '1px solid var(--line)', background: 'var(--bg)', marginBottom: '10px', display: 'grid', gap: '8px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+              <div>
+                <b>一键拉取群 {monthLabel(month)} 结团文件夹并用现有 LLM 自动填表</b>
+                <p className="stats-muted" style={{ margin: '2px 0 0', fontSize: '12px' }}>
+                  自动匹配群 863962937 下对应月份的『XX月结团文件』（随月份增长自动识别新目录），已入库同内容文件自动跳过不重复计费。
+                  {groupSource?.stale && groupSource.last_error ? `（当前缓存提示：${groupSource.last_error}）` : ''}
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--muted)' }}>
+                  <input
+                    type="checkbox"
+                    checked={forceRetryErrors}
+                    onChange={e => setForceRetryErrors(e.target.checked)}
+                    disabled={importing}
+                  />
+                  重跑本月曾报错文件
+                </label>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={importing}
+                  onClick={() => startGroupSync(month)}
+                >
+                  {importing ? '正在拉取解析…' : `拉取并解析 ${month} 群结团文件`}
+                </button>
+              </div>
+            </div>
           </div>
           <label
             className="import-drop"
@@ -592,10 +711,57 @@ export function SessionStats() {
                   </label>
                   <label className="stats-field">
                     <span>时长（小时）</span>
-                    <input type="number" min="0" step="0.5" value={editDuration} onChange={e => setEditDuration(e.target.value)} />
+                    <input type="number" min="0.5" step="0.5" value={editDuration} onChange={e => setEditDuration(e.target.value)} />
                   </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <label className="stats-field">
+                      <span>KP 昵称</span>
+                      <input value={editKpName} onChange={e => setEditKpName(e.target.value)} placeholder="主持人名称" />
+                    </label>
+                    <label className="stats-field">
+                      <span>KP QQ（选填）</span>
+                      <input value={editKpQq} onChange={e => setEditKpQq(e.target.value.replace(/[^\d]/g, ''))} placeholder="用于跨改名归并统计" />
+                    </label>
+                  </div>
+                  <div className="stats-field">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>参团玩家 PL（{editPlayers.length} 人）</span>
+                      <button
+                        type="button"
+                        style={{ padding: '2px 8px', fontSize: '12px' }}
+                        onClick={() => setEditPlayers(prev => [...prev, { name: '', qq: '' }])}
+                      >
+                        + 添加玩家
+                      </button>
+                    </div>
+                    <div style={{ display: 'grid', gap: '6px', marginTop: '4px' }}>
+                      {editPlayers.map((pl, idx) => (
+                        <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 130px auto', gap: '6px' }}>
+                          <input
+                            placeholder="玩家 / 卡名"
+                            value={pl.name}
+                            onChange={e => setEditPlayers(prev => prev.map((item, i) => (i === idx ? { ...item, name: e.target.value } : item)))}
+                          />
+                          <input
+                            placeholder="QQ 号（可空）"
+                            value={pl.qq}
+                            onChange={e => setEditPlayers(prev => prev.map((item, i) => (i === idx ? { ...item, qq: e.target.value.replace(/[^\d]/g, '') } : item)))}
+                          />
+                          <button
+                            type="button"
+                            className="danger"
+                            style={{ padding: '2px 8px' }}
+                            disabled={editPlayers.length <= 1}
+                            onClick={() => setEditPlayers(prev => prev.filter((_, i) => i !== idx))}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                   <div className="stats-detail-actions">
-                    <button type="button" onClick={saveSessionDetail} disabled={detailSaving}>{detailSaving ? '保存中' : '保存'}</button>
+                    <button type="button" className="primary" onClick={saveSessionDetail} disabled={detailSaving}>{detailSaving ? '保存中' : '保存全部修改'}</button>
                     <button type="button" onClick={closeSessionDetail} disabled={detailSaving}>关闭</button>
                   </div>
                 </div>

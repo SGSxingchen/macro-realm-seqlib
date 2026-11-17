@@ -28,7 +28,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# 后台写操作必需；不配置时只允许前台读取，管理写接口会拒绝
+# 维护后台写操作必需；结团统计也支持社区管理员/协管 QQ 登录管理
 export ADMIN_PASSWORD='change-me'
 # 可选：独立 cookie 签名密钥；默认从 ADMIN_PASSWORD 派生
 export ADMIN_SECRET='long-random-secret'
@@ -37,7 +37,7 @@ export ADMIN_SECRET='long-random-secret'
 export ONEBOT_SEQUENCE_TOKEN='your-onebot-sequence-bearer-token'
 # 可选：自定义验证码服务基址（默认 https://trpg.chordvers.org/onebot-sequences）
 # export ONEBOT_SEQUENCE_BASE_URL='https://trpg.chordvers.org/onebot-sequences'
-# 可选：社区管理员 QQ 白名单（逗号或空格分隔），使用对应 QQ 登录后可在前台直接置顶/删评/禁言及访问社区管理台
+# 可选：社区管理员 QQ 白名单（逗号或空格分隔），对应 QQ 登录后可管理社区与结团统计；社区协管也有结团统计管理权限
 export COMMUNITY_ADMIN_QQS='1348697221,853304398'
 # 可选：独立社区会话 HMAC 密钥与 SQLite 存储路径（默认 web/data/community.sqlite）
 # export COMMUNITY_SECRET='long-random-community-secret'
@@ -54,6 +54,9 @@ export OPENAI_MODEL='deepseek-v4-pro'                # 默认 deepseek-v4-pro
 # export OPENAI_API_MODE='chat'            # chat | responses | auto（默认 auto，deepseek 开头自动走 chat/completions）
 # export OPENAI_TIMEOUT_SECONDS='180'      # 单次请求超时，默认 180 秒
 # export OPENAI_REQUEST_RETRIES='1'        # 超时重试次数，默认 1
+# 群结团文件后台自动增量同步：默认开启，同时配置 ONEBOT_SEQUENCE_TOKEN 与 OPENAI_API_KEY（或 THIRD_PARTY_API_KEY）时生效
+# export SESSION_REPORT_AUTO_SYNC='1'      # 设为 0 关闭
+# export SESSION_REPORT_AUTO_SYNC_SECONDS='300' # 检查间隔，默认 300 秒（最小 60 秒），跟进最新 2 个月份目录
 
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
@@ -96,14 +99,20 @@ npm run dev
 - `GET /api/session-stats/players?month=&sort=hours|games|hosts|name`：玩家统计（全量返回，前端翻页）。
 - `GET /api/session-stats/sessions?month=`：团列表。
 - `GET /api/session-stats/sessions/{id}`：团详情（参与者、raw_payload）。
-- `PATCH /api/session-stats/sessions/{id}`：编辑标题/时长。
+- `PATCH /api/session-stats/sessions/{id}`：编辑 `title` / `duration_hours`，支持通过 `kp: { name, qq }` 与 `players: [{ name, qq }]` 补录/修正参与者。
 - `DELETE /api/session-stats/sessions/{id}`：删除团记录。
 - `POST /api/session-stats/import-jobs`：上传 TXT 创建异步导入任务（multipart：month/concurrency/files）。
-- `GET /api/session-stats/import-jobs/{job_id}`：轮询导入进度。
+- `GET /api/session-stats/import-jobs/{job_id}`：轮询上传导入或群文件同步任务进度。
+- `GET /api/session-stats/group-source`：读取 `onebot-sequence-cache` 自动识别的各月「XX月结团文件」目录列表及后台自动同步状态，随月份增长自动识别新月份目录。
+- `POST /api/session-stats/sync-group`：按月从群文件缓存增量拉取未入库或内容已修订的结团报告，调用现有 LLM 自动填表。body: `{ month, concurrency, force_retry_errors }`（并发默认 2、范围 1–6，失败文件默认不重试）；返回异步 `job_id`，复用上述任务轮询接口。
 - `POST /api/session-stats/dedupe?month=`：清理内容完全相同的重复团记录。
-- `GET /api/session-stats/errors?month=`：导入异常列表（需后台登录）。
+- `GET /api/session-stats/errors?month=`：导入异常列表（需结团统计管理权限）。
 
-导入需要配置 `OPENAI_API_KEY`（或 `THIRD_PARTY_API_KEY`），见上方「启动后端」。同一文件内容（content_hash）重复导入会自动跳过（SKIP）。
+编辑、删除、导入、同步、去重、任务轮询与异常查询支持 `ADMIN_PASSWORD` 后台登录，或使用 `COMMUNITY_ADMIN_QQS` 白名单管理员/社区协管 QQ 登录。
+
+导入需要配置 `OPENAI_API_KEY`（或 `THIRD_PARTY_API_KEY`），群文件拉取还需 `ONEBOT_SEQUENCE_TOKEN`，见上方「启动后端」。`SESSION_REPORT_AUTO_SYNC` 默认 `1` 开启，在上述密钥均配置时生效，每 `SESSION_REPORT_AUTO_SYNC_SECONDS=300` 秒增量跟进最新 2 个月份目录；设为 `0` 可关闭，失败文件可通过手动同步的 `force_retry_errors` 重试。
+
+导入会对原结团文件的常见瑕疵自动修正：时长缺失或无效时从文件名/正文的「时长」「总计 XXH」「XX小时」「XXh结团」等多种写法兜底提取；剥离 KP 复合 `+卡名` 与姓名中混写的 QQ；过滤局部乱码产生的空玩家项，保留有效参与者。同月同内容（`content_hash`）重复导入会自动跳过（SKIP）；群文件以 `source_file_id` 识别同一文件，内容修订后覆盖原团记录，避免重复记团。
 
 ### 规范化审核
 

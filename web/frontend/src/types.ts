@@ -290,6 +290,33 @@ export type SessionStatsErrorsResponse = {
   month: string;
 };
 
+export type SessionStatsGroupMonthItem = {
+  month: string;
+  file_count: number;
+  text_count: number;
+  latest_upload_time?: number;
+  folders: Array<{ folder_id?: string; folder_name: string }>;
+};
+
+export type SessionStatsGroupSourceResponse = {
+  configured: boolean;
+  can_manage: boolean;
+  stale: boolean;
+  last_success?: string | null;
+  last_error?: string | null;
+  revision?: number;
+  items: SessionStatsGroupMonthItem[];
+  auto_sync?: {
+    enabled: boolean;
+    interval_seconds: number;
+    last_run_at?: string | null;
+    last_success_at?: string | null;
+    last_error?: string;
+    last_synced_months?: string[];
+    last_imported_count?: number;
+  };
+};
+
 /* ---------- QQ 私聊验证码登录与社区留言板 / 资源评论类型 ---------- */
 
 export type CommunityUserProfile = {

@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import socket
 import sqlite3
 import time
@@ -15,11 +16,111 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, Protocol
 
+QQ_CLEAN_RE = re.compile(r"(?<!\d)([1-9][0-9]{4,11})(?!\d)")
+DURATION_EXPLICIT_RE = re.compile(
+    r"(?:【\s*时长\s*】|(?:模组|本团|结团|总计|共计|总)?\s*时长)\s*[:：]?\s*(?:[^\r\n]{0,24}?总计\s*)?(\d+(?:\.\d+)?)\s*(?:小时|h|H|hr|hrs)?"
+)
+DURATION_FILENAME_RE = re.compile(r"(?<![.\d])(\d+(?:\.\d+)?)\s*(?:小时|h|H)(?![A-Za-z])")
+DURATION_INLINE_RE = re.compile(r"(?<!\.ra)(?<!ra)(?<![.\d])(\d+(?:\.\d+)?)\s*(?:小时|h|H)\s*(?:结团|第一|第二|第三|第\d+|\)|）|$)")
+
+
+def clean_person_identity(raw_name: Any, raw_qq: Any = None) -> tuple[str, str | None]:
+    """修复结团文件常见姓名/QQ 瑕疵：
+    1. 拆出混在名字里的 QQ 号，如『雨桦（595561352）』、『艾丝特1546003281』（纯数字卡名如『10086』不误当 QQ）；
+    2. 剥离 KP 复合写法里的附加卡名，如『林雨霁（3909862519）+林若真（卡名）』-> name='林雨霁', qq='3909862519'（不误伤『苏早琴+1』类名字）；
+    3. 剥离前缀『卡名：』『PC：』『PL：』『KP：』『主持：』与后缀『（卡名）』『(KP)』等噪音。
+    """
+    qq_str: str | None = None
+    if raw_qq is not None:
+        m_qq = QQ_CLEAN_RE.search(str(raw_qq).strip())
+        if m_qq:
+            qq_str = m_qq.group(1)
+
+    text = str(raw_name or "").replace("\u3000", " ").strip()
+    if not text:
+        return "", qq_str
+
+    # 去除常见字段头前缀
+    text = re.sub(r"^(?:卡名|角色名|玩家|主持|主持人|KP|PL|PC)\s*[:：]\s*", "", text, flags=re.IGNORECASE).strip()
+
+    # 若还没拿到 QQ，尝试从名字字符串提取 5~12 位 QQ 号；若整串本身就是纯数字卡名（如『10086』），不误判为 QQ
+    if not qq_str:
+        m_in_name = QQ_CLEAN_RE.search(text)
+        if m_in_name and m_in_name.group(0) != text:
+            qq_str = m_in_name.group(1)
+
+    # 仅在确有『（卡名）/（角色）/（PC）』复合身份标注时按 + 切分，避免误切『苏早琴+1』
+    if ("+" in text or "＋" in text) and re.search(r"[（(\[【]\s*(?:卡名|角色名|角色|PC)\s*[)）\]】]", text, flags=re.IGNORECASE):
+        parts = [p.strip() for p in re.split(r"[+＋]", text) if p.strip()]
+        if len(parts) >= 2:
+            non_card = [p for p in parts if not re.search(r"[（(\[【]\s*(?:卡名|角色名|角色|PC)\s*[)）\]】]", p, flags=re.IGNORECASE)]
+            text = non_card[0] if non_card else parts[0]
+
+    # 剥离括号内的纯 QQ 号或角色标注，如（3909862519）、（卡名）、（KP）
+    text = re.sub(r"[（(\[【]\s*(?:QQ\s*[:：]?\s*)?[1-9][0-9]{4,11}\s*[)）\]】]", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"[（(\[【]\s*(?:卡名|角色名|角色|KP|PL|PC|认证KP|非认证KP)\s*[)）\]】]", "", text, flags=re.IGNORECASE)
+    # 若名字末尾紧贴该 QQ 号（如『艾丝特1546003281』且前面已有非数字字符），剥离尾部 QQ
+    if qq_str and text.endswith(qq_str) and len(text) > len(qq_str):
+        prefix = text[: -len(qq_str)].rstrip(" -_·:：")
+        if prefix:
+            text = prefix
+
+    # 清理残余空括号与首尾空白
+    text = re.sub(r"[（(\[【]\s*[)）\]】]", "", text).strip(" -_—·\t")
+    return text, qq_str
+
+
+def infer_duration_hours_fallback(filename: str, content: str) -> float | None:
+    """当 LLM 未能提取出时长或填了 null/0 时，从文件名与正文中安全回退提取小时数。"""
+    stem = Path(filename or "").stem
+    # 1. 优先查正文中明确的【时长】9h / 模组时长：32小时 / 时长：11.10~11.15 总计21H
+    for m in DURATION_EXPLICIT_RE.finditer(content or ""):
+        try:
+            val = float(m.group(1))
+            if 0.5 <= val <= 300:
+                return val
+        except ValueError:
+            continue
+
+    # 2. 查文件名中的明确时长标记，如『地城追凶8h结团.txt』『隔离区h(31小时)第一车』『游乐场-35.5h』
+    for m in DURATION_FILENAME_RE.finditer(stem):
+        try:
+            val = float(m.group(1))
+            if 0.5 <= val <= 300:
+                return val
+        except ValueError:
+            continue
+
+    # 3. 查正文首行标题里的 XXh / XX小时（预先剥除 .ra 检定表达式，防 .ra3.5h 尾部匹配）
+    first_lines = "\n".join((content or "").splitlines()[:5])
+    sanitized_head = re.sub(r"\.?ra\s*\d+(?:\.\d+)?\s*(?:h|H|小时)?(?:\s*\*\s*\d+)?", " ", first_lines, flags=re.IGNORECASE)
+    for m in DURATION_INLINE_RE.finditer(sanitized_head):
+        try:
+            val = float(m.group(1))
+            if 0.5 <= val <= 300:
+                return val
+        except ValueError:
+            continue
+    return None
+
+
+def strip_markdown_code_fence(text: str) -> str:
+    cleaned = (text or "").strip()
+    # 移除可能混入的 <think>...</think> 块
+    cleaned = re.sub(r"<think>[\s\S]*?</think>", "", cleaned, flags=re.IGNORECASE).strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+    return cleaned.strip()
+
 
 @dataclass(frozen=True)
 class SessionTextFile:
     filename: str
     content: str
+    source_file_id: str | None = None
+    uploader_qq: str | None = None
+    uploader_name: str | None = None
 
 
 class SessionStatsExtractor(Protocol):
@@ -166,10 +267,14 @@ class OpenAIExtractor:
     @staticmethod
     def _prompt(*, filename: str, content: str, month: str) -> str:
         return (
-            "从下面的 TRPG 结团文本中抽取结构化统计数据，只返回 JSON。"
-            "字段：title 字符串、duration_hours 数字、kp 对象{name, qq}、"
-            "players 数组[{name, qq}]、confidence 数字、warnings 字符串数组。"
-            "无法识别 QQ 时填 null；duration_hours 必须是数字小时。"
+            "你是“宏观界域”TRPG跑团结团报告结构化提取器。请从下面的结团文本与文件名中提取统计信息，严格只返回 JSON 对象。\n"
+            "字段要求：\n"
+            "1. title：模组/团名称字符串（去掉末尾多余的『结团报告』『.txt』等文件后缀，保留车次说明即可）。\n"
+            "2. duration_hours：本团数字小时数（如 9、3.5、35.5）。注意：时长可能写在正文【时长】/模组时长/总计XXH中，也可能只写在文件名或首行标题（如『刮刮乐8h结团』『31小时』『35.5h』）里，请务必综合提取；不要把『.ra35.5*2』检定当成额外时长。\n"
+            "3. kp：主持人对象 {name, qq}。常位于文首【KP】或文末『KP：/主持：/kp结算』处。若写成『林雨霁（3909862519）+林若真（卡名）』，name 填主持本人名『林雨霁』，qq 填『3909862519』；没有 QQ 则填 null。\n"
+            "4. players：参团玩家数组 [{name, qq}]。每个拥有独立评分/扮演/影响/评语/个人额外结算段落的角色算一名玩家（注意排除 KP 本人，且绝不要输出 name 为空或 null 的占位元素）。若玩家名带括号 QQ 如『梅普露（2577535590）』，拆分为 name='梅普露', qq='2577535590'；若只有『卡名：芬』无 QQ，则 name='芬', qq=null。\n"
+            "5. confidence：0 到 1 之间的置信度数字。\n"
+            "6. warnings：字符串数组（如有乱码或不确定项可简短说明，正常填 []）。"
             f"\n月份：{month}\n文件名：{filename}\n原文：\n{content}"
         )
 
@@ -206,13 +311,22 @@ class OpenAIExtractor:
             data = json.loads(raw)
         except json.JSONDecodeError as exc:
             raise RuntimeError("OpenAI 响应不是合法 JSON") from exc
-        text = text_reader(data)
+        text = strip_markdown_code_fence(text_reader(data))
         if not text:
             raise RuntimeError("OpenAI 返回为空")
         try:
             result = json.loads(text)
         except json.JSONDecodeError as exc:
-            raise RuntimeError("OpenAI 返回不是合法 JSON") from exc
+            # 容错提取最外层 {...} JSON 对象
+            start = text.find("{")
+            end = text.rfind("}")
+            if start != -1 and end > start:
+                try:
+                    result = json.loads(text[start : end + 1])
+                except json.JSONDecodeError:
+                    raise RuntimeError("OpenAI 返回不是合法 JSON") from exc
+            else:
+                raise RuntimeError("OpenAI 返回不是合法 JSON") from exc
         if not isinstance(result, dict):
             raise RuntimeError("OpenAI 返回 JSON 顶层不是对象")
         return result
@@ -289,8 +403,18 @@ class SessionStatsService:
         for file in files:
             content_hash = self._content_hash(file.content)
             with self._connect() as conn:
+                existing_by_fid = self._find_existing_session_by_source_file_id(conn, month, file.source_file_id)
+                if existing_by_fid and existing_by_fid["content_hash"] == content_hash:
+                    item = self._skip_item(file.filename, existing_by_fid)
+                    items.append(item)
+                    skip_count += 1
+                    if progress_callback:
+                        progress_callback(item, success_count + failure_count + skip_count, success_count, failure_count)
+                    continue
                 existing = self._find_existing_session_by_content(conn, month, content_hash)
                 if existing:
+                    if file.source_file_id and not existing["source_file_id"]:
+                        conn.execute("update sessions set source_file_id = ? where id = ?", (file.source_file_id, existing["id"]))
                     item = self._skip_item(file.filename, existing)
                     items.append(item)
                     skip_count += 1
@@ -312,18 +436,25 @@ class SessionStatsService:
             try:
                 extracted = actual_extractor.extract(filename=file.filename, content=file.content, month=month)
                 raw_payload = extracted
+                extracted = self._normalize_extracted_payload(extracted, filename=file.filename, content=file.content)
                 reason = self._validation_error(extracted)
                 if reason:
                     raise ValueError(reason)
                 with self._connect() as conn:
                     existing = self._find_existing_session_by_content(conn, month, content_hash)
                     if existing:
+                        if file.source_file_id and not existing["source_file_id"]:
+                            conn.execute("update sessions set source_file_id = ? where id = ?", (file.source_file_id, existing["id"]))
                         item = self._skip_item(file.filename, existing)
                         items.append(item)
                         skip_count += 1
                         if progress_callback:
                             progress_callback(item, success_count + failure_count + skip_count, success_count, failure_count)
                         continue
+                    # 如果同一群文件 file_id 更新了正文内容，原子替换旧版本而不重复记两场团
+                    old_same_fid = self._find_existing_session_by_source_file_id(conn, month, file.source_file_id)
+                    if old_same_fid:
+                        conn.execute("delete from sessions where id = ?", (old_same_fid["id"],))
                     session_id = self._insert_session(
                         conn,
                         batch_id=batch_id,
@@ -377,8 +508,13 @@ class SessionStatsService:
         def process_file(file: SessionTextFile) -> dict[str, Any]:
             content_hash = self._content_hash(file.content)
             with self._connect() as conn:
+                existing_by_fid = self._find_existing_session_by_source_file_id(conn, month, file.source_file_id)
+                if existing_by_fid and existing_by_fid["content_hash"] == content_hash:
+                    return self._skip_item(file.filename, existing_by_fid)
                 existing = self._find_existing_session_by_content(conn, month, content_hash)
                 if existing:
+                    if file.source_file_id and not existing["source_file_id"]:
+                        conn.execute("update sessions set source_file_id = ? where id = ?", (file.source_file_id, existing["id"]))
                     return self._skip_item(file.filename, existing)
             raw_payload: Any = None
             try:
@@ -390,14 +526,19 @@ class SessionStatsService:
 
                 extracted = extractor.extract(filename=file.filename, content=file.content, month=month)
                 raw_payload = extracted
+                extracted = self._normalize_extracted_payload(extracted, filename=file.filename, content=file.content)
                 reason = self._validation_error(extracted)
                 if reason:
                     raise ValueError(reason)
                 with self._connect() as conn:
                     existing = self._find_existing_session_by_content(conn, month, content_hash)
                     if existing:
+                        if file.source_file_id and not existing["source_file_id"]:
+                            conn.execute("update sessions set source_file_id = ? where id = ?", (file.source_file_id, existing["id"]))
                         return self._skip_item(file.filename, existing)
-                with self._connect() as conn:
+                    old_same_fid = self._find_existing_session_by_source_file_id(conn, month, file.source_file_id)
+                    if old_same_fid:
+                        conn.execute("delete from sessions where id = ?", (old_same_fid["id"],))
                     session_id = self._insert_session(
                         conn,
                         batch_id=batch_id,
@@ -432,6 +573,14 @@ class SessionStatsService:
             self._finish_batch(conn, batch_id, success_count, failure_count)
 
         return {"success_count": success_count, "failure_count": failure_count, "skip_count": skip_count, "items": items}
+
+    def has_imported_report(self, *, month: str, source_file_id: str | None, content_hash: str) -> bool:
+        with self._connect() as conn:
+            if source_file_id:
+                row = self._find_existing_session_by_source_file_id(conn, month, source_file_id)
+                if row and row["content_hash"] == content_hash:
+                    return True
+            return self._find_existing_session_by_content(conn, month, content_hash) is not None
 
     def get_overview(self, month: str) -> dict[str, Any]:
         with self._connect() as conn:
@@ -578,7 +727,15 @@ class SessionStatsService:
         ]
         return detail
 
-    def update_session(self, session_id: int, *, title: str | None = None, duration_hours: float | None = None) -> dict[str, Any] | None:
+    def update_session(
+        self,
+        session_id: int,
+        *,
+        title: str | None = None,
+        duration_hours: float | None = None,
+        kp: dict[str, Any] | None = None,
+        players: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any] | None:
         updates: list[str] = []
         params: list[Any] = []
         if title is not None:
@@ -594,14 +751,69 @@ class SessionStatsService:
             updates.append("duration_hours = ?")
             params.append(duration)
 
-        if updates:
-            with self._connect() as conn:
-                params.append(session_id)
-                cursor = conn.execute(f"update sessions set {', '.join(updates)} where id = ?", params)
-                if cursor.rowcount == 0:
-                    return None
-                if duration_hours is not None:
-                    conn.execute("update session_participants set duration_hours = ? where session_id = ?", (float(duration_hours), session_id))
+        with self._connect() as conn:
+            current = conn.execute(
+                "select id, duration_hours, kp_player_id from sessions where id = ?",
+                (session_id,),
+            ).fetchone()
+            if current is None:
+                return None
+
+            effective_duration = float(duration_hours) if duration_hours is not None else float(current["duration_hours"])
+            kp_player_id = int(current["kp_player_id"])
+
+            if kp is not None:
+                kp_name, kp_qq = clean_person_identity(kp.get("name"), kp.get("qq"))
+                if not kp_name:
+                    raise ValueError("KP 姓名不能为空")
+                kp_player_id = self._upsert_player(conn, kp_name, kp_qq, prefer_qq=True)
+                updates.append("kp_player_id = ?")
+                params.append(kp_player_id)
+
+            if updates:
+                conn.execute(f"update sessions set {', '.join(updates)} where id = ?", [*params, session_id])
+
+            if kp is not None or players is not None:
+                # 重建本团参与者关系（当仅改 kp 或仅改 players 时保留另一方既有成员）
+                if players is None:
+                    existing_pls = conn.execute(
+                        """
+                        select p.name, p.qq
+                        from session_participants sp
+                        join players p on p.id = sp.player_id
+                        where sp.session_id = ? and sp.is_host = 0
+                        order by sp.rowid asc
+                        """,
+                        (session_id,),
+                    ).fetchall()
+                    pl_specs = [{"name": r["name"], "qq": r["qq"]} for r in existing_pls]
+                else:
+                    pl_specs = []
+                    for idx, item in enumerate(players, start=1):
+                        if not isinstance(item, dict):
+                            raise ValueError(f"第 {idx} 名玩家格式无效")
+                        p_name, p_qq = clean_person_identity(item.get("name"), item.get("qq"))
+                        if not p_name:
+                            continue
+                        pl_specs.append({"name": p_name, "qq": p_qq})
+                    if not pl_specs:
+                        raise ValueError("至少需要保留 1 名参团玩家（PL）")
+
+                conn.execute("delete from session_participants where session_id = ?", (session_id,))
+                self._insert_participant(conn, session_id, kp_player_id, "kp", effective_duration, is_host=True)
+                seen_ids = {kp_player_id}
+                for spec in pl_specs:
+                    pid = self._upsert_player(conn, spec["name"], spec["qq"], prefer_qq=True)
+                    if pid in seen_ids:
+                        continue
+                    seen_ids.add(pid)
+                    self._insert_participant(conn, session_id, pid, "pl", effective_duration, is_host=False)
+            elif duration_hours is not None:
+                conn.execute(
+                    "update session_participants set duration_hours = ? where session_id = ?",
+                    (effective_duration, session_id),
+                )
+
         return self.get_session_detail(session_id)
 
     def list_errors(self, month: str) -> list[dict[str, Any]]:
@@ -758,6 +970,12 @@ class SessionStatsService:
                 create unique index if not exists idx_players_qq on players(qq) where qq is not null;
                 """
             )
+            cols = {row["name"] for row in conn.execute("pragma table_info(sessions)").fetchall()}
+            if "source_file_id" not in cols:
+                conn.execute("alter table sessions add column source_file_id text")
+            conn.execute(
+                "create index if not exists idx_sessions_month_file_id on sessions(month, source_file_id) where source_file_id is not null"
+            )
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -819,7 +1037,7 @@ class SessionStatsService:
     def _find_existing_session_by_content(self, conn: sqlite3.Connection, month: str, content_hash: str) -> sqlite3.Row | None:
         return conn.execute(
             """
-            select id, source_filename
+            select id, source_filename, source_file_id, content_hash
             from sessions
             where month = ? and content_hash = ?
             order by created_at asc, id asc
@@ -827,6 +1045,107 @@ class SessionStatsService:
             """,
             (month, content_hash),
         ).fetchone()
+
+    def _find_existing_session_by_source_file_id(
+        self, conn: sqlite3.Connection, month: str, source_file_id: str | None
+    ) -> sqlite3.Row | None:
+        if not source_file_id:
+            return None
+        return conn.execute(
+            """
+            select id, source_filename, source_file_id, content_hash
+            from sessions
+            where month = ? and source_file_id = ?
+            order by created_at desc, id desc
+            limit 1
+            """,
+            (month, source_file_id),
+        ).fetchone()
+
+    def _normalize_extracted_payload(self, payload: Any, *, filename: str, content: str) -> Any:
+        """对 LLM 抽取结果执行确定性瑕疵修复：
+        - 标题缺失时回退为文件名去扩展名；
+        - 时长缺失/非正数时从正文与文件名正则兜底提取；
+        - 清洗 KP 与 PL 的混写 QQ / 附加卡名 / 字段前缀；
+        - 若全量玩家列表混入个别全空占位对象（如 {name: null, qq: null}）且存在有效玩家，自动剔除空噪音项；
+        - 自动剔除被重复塞进 players 里的 KP 本人（同名或同 QQ）。
+        """
+        if not isinstance(payload, dict):
+            return payload
+        out = dict(payload)
+
+        # 1. 标题兜底：仅当原字段已经是空/None但键存在时，若用户原本明确传了空标题由校验拦截，只有 None 时用文件名兜底
+        if out.get("title") is None and filename:
+            stem = Path(filename).stem.strip()
+            if stem:
+                out["title"] = stem
+
+        # 2. 时长兜底：当 LLM 返回 None / 0 / 空串时，尝试从原文或文件名中提取明确小时数
+        dur = out.get("duration_hours")
+        need_fallback = False
+        if dur is None or dur == "":
+            need_fallback = True
+        else:
+            try:
+                if float(dur) <= 0:
+                    need_fallback = True
+            except (TypeError, ValueError):
+                need_fallback = True
+        if need_fallback:
+            inferred = infer_duration_hours_fallback(filename, content)
+            if inferred is not None:
+                out["duration_hours"] = inferred
+                warnings = list(out.get("warnings") or []) if isinstance(out.get("warnings"), list) else []
+                warnings.append(f"时长由文件名/正文规则兜底提取：{inferred}h")
+                out["warnings"] = warnings
+
+        # 3. KP 清洗
+        kp = out.get("kp")
+        kp_clean_name = ""
+        kp_clean_qq: str | None = None
+        if isinstance(kp, dict):
+            kp_clean_name, kp_clean_qq = clean_person_identity(kp.get("name"), kp.get("qq"))
+            if not kp_clean_name and kp_clean_qq:
+                kp_clean_name = f"KP_{kp_clean_qq[-4:]}"
+            out["kp"] = {"name": kp_clean_name, "qq": kp_clean_qq}
+
+        # 4. Players 清洗：过滤纯 null 噪音占位，但保留显式残缺字典（如 {}）在无其他信息时的校验语义；
+        #    当至少有 1 名有效具名玩家时，丢弃 LLM 因乱码产生的 {name: null, qq: null} 垃圾项。
+        players = out.get("players")
+        if isinstance(players, list):
+            cleaned_valid: list[dict[str, Any]] = []
+            cleaned_all: list[dict[str, Any]] = []
+            for p in players:
+                if not isinstance(p, dict):
+                    cleaned_all.append(p)
+                    continue
+                # 区分完全无 name 键的非法结构和 LLM 输出的 {"name": null, "qq": null}
+                has_name_key = "name" in p
+                p_name, p_qq = clean_person_identity(p.get("name"), p.get("qq"))
+                if not p_name and p_qq:
+                    p_name = f"玩家_{p_qq[-4:]}"
+                if p_name:
+                    # 排除被 LLM 误重复列入 PL 的 KP 本人
+                    if kp_clean_qq and p_qq and kp_clean_qq == p_qq:
+                        continue
+                    if not kp_clean_qq and not p_qq and kp_clean_name and p_name == kp_clean_name:
+                        continue
+                    entry = {"name": p_name, "qq": p_qq}
+                    cleaned_valid.append(entry)
+                    cleaned_all.append(entry)
+                else:
+                    if has_name_key and p.get("name") is None and not p_qq:
+                        # LLM 因局部乱码吐出的 {"name": null, "qq": null}
+                        continue
+                    cleaned_all.append(p)
+            if cleaned_valid and len(cleaned_valid) == len(cleaned_all):
+                out["players"] = cleaned_valid
+            elif cleaned_valid and all(isinstance(x, dict) and "name" in x for x in players):
+                out["players"] = cleaned_valid
+            else:
+                out["players"] = cleaned_all
+
+        return out
 
     @staticmethod
     def _skip_item(filename: str, existing: sqlite3.Row) -> dict[str, Any]:
@@ -876,9 +1195,9 @@ class SessionStatsService:
             """
             insert into sessions(
                 batch_id, month, title, duration_hours, kp_player_id, source_filename,
-                content_hash, model_name, confidence, raw_payload, created_at
+                source_file_id, content_hash, model_name, confidence, raw_payload, created_at
             )
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 batch_id,
@@ -887,6 +1206,7 @@ class SessionStatsService:
                 duration_hours,
                 kp_id,
                 file.filename,
+                file.source_file_id,
                 content_hash,
                 model_name,
                 payload.get("confidence"),
@@ -906,27 +1226,54 @@ class SessionStatsService:
             self._insert_participant(conn, session_id, player_id, "pl", duration_hours, is_host=False)
         return session_id
 
+    def _merge_orphan_player_into(self, conn: sqlite3.Connection, source_id: int, target_id: int) -> None:
+        if source_id == target_id:
+            return
+        conn.execute("update sessions set kp_player_id = ? where kp_player_id = ?", (target_id, source_id))
+        # 对同一 session 若 target 已在参与者表中，删掉重复的 source 行，其余迁移为 target_id
+        conn.execute(
+            """
+            delete from session_participants
+            where player_id = ?
+              and session_id in (select session_id from session_participants where player_id = ?)
+            """,
+            (source_id, target_id),
+        )
+        conn.execute("update session_participants set player_id = ? where player_id = ?", (target_id, source_id))
+        conn.execute("delete from players where id = ?", (source_id,))
+
     def _upsert_player(self, conn: sqlite3.Connection, name: str, qq: Any, *, prefer_qq: bool) -> int:
         clean_name = self._clean_text(name)
         clean_qq = self._optional_text(qq)
         now = self._now()
-        row = None
-        if prefer_qq and clean_qq:
-            row = conn.execute("select id, name, qq from players where qq = ?", (clean_qq,)).fetchone()
-        if row is None:
-            row = conn.execute(
-                """
-                select id, name, qq
-                from players
-                where name = ?
-                order by case when qq is null then 0 else 1 end, id
-                limit 1
-                """,
-                (clean_name,),
-            ).fetchone()
-        if prefer_qq and clean_qq and row is not None and row["qq"] != clean_qq:
+
+        by_qq = conn.execute("select id, name, qq from players where qq = ?", (clean_qq,)).fetchone() if (prefer_qq and clean_qq) else None
+        by_name = conn.execute(
+            """
+            select id, name, qq
+            from players
+            where name = ?
+            order by case when qq is null then 0 else 1 end, id
+            limit 1
+            """,
+            (clean_name,),
+        ).fetchone()
+
+        if by_qq is not None:
+            target_id = int(by_qq["id"])
+            # 若此前存在同名且 qq IS NULL 的孤儿记录，自动归并历史参团记录到该 QQ 账号下
+            if by_name is not None and int(by_name["id"]) != target_id and not by_name["qq"]:
+                self._merge_orphan_player_into(conn, int(by_name["id"]), target_id)
+            if prefer_qq and by_qq["name"] != clean_name:
+                conn.execute("update players set name = ?, updated_at = ? where id = ?", (clean_name, now, target_id))
+            return target_id
+
+        row = by_name
+        # 仅当同名记录已经绑定了另一个不同的非空 QQ 时（同名不同人），才不复用而新建独立玩家行
+        if prefer_qq and clean_qq and row is not None and row["qq"] is not None and row["qq"] != clean_qq:
             row = None
-        if row:
+
+        if row is not None:
             updates: list[str] = []
             params: list[Any] = []
             if clean_qq and not row["qq"]:
@@ -941,6 +1288,7 @@ class SessionStatsService:
                 params.append(row["id"])
                 conn.execute(f"update players set {', '.join(updates)} where id = ?", params)
             return int(row["id"])
+
         cursor = conn.execute(
             "insert into players(name, qq, created_at, updated_at) values (?, ?, ?, ?)",
             (clean_name, clean_qq, now, now),

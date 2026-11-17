@@ -12,7 +12,13 @@ from pathlib import Path
 BACKEND_ROOT = Path(__file__).resolve().parents[1] / "web" / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.session_stats import OpenAIExtractor, SessionStatsService, SessionTextFile
+from app.session_stats import (
+    OpenAIExtractor,
+    SessionStatsService,
+    SessionTextFile,
+    clean_person_identity,
+    infer_duration_hours_fallback,
+)
 
 
 class FakeExtractor:
@@ -664,6 +670,106 @@ class SessionStatsServiceTest(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertIn("模型请求超时", str(raised.exception))
         self.assertNotIn("The read operation timed out", str(raised.exception))
+
+    def test_flaw_repairs_duration_fallback_kp_card_split_and_null_players(self):
+        # 模拟生产库真实瑕疵：LLM 未抽出时长、KP 名字混带『+卡名（卡名）』、玩家含全 null 乱码项且混带括号 QQ
+        raw_content = "十镇冬日11月第一车·21H结团\n时长：11.10~11.15 总计21H\n【KP】林雨霁（3909862519）+林若真（卡名）\n"
+        result = self.service.import_text_files(
+            month="2026-11",
+            files=[SessionTextFile(filename="十镇冬日11月第一车·21H结团.txt", content=raw_content, source_file_id="/file_nov_1")],
+            extractor=FakeExtractor([
+                {
+                    "title": "十镇冬日",
+                    "duration_hours": None,
+                    "kp": {"name": "林雨霁（3909862519）+林若真（卡名）", "qq": None},
+                    "players": [
+                        {"name": "梅普露（2577535590）", "qq": None},
+                        {"name": "卡名：花塚硝子", "qq": None},
+                        {"name": None, "qq": None},
+                        {"name": "林雨霁", "qq": "3909862519"},  # 误混入 PL 的 KP 本人
+                    ],
+                    "confidence": 0.85,
+                    "warnings": [],
+                }
+            ]),
+            model_name="fake-model",
+        )
+        self.assertEqual(result["success_count"], 1, result)
+        sid = result["items"][0]["session_id"]
+        detail = self.service.get_session_detail(sid)
+        self.assertAlmostEqual(detail["duration_hours"], 21.0)
+        self.assertEqual(detail["kp"]["name"], "林雨霁")
+        self.assertEqual(detail["kp"]["qq"], "3909862519")
+        pls = [p for p in detail["participants"] if not p["is_host"]]
+        self.assertEqual(len(pls), 2)
+        self.assertEqual({(p["name"], p["qq"]) for p in pls}, {("梅普露", "2577535590"), ("花塚硝子", None)})
+
+        # 同一群文件 source_file_id 在群内修订了正文（例如从 21h 改成 22h），重新同步时应原地覆盖而非记成两场团
+        updated = self.service.import_text_files(
+            month="2026-11",
+            files=[SessionTextFile(filename="十镇冬日修订版.txt", content=raw_content + "\n修订", source_file_id="/file_nov_1")],
+            extractor=FakeExtractor([
+                {
+                    "title": "十镇冬日（修订）",
+                    "duration_hours": 22,
+                    "kp": {"name": "林雨霁", "qq": "3909862519"},
+                    "players": [{"name": "梅普露", "qq": "2577535590"}, {"name": "花塚硝子", "qq": None}],
+                    "confidence": 0.95,
+                    "warnings": [],
+                }
+            ]),
+            model_name="fake-model",
+        )
+        self.assertEqual(updated["success_count"], 1)
+        self.assertEqual(self.service.get_overview("2026-11")["session_count"], 1)
+        self.assertAlmostEqual(self.service.get_overview("2026-11")["total_host_hours"], 22.0)
+
+        # 支持手动编辑补录 KP 与 PL 名单并实时更新统计
+        patched = self.service.update_session(
+            updated["items"][0]["session_id"],
+            kp={"name": "林雨霁", "qq": "3909862519"},
+            players=[
+                {"name": "梅普露", "qq": "2577535590"},
+                {"name": "花塚硝子", "qq": "123450000"},
+                {"name": "新补录调查员", "qq": None},
+            ],
+        )
+        self.assertEqual(len([p for p in patched["participants"] if not p["is_host"]]), 3)
+        self.assertEqual(self.service.get_overview("2026-11")["participant_count"], 4)
+
+    def test_identity_and_duration_helpers(self):
+        self.assertEqual(clean_person_identity("艾丝特1546003281", None), ("艾丝特", "1546003281"))
+        self.assertEqual(clean_person_identity("Jinbert（1462158343）+方汪汪（卡名）", None), ("Jinbert", "1462158343"))
+        # 纯数字卡名与 +1 增益后缀不应误伤
+        self.assertEqual(clean_person_identity("10086", None), ("10086", None))
+        self.assertEqual(clean_person_identity("苏早琴+1", None), ("苏早琴+1", None))
+        # .ra3.5h 检定不应误抽成 5h
+        self.assertIsNone(infer_duration_hours_fallback("普通结团报告.txt", "检定记录 .ra3.5h 成功"))
+        self.assertEqual(infer_duration_hours_fallback("从地狱归来的刮刮乐8h结团.txt", "无时长正文"), 8.0)
+        self.assertEqual(infer_duration_hours_fallback("隔离区h(31小时)第一车升b.txt", "无"), 31.0)
+
+        # 验证原本无 QQ 的玩家在后续补填 QQ 时原地升级归并，不分裂成两条同名玩家
+        self.service.import_text_files(
+            month="2026-11",
+            files=[SessionTextFile(filename="t1.txt", content="c1")],
+            extractor=FakeExtractor([
+                {"title": "T1", "duration_hours": 5, "kp": {"name": "KP甲", "qq": "100001"}, "players": [{"name": "无号旅人", "qq": None}], "confidence": 0.9, "warnings": []}
+            ]),
+            model_name="fake-model",
+        )
+        self.service.import_text_files(
+            month="2026-11",
+            files=[SessionTextFile(filename="t2.txt", content="c2")],
+            extractor=FakeExtractor([
+                {"title": "T2", "duration_hours": 7, "kp": {"name": "KP甲", "qq": "100001"}, "players": [{"name": "无号旅人", "qq": "77788899"}], "confidence": 0.9, "warnings": []}
+            ]),
+            model_name="fake-model",
+        )
+        travellers = [p for p in self.service.list_players("2026-11") if p["name"] == "无号旅人"]
+        self.assertEqual(len(travellers), 1)
+        self.assertEqual(travellers[0]["qq"], "77788899")
+        self.assertEqual(travellers[0]["game_count"], 2)
+        self.assertAlmostEqual(travellers[0]["game_hours"], 12.0)
 
 
 if __name__ == "__main__":

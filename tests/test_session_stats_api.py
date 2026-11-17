@@ -7,11 +7,13 @@ import time
 import unittest
 from pathlib import Path
 
+import httpx
 from fastapi.testclient import TestClient
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1] / "web" / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
+from app.community import UpstreamAuthClient
 from app.session_stats import SessionStatsService, SessionTextFile
 import app.main as main_app
 
@@ -321,6 +323,105 @@ class SessionStatsApiTest(unittest.TestCase):
             self.assertEqual(response.json()["deleted_count"], 1)
             self.assertEqual(main_app.SESSION_STATS_SERVICE.get_overview("2026-05")["session_count"], 1)
         finally:
+            if old_password is None:
+                os.environ.pop("ADMIN_PASSWORD", None)
+            else:
+                os.environ["ADMIN_PASSWORD"] = old_password
+
+    def test_sync_group_endpoint_pulls_from_cache_and_runs_llm_incrementally(self):
+        old_password = os.environ.get("ADMIN_PASSWORD")
+        old_upstream = main_app.UPSTREAM_AUTH_CLIENT
+        os.environ["ADMIN_PASSWORD"] = "test-pass"
+
+        def mock_upstream(req: httpx.Request) -> httpx.Response:
+            if req.url.path.endswith("/v1/session-reports/months"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "items": [
+                            {"month": "2026-12", "file_count": 1, "text_count": 1, "folders": [{"folder_name": "十二月结团文件"}]},
+                            {"month": "2026-11", "file_count": 2, "text_count": 2, "folders": [{"folder_name": "十一月结团文件"}]},
+                        ],
+                        "stale": False,
+                        "revision": 3,
+                    },
+                )
+            if req.url.path.endswith("/v1/session-reports") and req.url.params.get("month") == "2026-11":
+                return httpx.Response(
+                    200,
+                    json={
+                        "items": [
+                            {"id": "rep1", "file_id": "/qq_f1", "file_name": "地城追凶9h.txt", "text_available": True, "uploader_qq": "123456"},
+                            {"id": "rep2", "file_id": "/qq_f2", "file_name": "肥沃谷7小时.txt", "text_available": True, "uploader_qq": "654321"},
+                        ],
+                        "total": 2,
+                    },
+                )
+            if req.url.path.endswith("/v1/session-reports/rep1/content"):
+                return httpx.Response(200, json={"id": "rep1", "content": "团名：地城追凶\n【时长】9h\n【KP】甲（111111）\n乙（222222）"})
+            if req.url.path.endswith("/v1/session-reports/rep2/content"):
+                return httpx.Response(200, json={"id": "rep2", "content": "肥沃谷(7小时)\nKP：丙（333333）\n丁（444444）"})
+            return httpx.Response(404, json={"error": "not_found"})
+
+        main_app.UPSTREAM_AUTH_CLIENT = UpstreamAuthClient(
+            base_url="https://trpg.chordvers.org/onebot-sequences",
+            token_getter=lambda: "mock-token-value",
+            transport=httpx.MockTransport(mock_upstream),
+        )
+        main_app.SESSION_STATS_EXTRACTOR = FakeExtractor([
+            {
+                "title": "地城追凶",
+                "duration_hours": 9,
+                "kp": {"name": "甲", "qq": "111111"},
+                "players": [{"name": "乙", "qq": "222222"}],
+                "confidence": 0.95,
+                "warnings": [],
+            },
+            {
+                "title": "肥沃谷",
+                "duration_hours": None,  # 由文件名 7小时 自动兜底修复
+                "kp": {"name": "丙（333333）+分身（卡名）", "qq": None},
+                "players": [{"name": "丁（444444）", "qq": None}],
+                "confidence": 0.9,
+                "warnings": [],
+            },
+        ])
+        try:
+            src = self.client.get("/api/session-stats/group-source")
+            self.assertEqual(src.status_code, 200)
+            self.assertEqual([m["month"] for m in src.json()["items"]], ["2026-12", "2026-11"])
+
+            self.client.post("/api/admin/login", json={"password": "test-pass"})
+            started = self.client.post("/api/session-stats/sync-group", json={"month": "2026-11", "concurrency": 2})
+            self.assertEqual(started.status_code, 200)
+            job_id = started.json()["job_id"]
+
+            final = None
+            for _ in range(40):
+                polled = self.client.get(f"/api/session-stats/import-jobs/{job_id}")
+                final = polled.json()
+                if final["status"] in ("completed", "failed"):
+                    break
+                time.sleep(0.05)
+
+            self.assertEqual(final["status"], "completed", final)
+            self.assertEqual(final["success_count"], 2)
+            self.assertEqual(main_app.SESSION_STATS_SERVICE.get_overview("2026-11")["session_count"], 2)
+
+            # 第二次增量拉取同一月：全部命中已导入缓存，不再消耗 LLM 调用
+            started2 = self.client.post("/api/session-stats/sync-group", json={"month": "2026-11", "concurrency": 2})
+            job2_id = started2.json()["job_id"]
+            final2 = None
+            for _ in range(30):
+                final2 = self.client.get(f"/api/session-stats/import-jobs/{job2_id}").json()
+                if final2["status"] in ("completed", "failed"):
+                    break
+                time.sleep(0.05)
+            self.assertEqual(final2["status"], "completed")
+            self.assertEqual(final2["success_count"], 0)
+            self.assertEqual(final2["skip_count"], 2)
+        finally:
+            main_app.UPSTREAM_AUTH_CLIENT = old_upstream
             if old_password is None:
                 os.environ.pop("ADMIN_PASSWORD", None)
             else:
