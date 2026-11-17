@@ -38,7 +38,7 @@ function readCachedPending(): { qq: string; botQq: string; code: string; expires
     }
     return {
       qq: parsed.qq,
-      botQq: parsed.botQq || '3239195029',
+      botQq: parsed.botQq || '412318056',
       code: parsed.code || '',
       expiresAt: parsed.expiresAt,
     };
@@ -100,7 +100,7 @@ export function QqLoginModal({ open, viewer, onClose, onLoggedIn, onLoggedOut }:
       if (Number.isNaN(expMs) || expMs > Date.now()) {
         const restoredQq = serverPending?.qq || cached?.qq || '';
         const restoredCode = serverPending?.verification_code || cached?.code || '';
-        const restoredBot = serverPending?.bot_qq || cached?.botQq || '3239195029';
+        const restoredBot = serverPending?.bot_qq || cached?.botQq || '412318056';
         if (restoredQq) {
           setQq(restoredQq);
           setStep({
@@ -373,7 +373,7 @@ export function QqLoginModal({ open, viewer, onClose, onLoggedIn, onLoggedOut }:
             </div>
             <ul className="comm-auth-tips">
               <li>第 1 步先校验你的 QQ 当前在交易群 <code>672204828</code>，不在群不发码。</li>
-              <li>第 2 步使用刚填的 QQ 向 BOT（<code>{viewer?.bot_qq || '3239195029'}</code>）私聊发送完整验证码（好友或群临时会话均可）。</li>
+              <li>第 2 步使用刚填的 QQ 向 BOT（<code>{viewer?.bot_qq || '412318056'}</code>）私聊发送完整验证码（好友或群临时会话均可）。</li>
               <li>即使从 QQ 内置网页切出去发消息后再重新点开链接，未过期的验证也会自动续接并完成登录。</li>
             </ul>
             {error && <p className="comm-auth-error" role="alert">{error}</p>}

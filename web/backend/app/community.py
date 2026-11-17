@@ -33,7 +33,8 @@ from pydantic import BaseModel, Field
 
 QQ_RE = re.compile(r"^[1-9][0-9]{4,11}$")
 EXPECTED_GROUP_ID = 672204828
-EXPECTED_BOT_QQ = "3239195029"
+# 私聊验证码接收 BOT 的 QQ 号；换号时优先改环境变量 COMMUNITY_BOT_QQ，无需改代码
+EXPECTED_BOT_QQ = os.getenv("COMMUNITY_BOT_QQ", "412318056").strip() or "412318056"
 DEFAULT_AUTH_BASE = "https://trpg.chordvers.org/onebot-sequences"
 
 BROWSER_COOKIE = "seqlib_community_sid"
