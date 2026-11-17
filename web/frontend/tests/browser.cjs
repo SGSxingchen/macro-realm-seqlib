@@ -28,7 +28,7 @@ async function setup(browser, viewport, colorScheme = 'dark') {
     let status = 200;
     let body;
     if (url.pathname === '/api/tree') body = { items: [{ name: '序列库', path: '序列库', count: 620, children: [{ name: '技能表', path: '序列库/技能表', count: 620, children: [{ name: '科技侧', path: '序列库/技能表/科技侧', count: 620, children: [] }] }] }] };
-    else if (url.pathname === '/api/auth/me') body = { authenticated: false, auth_configured: true, bot_qq: '3239195029', group_id: 672204828, admin_authenticated: false, is_moderator: false, user: null };
+    else if (url.pathname === '/api/auth/me') body = { authenticated: false, auth_configured: true, bot_qq: '412318056', group_id: 672204828, admin_authenticated: false, is_moderator: false, user: null };
     else if (url.pathname === '/api/community/home') body = { board: { items: [], count: 0, total_threads: 0, total_posts: 0, anchor_counts: {}, limit: 25, offset: 0 }, recent_resource_comments: [], stats: { board_post_count: 0, resource_comment_count: 0, member_count: 0, banned_count: 0 } };
     else if (url.pathname === '/api/community/comments') body = { items: [], count: 0, total_threads: 0, total_posts: 0, anchor_counts: {}, limit: 50, offset: 0 };
     else if (url.pathname === '/api/resources') {

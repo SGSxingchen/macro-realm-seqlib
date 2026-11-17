@@ -188,7 +188,7 @@ const resources = [{
           body = {
             authenticated: loggedIn,
             auth_configured: true,
-            bot_qq: '3239195029',
+            bot_qq: '412318056',
             group_id: 672204828,
             admin_authenticated: false,
             is_moderator: loggedIn,
@@ -199,7 +199,7 @@ const resources = [{
           const exp = new Date(Date.now() + 300000).toISOString();
           pendingChallenge = {
             qq: '1348697221',
-            bot_qq: '3239195029',
+            bot_qq: '412318056',
             verification_code: 'TRPG-TESTCODE8888',
             expires_at: exp,
           };
@@ -207,7 +207,7 @@ const resources = [{
             ok: true,
             qq: '1348697221',
             group_id: 672204828,
-            bot_qq: '3239195029',
+            bot_qq: '412318056',
             verification_code: 'TRPG-TESTCODE8888',
             message_to_send: 'TRPG-TESTCODE8888',
             expires_at: exp,
@@ -216,7 +216,7 @@ const resources = [{
         } else if (url.pathname === '/api/auth/qq/challenges/current') {
           body = {
             qq: '1348697221',
-            bot_qq: '3239195029',
+            bot_qq: '412318056',
             status: challengeVerified ? 'verified' : 'pending',
             expires_at: pendingChallenge?.expires_at || new Date(Date.now() + 300000).toISOString(),
           };
@@ -227,7 +227,7 @@ const resources = [{
             ok: true,
             authenticated: true,
             auth_configured: true,
-            bot_qq: '3239195029',
+            bot_qq: '412318056',
             group_id: 672204828,
             admin_authenticated: false,
             is_moderator: true,
