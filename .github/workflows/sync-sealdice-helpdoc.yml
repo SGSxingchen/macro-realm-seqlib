@@ -1,0 +1,138 @@
+name: 同步海豹帮助文档
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - "序列库/**"
+      - "!序列库/新过审序列/**"
+      - "text_encoding.py"
+      - "tools/build_sealdice_helpdoc.py"
+      - "tools/sync_sealdice_helpdoc.py"
+      - ".github/workflows/sync-sealdice-helpdoc.yml"
+  workflow_dispatch:
+    inputs:
+      force_reload:
+        description: 内容未变化时也同步并重载
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-sealdice-helpdoc
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: 检出资源与同步脚本
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: 严格校验资源
+        run: |
+          if ! python3 .agents/skills/seqlib-resource-workflow/scripts/lint_resources.py --all --strict; then
+            echo '::warning::全库 strict 校验未通过；改用同一 strict 规则检查本次实际发布的五类正式资源。'
+            python3 .agents/skills/seqlib-resource-workflow/scripts/lint_resources.py --strict \
+              '序列库/公共建筑' '序列库/技能表' '序列库/能量池' '序列库/特质改造' '序列库/职业'
+          fi
+
+      - name: 构建帮助文档校验包
+        run: |
+          python3 tools/build_sealdice_helpdoc.py --check \
+            --output-dir /tmp/sealdice-helpdoc-out \
+            --archive /tmp/sealdice-helpdoc.tar.gz | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 保存构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: sealdice-helpdoc
+          path: /tmp/sealdice-helpdoc.tar.gz
+          if-no-files-found: error
+
+      - name: 上传并同步至海豹实例
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SEALDICE_DIR: ${{ vars.SEALDICE_DIR }}
+          FORCE_RELOAD: ${{ inputs.force_reload }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_HOST" || { echo '缺少 GitHub Secret: DEPLOY_HOST'; exit 1; }
+          test -n "$DEPLOY_USER" || { echo '缺少 GitHub Secret: DEPLOY_USER'; exit 1; }
+          test -n "$DEPLOY_SSH_KEY" || { echo '缺少 GitHub Secret: DEPLOY_SSH_KEY'; exit 1; }
+
+          host="${DEPLOY_HOST#http://}"
+          host="${host#https://}"
+          host="${host%%/*}"
+          host="${host#[}"
+          host="${host%]}"
+          [[ "$host" =~ ^[a-zA-Z0-9:][a-zA-Z0-9.:-]*$ ]] || { echo 'DEPLOY_HOST 无效'; exit 1; }
+          [[ "$DEPLOY_USER" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$ ]] || { echo 'DEPLOY_USER 无效'; exit 1; }
+          PORT="${DEPLOY_PORT:-61149}"
+          if [[ ! "$PORT" =~ ^[0-9]{1,5}$ ]] || (( 10#$PORT < 1 || 10#$PORT > 65535 )); then
+            PORT=61149
+          else
+            PORT=$((10#$PORT))
+          fi
+
+          umask 077
+          ssh_dir=$(mktemp -d "$RUNNER_TEMP/sealdice-ssh.XXXXXXXX")
+          remote_dir_created=false
+          cleanup() {
+            local status=$?
+            if [[ "$remote_dir_created" == true ]] && ! ssh "${ssh_options[@]}" -p "$PORT" -- "$target" \
+              'rm -f -- /tmp/sealdice-helpdoc-deploy/sealdice-helpdoc.tar.gz /tmp/sealdice-helpdoc-deploy/sync_sealdice_helpdoc.py && rmdir -- /tmp/sealdice-helpdoc-deploy'; then
+              echo '::warning::清理远端帮助文档上传目录失败，请检查后再重试。'
+              if (( status == 0 )); then status=1; fi
+            fi
+            if ! { rm -f -- "$ssh_dir/key" "$ssh_dir/known_hosts" && rmdir -- "$ssh_dir"; }; then
+              if (( status == 0 )); then status=1; fi
+            fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+
+          printf '%s\n' "${DEPLOY_SSH_KEY//$'\r'/}" > "$ssh_dir/key"
+          chmod 600 "$ssh_dir/key"
+          ssh-keygen -y -f "$ssh_dir/key" </dev/null >/dev/null
+          ssh-keyscan -T 15 -p "$PORT" -H "$host" > "$ssh_dir/known_hosts"
+          ssh_options=(-i "$ssh_dir/key" -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$ssh_dir/known_hosts" -o ConnectTimeout=15)
+          target="$DEPLOY_USER@$host"
+          scp_host="$host"
+          if [[ "$host" == *:* ]]; then scp_host="[$host]"; fi
+
+          # 独占暂存目录，避免覆盖同名文件或使用残留的上次上传内容。
+          ssh "${ssh_options[@]}" -p "$PORT" -- "$target" 'mkdir -m 700 -- /tmp/sealdice-helpdoc-deploy'
+          remote_dir_created=true
+          scp -P "$PORT" "${ssh_options[@]}" -- /tmp/sealdice-helpdoc.tar.gz \
+            tools/sync_sealdice_helpdoc.py "$DEPLOY_USER@$scp_host:/tmp/sealdice-helpdoc-deploy/"
+
+          # SSH 将远端命令交给登录 shell；用单引号转义保留路径中的空格和引号。
+          quote_remote() {
+            local value=${1//\'/\'\\\'\'}
+            printf "'%s'" "$value"
+          }
+          ssh "${ssh_options[@]}" -p "$PORT" -- "$target" \
+            "bash -s -- $(quote_remote "${SEALDICE_DIR:-/root/sealdice/15}") $(quote_remote "$FORCE_RELOAD")" <<'REMOTE'
+          set -euo pipefail
+          args=(--bundle /tmp/sealdice-helpdoc-deploy/sealdice-helpdoc.tar.gz
+                --sealdice-dir "$1" --clean-legacy-zip)
+          if [[ "$2" == true ]]; then args+=(--force); fi
+          python3 /tmp/sealdice-helpdoc-deploy/sync_sealdice_helpdoc.py "${args[@]}"
+          REMOTE
