@@ -36,5 +36,5 @@ python3 /tmp/sealdice-helpdoc-deploy/sync_sealdice_helpdoc.py \
 ## 验收、跳过与回滚
 
 - 已安装的清单通过校验且对应同一 Git 提交时，默认跳过同步和重载。需要强制更新时加 `--force`，或在 Actions 手动勾选 `force_reload`。`--skip-reload` 仅写文件，不会重载或验证索引，不代表服务已生效；之后用同一提交正式重载时须加 `--force`，否则会跳过。
-- 正常同步通过 `POST /sd-api/helpdoc/reload` 重载，等待 `GET /sd-api/helpdoc/tree` 不再加载并检查五个分类的状态，然后用 `POST /sd-api/helpdoc/text_item_page` 确认各分类的搜索结果 `total > 0`。
+- 正常同步通过 `POST /sd-api/helpdoc/reload` 重载，等待 `GET /sd-api/helpdoc/tree` 不再加载并检查五个分类的状态，然后用 `POST /sd-api/helpdoc/textitem/get_page` 确认各分类的搜索结果 `total > 0`。
 - 上一份受管内容保留在 `<sealdice-dir>/backups/helpdoc-seqlib-prev`，只有一个备份槽；它也包含本次移除的旧 ZIP（如有）。如重载或验收失败，脚本会尝试恢复旧内容和 ZIP 并再次重载。如果自动恢复失败，先停止后续同步并检查日志及备份，只恢复受管分类、清单和本次移除的旧 ZIP，再重载和复核；不要整目录覆盖 `data/helpdoc`。

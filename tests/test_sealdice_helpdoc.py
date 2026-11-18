@@ -208,7 +208,7 @@ class SealDiceHandler(BaseHTTPRequestHandler):
                         {"name": f"001】{group}.json", "group": group, "isDir": False,
                          "loadStatus": 2 if s.failure == "tree" and s.reloads == 1 and group == "技能表" else 1}
                     ]} for group in GROUPS]}
-        elif self.command == "POST" and self.path == "/sd-api/helpdoc/text_item_page":
+        elif self.command == "POST" and self.path == "/sd-api/helpdoc/textitem/get_page":
             request = json.loads(body)
             s.pages.append(request)
             answer = {"result": True, "total": 0 if s.failure == "page" and s.reloads == 1 and request["group"] == "技能表" else 1, "data": []}

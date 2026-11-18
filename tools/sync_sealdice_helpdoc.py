@@ -345,7 +345,7 @@ class SealDice:
                 raise SyncError(f"SealDice tree does not contain the managed group: {group}")
             self.verify_tree(groups[0], group)
         for group in GROUPS:
-            response = self.call("POST", "text_item_page", {"pageNum": 1, "pageSize": 5, "group": group})
+            response = self.call("POST", "textitem/get_page", {"pageNum": 1, "pageSize": 5, "group": group})
             if type(response.get("total")) is not int or response["total"] <= 0:
                 raise SyncError(f"SealDice search has no indexed entries for group: {group}")
 
