@@ -372,89 +372,58 @@ class CommunityAndQqAuthTests(unittest.TestCase):
         self.assertEqual(detail["floor"], 1)
         self.assertEqual(detail["replies"][0]["floor"], 2)
 
-    def test_official_bot_short_code_login_and_nickname_edit(self) -> None:
+    def test_official_bot_web_challenge_login_and_nickname_edit(self) -> None:
         bot_bridge = TestClient(app_main.app)
         browser = TestClient(app_main.app)
+        other = TestClient(app_main.app)
+        challenge = "/api/auth/web-challenges"
+        verify = "/api/auth/bot/verify-code"
+        token = {"Authorization": "Bearer mock-secret-bearer-token"}
+        group = "OpenQQ-Group:4019653007-6C93AE22F9628FC5D947F07C55643B91"
 
-        # 1. 未带 Bearer 密钥或非主群请求拒绝签发
-        unauth = bot_bridge.post(
-            "/api/auth/bot/issue-code",
-            json={
-                "open_user_id": "OpenQQ:4019653007-49E8BA38D36D9D9EEEA615D657C94E2C",
-                "open_group_id": "OpenQQ-Group:4019653007-6C93AE22F9628FC5D947F07C55643B91",
-                "sealdice_nickname": "雨霁",
-            },
-        )
-        self.assertEqual(unauth.status_code, 401)
-
-        wrong_group = bot_bridge.post(
-            "/api/auth/bot/issue-code",
-            headers={"Authorization": "Bearer mock-secret-bearer-token"},
-            json={
-                "open_user_id": "OpenQQ:4019653007-49E8BA38D36D9D9EEEA615D657C94E2C",
-                "open_group_id": "OpenQQ-Group:4019653007-CAB18FD223F3C863DC20A42B6456BA16",
-                "sealdice_nickname": "雨霁",
-            },
-        )
-        self.assertEqual(wrong_group.status_code, 403)
-
-        # 1b. 未在主群登记过的陌生人直接私聊请求登录码，返回 403 拦截
-        stranger_dm = bot_bridge.post(
-            "/api/auth/bot/issue-code",
-            headers={"Authorization": "Bearer mock-secret-bearer-token"},
-            json={
-                "open_user_id": "OpenQQ:4019653007-49E8BA38D36D9D9EEEA615D657C94E2C",
-                "source": "private",
-            },
-        )
-        self.assertEqual(stranger_dm.status_code, 403)
-
-        # 2. 主群内登记成员后，后续直接私聊 source="private" 也可正常签发 6 位私密短码
-        issued = bot_bridge.post(
-            "/api/auth/bot/issue-code",
-            headers={"Authorization": "Bearer mock-secret-bearer-token"},
-            json={
-                "open_user_id": "OpenQQ:4019653007-49E8BA38D36D9D9EEEA615D657C94E2C",
-                "open_group_id": "OpenQQ-Group:4019653007-6C93AE22F9628FC5D947F07C55643B91",
-                "sealdice_nickname": "雨霁",
-                "bot_app_id": "1903175013",
-                "source": "group",
-            },
-        )
-        self.assertEqual(issued.status_code, 200)
-        dm_issued = bot_bridge.post(
-            "/api/auth/bot/issue-code",
-            headers={"Authorization": "Bearer mock-secret-bearer-token"},
-            json={
-                "open_user_id": "OpenQQ:4019653007-49E8BA38D36D9D9EEEA615D657C94E2C",
-                "bot_app_id": "1903175013",
-                "source": "private",
-            },
-        )
-        self.assertEqual(dm_issued.status_code, 200)
-        code = dm_issued.json()["code"]
+        issued = browser.post(challenge)
+        self.assertEqual(issued.status_code, 200, issued.text)
+        self.assertIn("HttpOnly", issued.headers["set-cookie"])
+        self.assertEqual(issued.headers["cache-control"], "private, no-store")
+        code = issued.json()["code"]
+        self.assertEqual(issued.json()["command"], f"/登录 {code}")
         self.assertRegex(code, r"^\d{6}$")
+        self.assertEqual(browser.post(challenge).json()["code"], code)
+        self.assertEqual(browser.get(f"{challenge}/current").json()["status"], "pending")
+        self.assertEqual(other.get(f"{challenge}/current").json(), {"status": "expired"})
 
-        inspected = browser.post("/api/auth/bot/inspect", json={"code": code})
-        self.assertEqual(inspected.status_code, 200)
-        ins_data = inspected.json()
-        self.assertTrue(ins_data["is_new_user"])
-        self.assertEqual(ins_data["suggested_nickname"], "雨霁")
-        self.assertEqual(
-            ins_data["avatar_url"],
-            "https://q.qlogo.cn/qqapp/1903175013/49E8BA38D36D9D9EEEA615D657C94E2C/640",
-        )
+        claim = {
+            "code": code,
+            "open_user_id": "OpenQQ:4019653007-49E8BA38D36D9D9EEEA615D657C94E2C",
+            "open_group_id": group,
+            "bot_app_id": "1903175013",
+            "sealdice_nickname": "雨霁",
+        }
+        self.assertEqual(bot_bridge.post(verify, json=claim).status_code, 401)
+        self.assertEqual(bot_bridge.post(verify, headers=token, json={
+            **claim, "open_group_id": "AAAAAAAAAAAAAAAA",
+        }).status_code, 403)
+        self.assertEqual(bot_bridge.post(verify, headers=token, json=claim).status_code, 200)
+        self.assertEqual(bot_bridge.post(verify, headers=token, json={
+            **claim, "open_user_id": "OpenQQ:4019653007-AAAAAAAAAAAAAAAA",
+        }).status_code, 409)
 
-        # 3. 首次登录可自定义修改昵称并建立会话；同一短码二次消费返回 409
-        consumed = browser.post("/api/auth/bot/consume", json={"code": code, "nickname": "雨霁·改"})
-        self.assertEqual(consumed.status_code, 200)
-        viewer = consumed.json()
-        self.assertTrue(viewer["authenticated"])
-        self.assertEqual(viewer["user"]["qq"], "oid:49E8BA38D36D9D9EEEA615D657C94E2C")
-        self.assertEqual(viewer["user"]["nickname"], "雨霁·改")
-
-        replay = TestClient(app_main.app).post("/api/auth/bot/consume", json={"code": code, "nickname": "重放"})
-        self.assertEqual(replay.status_code, 409)
+        inspected = browser.get(f"{challenge}/current").json()
+        self.assertEqual(browser.post(challenge).json(), inspected)
+        self.assertTrue(inspected["is_new_user"])
+        self.assertEqual(inspected["suggested_nickname"], "雨霁")
+        self.assertNotIn("code", inspected)
+        receipt = {"X-Login-Confirmation": inspected["confirmation"]}
+        consume = f"{challenge}/consume"
+        self.assertEqual(other.post(consume, headers=receipt, json={"nickname": "重放"}).status_code, 409)
+        self.assertEqual(browser.post(consume, json={"code": code, "nickname": "雨霁·改"}).status_code, 422)
+        self.assertEqual(browser.post(consume, headers=receipt, json={}).status_code, 400)
+        consumed = browser.post(consume, headers=receipt, json={"nickname": "雨霁·改"})
+        self.assertEqual(consumed.status_code, 200, consumed.text)
+        self.assertTrue(consumed.json()["authenticated"])
+        self.assertEqual(consumed.json()["user"]["nickname"], "雨霁·改")
+        self.assertEqual(browser.post(consume, headers=receipt, json={}).status_code, 409)
+        self.assertEqual(other.post("/api/auth/bot/consume", json={"code": code}).status_code, 404)
 
         # 4. 登录后发帖与自助修改昵称（历史帖子作者名同步更新）
         post_res = browser.post("/api/community/board", json={"title": "主群短码测试帖", "content": "无需角色卡即可发帖"})
@@ -469,20 +438,31 @@ class CommunityAndQqAuthTests(unittest.TestCase):
         self.assertEqual(thread["author"]["nickname"], "雨霁终章")
 
         # 5. 维护者 OpenID 白名单自动享有管理员身份，且后台支持封禁/解封 oid:... 账号
-        admin_issue = bot_bridge.post(
-            "/api/auth/bot/issue-code",
-            headers={"Authorization": "Bearer mock-secret-bearer-token"},
-            json={
-                "open_user_id": "OpenQQ:4019653007-FF834522288AB2D2993970BE14970D3A",
-                "open_group_id": "OpenQQ-Group:4019653007-6C93AE22F9628FC5D947F07C55643B91",
-                "sealdice_nickname": "牛奶泡LanStarD",
-            },
-        ).json()
+        returning = TestClient(app_main.app)
+        returning_code = returning.post(challenge).json()["code"]
+        self.assertEqual(bot_bridge.post(verify, headers=token, json={
+            **claim, "code": returning_code, "sealdice_nickname": "其他海豹昵称",
+        }).status_code, 200)
+        returning_info = returning.get(f"{challenge}/current").json()
+        self.assertFalse(returning_info["is_new_user"])
+        self.assertEqual(returning_info["suggested_nickname"], "雨霁终章")
+        returning_login = returning.post(consume, headers={
+            "X-Login-Confirmation": returning_info["confirmation"],
+        }, json={"nickname": ""})
+        self.assertEqual(returning_login.json()["user"]["nickname"], "雨霁终章")
+
         admin_browser = TestClient(app_main.app)
-        admin_login = admin_browser.post(
-            "/api/auth/bot/consume",
-            json={"code": admin_issue["code"], "nickname": "牛奶泡LanStarD"},
-        ).json()
+        admin_code = admin_browser.post(challenge).json()["code"]
+        self.assertEqual(bot_bridge.post(verify, headers=token, json={
+            **claim,
+            "code": admin_code,
+            "open_user_id": "OpenQQ:4019653007-FF834522288AB2D2993970BE14970D3A",
+            "sealdice_nickname": "牛奶泡LanStarD",
+        }).status_code, 200)
+        admin_info = admin_browser.get(f"{challenge}/current").json()
+        admin_login = admin_browser.post(consume, headers={
+            "X-Login-Confirmation": admin_info["confirmation"],
+        }, json={"nickname": "牛奶泡LanStarD"}).json()
         self.assertTrue(admin_login["is_moderator"])
         self.assertEqual(admin_login["user"]["badge"], "维护者")
 

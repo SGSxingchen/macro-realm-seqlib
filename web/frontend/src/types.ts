@@ -350,17 +350,6 @@ export type CommunityViewerState = {
   user: CommunityUserProfile | null;
 };
 
-export type BotInspectCodeResponse = {
-  ok: boolean;
-  code: string;
-  user_key_masked: string;
-  is_new_user: boolean;
-  suggested_nickname: string;
-  sealdice_nickname: string;
-  avatar_url: string;
-  expires_at?: string | null;
-};
-
 export type QqChallengeBeginResponse = {
   ok: boolean;
   qq: string;

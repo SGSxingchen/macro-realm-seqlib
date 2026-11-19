@@ -1,4 +1,4 @@
-/** E2E regression: QQ private code login (incl. WebView reload recovery), classic forum topic list + 1F/2F thread detail, resource anchor comments & visual captures. */
+/** E2E regression: QQ group verification login (incl. WebView reload recovery), classic forum topic list + 1F/2F thread detail, resource anchor comments & visual captures. */
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -198,10 +198,12 @@ const resources = [{
             pending_challenge: null,
             user: currentUser,
           };
-        } else if (url.pathname === '/api/auth/bot/inspect' && req.method() === 'POST') {
+        } else if (url.pathname === '/api/auth/web-challenges' && req.method() === 'POST') {
+          body = { status: 'pending', command: '/登录 839204', bot_name: '阿瓦娜', expires_at: new Date(Date.now() + 300000).toISOString() };
+        } else if (url.pathname === '/api/auth/web-challenges/current' && challengeVerified) {
           body = {
-            ok: true,
-            code: '839204',
+            status: 'verified',
+            confirmation: 'browser-confirmation',
             user_key_masked: 'ID:FF83…0D3A',
             is_new_user: true,
             suggested_nickname: '牛奶泡LanStarD',
@@ -209,8 +211,10 @@ const resources = [{
             avatar_url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
             expires_at: new Date(Date.now() + 300000).toISOString(),
           };
-        } else if (url.pathname === '/api/auth/bot/consume' && req.method() === 'POST') {
+        } else if (url.pathname === '/api/auth/web-challenges/consume' && req.method() === 'POST') {
+          assert.equal(req.headers()['x-login-confirmation'], 'browser-confirmation');
           const payload = JSON.parse(req.postData() || '{}');
+          assert.deepEqual(Object.keys(payload), ['nickname']);
           loggedIn = true;
           const finalNick = (payload.nickname || '').trim() || '轮回者星尘';
           body = {
@@ -405,8 +409,8 @@ const resources = [{
         await page.getByRole('button', { name: '导航', exact: true }).click();
       }
       await page.getByRole('button', { name: '轮回者登录' }).click();
-      await page.getByTestId('bot-login-code-input').fill('839204');
-      await page.getByRole('button', { name: '下一步' }).click();
+      assert.equal(await page.getByTestId('web-login-command').textContent(), '/登录 839204');
+      challengeVerified = true;
       const nickInput = page.getByTestId('bot-login-nickname-input');
       await nickInput.waitFor();
       assert.equal(await nickInput.inputValue(), '牛奶泡LanStarD');

@@ -1,16 +1,8 @@
-"""QQ 私聊验证码登录、持久会话、轮回者论坛与跨序号防断链资源评论模块。
+"""主群 QQ 验证、持久会话和轮回者论坛。
 
-严格遵循《TRPG 私聊验证码登录接口》安全契约与仓库无损规范：
-1. 网站后端持有 ONEBOT_SEQUENCE_TOKEN，前端永不可见该密钥。
-2. challenge_id 与申请绑定的 QQ 仅保存在服务端 SQLite 会话表中（通过 HttpOnly Cookie 绑定当前浏览器），
-   轮询和消费时绝不接受浏览器传入任意 challenge_id 或其他 QQ。
-3. verified 只代表本人已私聊发码；必须调用一次性 consume 接口且同时满足：
-   HTTP 200、passed === True、stale === False、auth_type == "qq_private_code"、
-   status == "consumed"、group_id == 672204828（交易群）、qq 与 challenge_id 与服务端会话一致，才建立登录态。
-4. 资源评论抗重排/抗改名存储：
-   - 不绑死易变的 `001】...` 路径，计算去序号稳定标识 `resource_key = <一级大类>::<去序号规范名>`；
-   - 维护 `community_resource_aliases` 历史路径映射表（后台 move/改名/移入荣誉室自动接力，重排编号自动自愈最新物理路径）；
-   - 能力卡锚点同时保存 `anchor_id` 与去除品阶括号后的 `anchor_label`，能力升阶/改品阶后仍自动匹配原卡评论。
+网页挑战绑定 HttpOnly Cookie 对应的浏览器会话。主群机器人核验身份后，
+页面使用一次性确认凭据提交，身份记录与浏览器会话在同一事务中更新。
+历史 QQ 私聊接口保留原有独立契约，资源评论继续使用去序号标识及历史路径映射。
 """
 from __future__ import annotations
 
@@ -29,7 +21,7 @@ from typing import Any, Callable, Iterator, Literal, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 QQ_RE = re.compile(r"^[1-9][0-9]{4,11}$")
 OPENID_HEX_RE = re.compile(r"^[0-9A-F]{16,64}$")
@@ -429,28 +421,17 @@ class CommunityStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_res_alias_key ON community_resource_aliases(canonical_key);
 
-                CREATE TABLE IF NOT EXISTS community_bot_codes (
-                    code TEXT PRIMARY KEY,
-                    user_key TEXT NOT NULL,
-                    open_group_id TEXT NOT NULL,
-                    bot_app_id TEXT NOT NULL DEFAULT '',
+                CREATE TABLE IF NOT EXISTS community_web_challenges (
+                    id INTEGER PRIMARY KEY,
+                    sid_hash TEXT NOT NULL REFERENCES browser_sessions(sid_hash) ON DELETE CASCADE,
+                    code TEXT NOT NULL UNIQUE,
+                    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'verified', 'consumed', 'expired')),
+                    user_key TEXT NOT NULL DEFAULT '',
                     sealdice_nickname TEXT NOT NULL DEFAULT '',
-                    avatar_url TEXT NOT NULL DEFAULT '',
-                    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'consumed', 'expired')),
-                    created_at INTEGER NOT NULL,
-                    expires_at INTEGER NOT NULL,
-                    consumed_at INTEGER NOT NULL DEFAULT 0
+                    expires_at INTEGER NOT NULL
                 );
-                CREATE INDEX IF NOT EXISTS idx_bot_codes_user ON community_bot_codes(user_key, created_at DESC);
-                CREATE INDEX IF NOT EXISTS idx_bot_codes_exp ON community_bot_codes(expires_at);
-
-                CREATE TABLE IF NOT EXISTS community_verified_members (
-                    user_key TEXT PRIMARY KEY,
-                    open_group_id TEXT NOT NULL,
-                    sealdice_nickname TEXT NOT NULL DEFAULT '',
-                    verified_at INTEGER NOT NULL,
-                    updated_at INTEGER NOT NULL
-                );
+                CREATE INDEX IF NOT EXISTS idx_web_challenges_sid ON community_web_challenges(sid_hash, id DESC);
+                CREATE INDEX IF NOT EXISTS idx_web_challenges_exp ON community_web_challenges(expires_at);
                 """
             )
             # 在线平滑升级旧表结构（兼容已部署库）
@@ -787,213 +768,129 @@ class CommunityStore:
             user_row = conn.execute("SELECT * FROM community_users WHERE qq = ?", (qq,)).fetchone()
             return dict(user_row)
 
-    def bind_verified_member(
-        self,
-        *,
-        user_key: str,
-        open_group_id: str,
-        sealdice_nickname: str = "",
+    @staticmethod
+    def _latest_web_challenge(conn: sqlite3.Connection, sid_hash: str) -> sqlite3.Row | None:
+        return conn.execute(
+            """SELECT id, code, status, user_key, sealdice_nickname, expires_at
+               FROM community_web_challenges WHERE sid_hash = ? ORDER BY id DESC LIMIT 1""",
+            (sid_hash,),
+        ).fetchone()
+
+    @staticmethod
+    def _web_challenge_view(
+        conn: sqlite3.Connection, row: sqlite3.Row | None, secret: bytes
     ) -> dict[str, Any]:
-        now = now_ts()
-        clean_hint = re.sub(r"[\x00-\x1f\x7f]+", " ", sealdice_nickname or "")
-        clean_hint = re.sub(r"\s+", " ", clean_hint).strip()[:32]
+        if row is None or row["status"] in ("consumed", "expired") or row["expires_at"] <= now_ts():
+            return {"status": "expired"}
+        view = {"status": row["status"], "expires_at": ts_to_iso(row["expires_at"])}
+        if row["status"] == "pending":
+            return {**view, "code": row["code"], "command": f"/登录 {row['code']}", "bot_name": OFFICIAL_BOT_NAME}
+
+        user_key = row["user_key"]
+        existing = conn.execute("SELECT nickname FROM community_users WHERE qq = ?", (user_key,)).fetchone()
+        nickname = row["sealdice_nickname"] or f"轮回者{user_key[-4:]}"
+        return {
+            **view,
+            "is_new_user": existing is None,
+            "user_key_masked": mask_qq(user_key),
+            "suggested_nickname": existing["nickname"] if existing else nickname,
+            "sealdice_nickname": row["sealdice_nickname"],
+            "avatar_url": default_avatar_for_user(user_key),
+            "confirmation": CommunityStore._web_confirmation(row, secret),
+        }
+
+    @staticmethod
+    def _web_confirmation(row: sqlite3.Row, secret: bytes) -> str:
+        data = f"web-login:{row['id']}:{row['code']}:{row['user_key']}:{row['expires_at']}"
+        return hmac.new(secret, data.encode(), hashlib.sha256).hexdigest()
+
+    def begin_web_challenge(self, sid_hash: str, secret: bytes, *, renew: bool) -> dict[str, Any]:
         with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            now = now_ts()
+            row = self._latest_web_challenge(conn, sid_hash)
+            if row and row["expires_at"] > now and (
+                row["status"] == "pending" or (row["status"] == "verified" and not renew)
+            ):
+                return self._web_challenge_view(conn, row, secret)
+            if row and row["status"] in ("pending", "verified"):
+                conn.execute("UPDATE community_web_challenges SET status = 'expired' WHERE id = ?", (row["id"],))
             conn.execute(
-                """
-                INSERT INTO community_verified_members (
-                    user_key, open_group_id, sealdice_nickname, verified_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(user_key) DO UPDATE SET
-                    open_group_id = excluded.open_group_id,
-                    sealdice_nickname = CASE WHEN excluded.sealdice_nickname != '' THEN excluded.sealdice_nickname ELSE community_verified_members.sealdice_nickname END,
-                    updated_at = excluded.updated_at
-                """,
-                (user_key, open_group_id, clean_hint, now, now),
+                """DELETE FROM community_web_challenges WHERE id IN (
+                       SELECT id FROM community_web_challenges WHERE expires_at <= ? ORDER BY expires_at LIMIT 100
+                   )""",
+                (now - BOT_SHORT_CODE_TTL_SECONDS,),
             )
-            return {"ok": True, "user_key": user_key, "sealdice_nickname": clean_hint}
-
-    def issue_bot_login_code(
-        self,
-        *,
-        user_key: str,
-        open_group_id: str = "",
-        sealdice_nickname: str = "",
-        bot_app_id: str = OFFICIAL_BOT_APP_ID,
-        require_verified_member: bool = False,
-    ) -> dict[str, Any]:
-        now = now_ts()
-        clean_hint = re.sub(r"[\x00-\x1f\x7f]+", " ", sealdice_nickname or "")
-        clean_hint = re.sub(r"\s+", " ", clean_hint).strip()[:32]
-        avatar_url = default_avatar_for_user(user_key, bot_app_id)
-
-        with self._conn() as conn:
-            verified_row = conn.execute(
-                "SELECT * FROM community_verified_members WHERE user_key = ?",
-                (user_key,),
-            ).fetchone()
-            existing = conn.execute("SELECT nickname FROM community_users WHERE qq = ?", (user_key,)).fetchone()
-            is_admin = user_key in parse_admin_qqs()
-
-            if require_verified_member and not verified_row and not existing and not is_admin:
-                raise HTTPException(
-                    403,
-                    "尚未登记主群成员身份：请先在宏观界域主群内发送一次 @阿瓦娜 /登录 完成主群身份登记，之后私聊发送 /登录 即可接收私密登录码。",
+            for _ in range(20):
+                code = f"{secrets.randbelow(1_000_000):06d}"
+                inserted = conn.execute(
+                    """INSERT INTO community_web_challenges (sid_hash, code, expires_at) VALUES (?, ?, ?)
+                       ON CONFLICT(code) DO NOTHING""",
+                    (sid_hash, code, now + BOT_SHORT_CODE_TTL_SECONDS),
                 )
+                if inserted.rowcount:
+                    return self._web_challenge_view(conn, self._latest_web_challenge(conn, sid_hash), secret)
+            raise HTTPException(503, "暂时无法生成登录码，请稍后重试")
 
-            effective_group = open_group_id or (str(verified_row["open_group_id"]) if verified_row else "private_c2c")
-            if not clean_hint and verified_row and str(verified_row["sealdice_nickname"]).strip():
-                clean_hint = str(verified_row["sealdice_nickname"]).strip()
-
-            conn.execute("DELETE FROM community_bot_codes WHERE expires_at <= ?", (now - 3600,))
-            recent_cnt = int(
-                conn.execute(
-                    "SELECT COUNT(*) AS c FROM community_bot_codes WHERE user_key = ? AND created_at >= ?",
-                    (user_key, now - 300),
-                ).fetchone()["c"]
-            )
-            if recent_cnt >= 6:
-                raise HTTPException(429, "登录码获取过于频繁，请直接使用刚才私聊收到的 6 位验证码或 5 分钟后再试。")
-
-            # 作废该用户此前未使用的旧短码，仅保留最新一个有效码
-            conn.execute(
-                "UPDATE community_bot_codes SET status = 'expired' WHERE user_key = ? AND status = 'pending'",
-                (user_key,),
-            )
-
-            code = ""
-            for _ in range(25):
-                candidate = f"{secrets.randbelow(900000) + 100000:06d}"
-                clash = conn.execute("SELECT 1 FROM community_bot_codes WHERE code = ?", (candidate,)).fetchone()
-                if not clash:
-                    code = candidate
-                    break
-            if not code:
-                raise HTTPException(503, "登录码生成繁忙，请稍后再试")
-
-            exp = now + BOT_SHORT_CODE_TTL_SECONDS
-            conn.execute(
-                """
-                INSERT INTO community_bot_codes (
-                    code, user_key, open_group_id, bot_app_id, sealdice_nickname,
-                    avatar_url, status, created_at, expires_at, consumed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, 0)
-                """,
-                (code, user_key, effective_group, bot_app_id, clean_hint, avatar_url, now, exp),
-            )
-            return {
-                "ok": True,
-                "code": code,
-                "user_key": user_key,
-                "is_existing_user": bool(existing),
-                "current_nickname": str(existing["nickname"]) if existing else clean_hint,
-                "expires_in_seconds": BOT_SHORT_CODE_TTL_SECONDS,
-                "expires_at": ts_to_iso(exp),
-            }
-
-    def inspect_bot_login_code(self, code: str) -> dict[str, Any]:
-        cleaned = (code or "").strip()
-        if not BOT_SHORT_CODE_RE.fullmatch(cleaned):
-            raise HTTPException(400, "请输入群内机器人回复的 6 位数字登录码")
-        now = now_ts()
+    def current_web_challenge(self, sid_hash: str, secret: bytes) -> dict[str, Any]:
         with self._conn() as conn:
-            row = conn.execute("SELECT * FROM community_bot_codes WHERE code = ?", (cleaned,)).fetchone()
-            if not row:
-                raise HTTPException(404, "登录码不存在或已失效，请在主群发送 /登录 重新获取")
-            if row["status"] == "consumed":
-                raise HTTPException(409, "该登录码已被使用，请重新发送 /登录 获取新码")
-            if row["status"] != "pending" or int(row["expires_at"]) <= now:
-                conn.execute("UPDATE community_bot_codes SET status = 'expired' WHERE code = ?", (cleaned,))
-                raise HTTPException(410, "登录码已过期（有效期 5 分钟），请在主群重新发送 /登录")
+            return self._web_challenge_view(conn, self._latest_web_challenge(conn, sid_hash), secret)
 
-            user_key = str(row["user_key"])
-            existing = conn.execute("SELECT * FROM community_users WHERE qq = ?", (user_key,)).fetchone()
-            suggested = (
-                str(existing["nickname"]).strip()
-                if existing and str(existing["nickname"]).strip()
-                else (str(row["sealdice_nickname"]).strip() or f"轮回者{user_key[-4:]}")
+    def verify_web_challenge(self, code: str, user_key: str, nickname: str) -> None:
+        if not BOT_SHORT_CODE_RE.fullmatch(code):
+            raise HTTPException(400, "请输入 6 位数字验证码")
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            now = now_ts()
+            row = conn.execute(
+                "SELECT id, status, expires_at FROM community_web_challenges WHERE code = ?", (code,)
+            ).fetchone()
+            if row is None:
+                raise HTTPException(404, "没有找到该验证码，请检查网页上的指令")
+            if row["status"] == "expired" or row["expires_at"] <= now:
+                raise HTTPException(410, "验证码已过期，请回网页重新取码")
+            if row["status"] != "pending":
+                raise HTTPException(409, "该验证码已核验，请在网页核对身份")
+            conn.execute(
+                """UPDATE community_web_challenges SET status = 'verified', user_key = ?, sealdice_nickname = ?
+                   WHERE id = ? AND status = 'pending'""",
+                (user_key, re.sub(r"[\x00-\x1f\x7f]+", " ", nickname).strip()[:32], row["id"]),
             )
-            avatar = (
-                str(row["avatar_url"]).strip()
-                or (str(existing["avatar_url"]).strip() if existing else "")
-                or default_avatar_for_user(user_key, str(row["bot_app_id"] or ""))
-            )
-            return {
-                "ok": True,
-                "code": cleaned,
-                "user_key_masked": mask_qq(user_key),
-                "is_new_user": not bool(existing),
-                "suggested_nickname": suggested,
-                "sealdice_nickname": str(row["sealdice_nickname"] or ""),
-                "avatar_url": avatar,
-                "expires_at": ts_to_iso(int(row["expires_at"])),
-            }
 
-    def consume_bot_login_code(
-        self,
-        raw_sid: str,
-        secret: bytes,
-        *,
-        code: str,
-        nickname: str | None = None,
+    def consume_web_challenge(
+        self, sid_hash: str, secret: bytes, *, confirmation: str, nickname: str
     ) -> dict[str, Any]:
-        cleaned = (code or "").strip()
-        if not BOT_SHORT_CODE_RE.fullmatch(cleaned):
-            raise HTTPException(400, "请输入有效的 6 位数字登录码")
-        now = now_ts()
-        sid_hash = self._hash_sid(raw_sid, secret)
         with self._conn() as conn:
-            row = conn.execute("SELECT * FROM community_bot_codes WHERE code = ?", (cleaned,)).fetchone()
-            if not row:
-                raise HTTPException(404, "登录码不存在或已失效，请在主群发送 /登录 重新获取")
-            if row["status"] == "consumed":
-                raise HTTPException(409, "该登录码已被使用，请重新发送 /登录 获取新码")
-            if row["status"] != "pending" or int(row["expires_at"]) <= now:
-                conn.execute("UPDATE community_bot_codes SET status = 'expired' WHERE code = ?", (cleaned,))
-                raise HTTPException(410, "登录码已过期（有效期 5 分钟），请在主群重新发送 /登录")
-
-            updated = conn.execute(
-                "UPDATE community_bot_codes SET status = 'consumed', consumed_at = ? WHERE code = ? AND status = 'pending'",
-                (now, cleaned),
-            )
-            if updated.rowcount != 1:
-                raise HTTPException(409, "该登录码已被使用，请重新获取")
+            conn.execute("BEGIN IMMEDIATE")
+            now = now_ts()
+            row = self._latest_web_challenge(conn, sid_hash)
+            if row is None or row["status"] != "verified" or row["expires_at"] <= now:
+                raise HTTPException(409, "当前浏览器没有可确认的登录验证")
+            if not re.fullmatch(r"[0-9a-f]{64}", confirmation) or not hmac.compare_digest(
+                self._web_confirmation(row, secret), confirmation
+            ):
+                raise HTTPException(409, "待确认身份已变化，请重新核对")
+            conn.execute("UPDATE community_web_challenges SET status = 'consumed' WHERE id = ?", (row["id"],))
 
             user_key = str(row["user_key"])
             existing = conn.execute("SELECT * FROM community_users WHERE qq = ?", (user_key,)).fetchone()
-            avatar = (
-                str(row["avatar_url"]).strip()
-                or (str(existing["avatar_url"]).strip() if existing else "")
-                or default_avatar_for_user(user_key, str(row["bot_app_id"] or ""))
-            )
+            avatar = default_avatar_for_user(user_key)
 
             provided_nick = (nickname or "").strip()
-            if provided_nick:
+            if existing:
+                final_nick = existing["nickname"]
+            else:
                 try:
                     final_nick = clean_nickname(provided_nick)
                 except ValueError as exc:
                     raise HTTPException(400, str(exc)) from exc
-            elif existing and str(existing["nickname"]).strip():
-                final_nick = str(existing["nickname"]).strip()
-            else:
-                fallback_raw = str(row["sealdice_nickname"] or "").strip() or f"轮回者{user_key[-4:]}"
-                final_nick = clean_nickname(fallback_raw)
 
             if existing:
-                old_nick = str(existing["nickname"])
                 conn.execute(
-                    """
-                    UPDATE community_users
-                    SET nickname = ?,
-                        avatar_url = ?,
-                        last_login_at = ?,
-                        updated_at = ?
-                    WHERE qq = ?
-                    """,
-                    (final_nick, avatar, now, now, user_key),
+                    """UPDATE community_users SET avatar_url = ?, last_login_at = ?, updated_at = ? WHERE qq = ?""",
+                    (avatar, now, now, user_key),
                 )
-                if final_nick != old_nick:
-                    self._sync_author_profile_in_posts(conn, user_key=user_key, nickname=final_nick, avatar_url=avatar)
-                elif avatar:
+                if avatar != existing["avatar_url"]:
                     conn.execute(
                         "UPDATE community_posts SET author_avatar = ? WHERE author_qq = ?",
                         (avatar, user_key),
@@ -1009,7 +906,7 @@ class CommunityStore:
                     (user_key, final_nick, avatar, EXPECTED_GROUP_ID, now, now, now),
                 )
 
-            conn.execute(
+            updated_session = conn.execute(
                 """
                 UPDATE browser_sessions
                 SET user_qq = ?,
@@ -1021,10 +918,12 @@ class CommunityStore:
                     pending_created_at = NULL,
                     updated_at = ?,
                     expires_at = ?
-                WHERE sid_hash = ?
+                WHERE sid_hash = ? AND user_qq IS NULL AND expires_at > ?
                 """,
-                (user_key, now, now + BROWSER_TTL_SECONDS, sid_hash),
+                (user_key, now, now + BROWSER_TTL_SECONDS, sid_hash, now),
             )
+            if updated_session.rowcount != 1:
+                raise HTTPException(409, "当前浏览器会话已变化，请刷新页面")
             user_row = conn.execute("SELECT * FROM community_users WHERE qq = ?", (user_key,)).fetchone()
             return dict(user_row)
 
@@ -1822,20 +1721,17 @@ class BeginChallengeRequest(BaseModel):
     qq: str
 
 
-class BotIssueCodeRequest(BaseModel):
+class BotVerifyCodeRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=6)
     open_user_id: str = Field(min_length=4, max_length=120)
-    open_group_id: str = Field(default="", max_length=120)
+    open_group_id: str = Field(min_length=1, max_length=120)
     sealdice_nickname: str = Field(default="", max_length=80)
     bot_app_id: str = Field(default="", max_length=32)
-    source: Literal["group", "private", "group_bind_only"] = "group"
 
 
-class BotInspectCodeRequest(BaseModel):
-    code: str = Field(min_length=6, max_length=6)
+class WebChallengeConsumeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
-
-class BotConsumeCodeRequest(BaseModel):
-    code: str = Field(min_length=6, max_length=6)
     nickname: str = Field(default="", max_length=40)
 
 
@@ -2195,85 +2091,70 @@ def build_community_router(
             **format_viewer(updated_sess, user, admin_cookie=admin_cookie, is_mod=is_mod),
         }
 
-    @router.post("/auth/bot/issue-code")
-    def auth_bot_issue_code(body: BotIssueCodeRequest, request: Request, response: Response):
-        """供本机海豹官方 Bot 插件调用：核验主群白名单并为群成员签发 6 位一次性私聊登录短码（绝不在公屏展示）。"""
+    @router.post("/auth/web-challenges")
+    def auth_web_challenge_begin(request: Request, response: Response, renew: bool = False):
         no_store(response)
-        expected_tok = bot_bridge_token()
-        if not expected_tok:
+        if not bot_auth_configured():
             raise HTTPException(503, "服务器尚未配置机器人桥接密钥")
+        store = store_getter()
+        secret = secret_getter()
+        sid, session, _ = store.get_or_create_session(request.cookies.get(BROWSER_COOKIE), secret)
+        if session["user_qq"]:
+            raise HTTPException(409, "当前浏览器已登录")
+        view = store.begin_web_challenge(session["sid_hash"], secret, renew=renew)
+        set_browser_cookie(response, request, sid)
+        return view
 
-        auth_header = (request.headers.get("Authorization") or "").strip()
-        provided_tok = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
-        if not provided_tok or not hmac.compare_digest(provided_tok, expected_tok):
+    @router.get("/auth/web-challenges/current")
+    def auth_web_challenge_current(request: Request, response: Response):
+        no_store(response)
+        store = store_getter()
+        secret = secret_getter()
+        session = store.get_session(request.cookies.get(BROWSER_COOKIE), secret)
+        if not session or session["user_qq"]:
+            return {"status": "expired"}
+        return store.current_web_challenge(session["sid_hash"], secret)
+
+    @router.post("/auth/bot/verify-code")
+    def auth_bot_verify_code(body: BotVerifyCodeRequest, request: Request, response: Response):
+        no_store(response)
+        expected = bot_bridge_token()
+        if not expected:
+            raise HTTPException(503, "服务器尚未配置机器人桥接密钥")
+        scheme, _, provided = request.headers.get("Authorization", "").partition(" ")
+        if scheme.lower() != "bearer" or not hmac.compare_digest(provided.strip().encode(), expected.encode()):
             raise HTTPException(401, "机器人桥接鉴权未通过")
-
+        group = normalize_open_group_token(body.open_group_id)
+        allowed = parse_allowed_open_groups()
+        if not OPENID_HEX_RE.fullmatch(group) or (group not in allowed and "*" not in allowed):
+            raise HTTPException(403, "仅限在宏观界域主群内核验身份")
+        if body.bot_app_id and body.bot_app_id != OFFICIAL_BOT_APP_ID:
+            raise HTTPException(403, "机器人身份与站点配置不符")
         try:
-            oid_hex = normalize_open_user_id(body.open_user_id)
+            user_key = f"oid:{normalize_open_user_id(body.open_user_id)}"
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        store_getter().verify_web_challenge(body.code, user_key, body.sealdice_nickname)
+        return {"ok": True, "status": "verified"}
 
-        user_key = f"oid:{oid_hex}"
-        app_id = re.sub(r"[^0-9A-Za-z_-]", "", (body.bot_app_id or "").strip()) or OFFICIAL_BOT_APP_ID
-
-        if body.source == "private":
-            return store_getter().issue_bot_login_code(
-                user_key=user_key,
-                open_group_id="",
-                sealdice_nickname=body.sealdice_nickname,
-                bot_app_id=app_id,
-                require_verified_member=True,
-            )
-
-        group_token = normalize_open_group_token(body.open_group_id)
-        allowed_groups = parse_allowed_open_groups()
-        if not group_token or ("*" not in allowed_groups and group_token not in allowed_groups):
-            raise HTTPException(403, "仅限在宏观界域主群内认证登记成员资格")
-
-        # 记录该 OpenID 已在主群内核验过，此后支持随时直接私聊机器人发送 /登录
-        store_getter().bind_verified_member(
-            user_key=user_key,
-            open_group_id=body.open_group_id.strip(),
-            sealdice_nickname=body.sealdice_nickname,
-        )
-        if body.source == "group_bind_only":
-            return {"ok": True, "bound": True, "user_key": user_key}
-
-        return store_getter().issue_bot_login_code(
-            user_key=user_key,
-            open_group_id=body.open_group_id.strip(),
-            sealdice_nickname=body.sealdice_nickname,
-            bot_app_id=app_id,
-            require_verified_member=False,
-        )
-
-    @router.post("/auth/bot/inspect")
-    def auth_bot_inspect_code(body: BotInspectCodeRequest, response: Response):
-        """网页端输入 6 位码后预检：若为新用户则返回默认海豹昵称与高清头像供确认/修改；老用户可直接完成登录。"""
+    @router.post("/auth/web-challenges/consume")
+    def auth_web_challenge_consume(body: WebChallengeConsumeRequest, request: Request, response: Response):
         no_store(response)
-        return store_getter().inspect_bot_login_code(body.code)
-
-    @router.post("/auth/bot/consume")
-    def auth_bot_consume_code(body: BotConsumeCodeRequest, request: Request, response: Response):
-        """一次性原子消费 6 位登录码，创建或更新用户昵称/头像并建立 30 天 HttpOnly 登录会话。"""
-        no_store(response)
-        sid, _sess, _created = store_getter().get_or_create_session(
-            request.cookies.get(BROWSER_COOKIE),
-            secret_getter(),
-        )
-        user = store_getter().consume_bot_login_code(
-            sid,
-            secret_getter(),
-            code=body.code,
-            nickname=body.nickname,
+        store = store_getter()
+        secret = secret_getter()
+        sid = request.cookies.get(BROWSER_COOKIE)
+        session = store.get_session(sid, secret)
+        if not sid or not session or session["user_qq"]:
+            raise HTTPException(409, "当前浏览器没有可确认的登录验证")
+        user = store.consume_web_challenge(
+            session["sid_hash"], secret, confirmation=request.headers.get("X-Login-Confirmation", ""), nickname=body.nickname
         )
         set_browser_cookie(response, request, sid)
-        updated_sess = store_getter().get_session(sid, secret_getter())
         admin_cookie = is_admin_request(request)
-        is_mod = admin_cookie or user_is_qq_moderator(user)
         return {
             "ok": True,
-            **format_viewer(updated_sess, user, admin_cookie=admin_cookie, is_mod=is_mod),
+            **format_viewer(store.get_session(sid, secret), user, admin_cookie=admin_cookie,
+                            is_mod=admin_cookie or user_is_qq_moderator(user)),
         }
 
     @router.patch("/auth/profile")

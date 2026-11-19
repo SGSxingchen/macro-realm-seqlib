@@ -129,11 +129,12 @@ npm run dev
 
 独立持久化于 `web/data/community.sqlite`（不改动任何 `序列库/`、`荣誉室/` TXT 源文件，在线自动兼容存量表升级）：
 
-- **主群官方 Bot 6 位短码登录**（本机海豹 JS 插件 `tools/sealdice_forum_auth.js` 监听主群 `/登录` 指令，携带 `COMMUNITY_BOT_TOKEN` 或 `ONEBOT_SEQUENCE_TOKEN` 调用后端签发 6 位短码；自动通过 `q.qlogo.cn/qqapp/{AppID}/{openid}/640` 获取高清 QQ 头像并默认带入海豹角色昵称，无需角色卡门槛）：
-  - `GET /api/auth/me`：读取当前浏览器轮回者身份、管理员权限与认证配置。
-  - `POST /api/auth/bot/issue-code`：供本机海豹插件调用，核验主群白名单（`COMMUNITY_ALLOWED_OPEN_GROUPS`）并签发 5 分钟有效的 6 位短码。
-  - `POST /api/auth/bot/inspect`：前端输入 6 位码后预检是否首次登录，返回默认海豹昵称与头像预览。
-  - `POST /api/auth/bot/consume`：一次性原子消费 6 位短码，保存用户确认的昵称并建立 30 天 HttpOnly 会话。
+- **主群官方 Bot 网页登录**：网页生成绑定到当前浏览器的 6 位码。在宏观界域主群 @阿瓦娜，发送网页显示的 `/登录 验证码`，回到网页核对身份。首次注册填写展示昵称，之后沿用论坛昵称；会话有效期为 30 天。
+  - `GET /api/auth/me` 读取当前浏览器的身份与认证配置。
+  - `POST /api/auth/web-challenges` 生成或恢复有效期 5 分钟的验证请求。
+  - `POST /api/auth/bot/verify-code` 由海豹插件 `tools/sealdice_forum_auth.js` 调用。后端校验桥接密钥、主群白名单和机器人身份。
+  - `GET /api/auth/web-challenges/current` 根据 HttpOnly Cookie 查询核验状态，返回待确认的 QQ 身份。
+  - `POST /api/auth/web-challenges/consume` 校验当前浏览器和身份确认凭据，在同一事务中消费请求并建立会话。
   - `PATCH /api/auth/profile`：已登录轮回者自助修改论坛展示昵称（同步更新历史发言作者昵称）。
   - `POST /api/auth/logout`：销毁当前浏览器会话。
 - **轮回者论坛与抗重排序列评论区**（未登录公开只读，交易群轮回者登录后发帖、跟帖、点赞共鸣、关联能力卡锚点）：

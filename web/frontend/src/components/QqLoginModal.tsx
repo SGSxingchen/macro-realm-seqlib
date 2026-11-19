@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { copyText } from '../library-state';
-import type { BotInspectCodeResponse, CommunityViewerState } from '../types';
+import type { CommunityViewerState } from '../types';
 
 type Props = {
   open: boolean;
@@ -11,22 +11,28 @@ type Props = {
   onLoggedOut: () => void;
 };
 
-type StepState =
-  | { kind: 'code' }
+type Challenge =
+  | { status: 'expired' }
+  | { status: 'pending'; command: string; bot_name: string; expires_at: string }
   | {
-      kind: 'confirm';
-      code: string;
-      userMasked: string;
-      isNewUser: boolean;
-      sealdiceNickname: string;
-      avatarUrl: string;
+      status: 'verified';
+      is_new_user: boolean;
+      user_key_masked: string;
+      suggested_nickname: string;
+      sealdice_nickname: string;
+      avatar_url: string;
+      confirmation: string;
     };
+
+const challengeUrl = '/api/auth/web-challenges';
 
 export function QqLoginModal({ open, viewer, onClose, onLoggedIn, onLoggedOut }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [code, setCode] = useState('');
   const [nickname, setNickname] = useState('');
-  const [step, setStep] = useState<StepState>({ kind: 'code' });
+  const [challenge, setChallenge] = useState<Challenge | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const starting = useRef<Promise<Challenge> | null>(null);
+  const renew = useRef(false);
   const [editingNick, setEditingNick] = useState(false);
   const [editNickValue, setEditNickValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -52,95 +58,100 @@ export function QqLoginModal({ open, viewer, onClose, onLoggedIn, onLoggedOut }:
   }, [open, viewer?.user]);
 
   useEffect(() => {
-    if (viewer?.authenticated) {
-      setStep({ kind: 'code' });
-      setCode('');
-    }
-  }, [viewer?.authenticated]);
-
-  const handleCopyCommand = async () => {
-    try {
-      await copyText('/登录');
-      setNotice('已复制指令 /登录，前往与机器人「' + botName + '」私聊发送即可获取登录码');
-      window.setTimeout(() => setNotice(''), 3000);
-    } catch {
-      setNotice('请手动私聊机器人发送 /登录');
-    }
-  };
-
-  const handleInspectCode = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const cleaned = code.replace(/\D/g, '').slice(0, 6);
-    if (cleaned.length !== 6) {
-      setError('请输入主群机器人回复的 6 位数字登录码。');
-      return;
-    }
-    setSubmitting(true);
+    if (!open || viewer?.authenticated) return;
+    let cancelled = false;
+    let polling = false;
+    let waiting = false;
+    let timer: number | undefined;
+    setChallenge(null);
+    setNickname('');
     setError('');
     setNotice('');
-    try {
-      const info = await api<BotInspectCodeResponse>('/api/auth/bot/inspect', {
-        method: 'POST',
-        body: JSON.stringify({ code: cleaned }),
-      });
 
-      // 已注册老用户直接完成登录，无需每次重复确认昵称（登录后可随时在个人面板修改昵称）
-      if (!info.is_new_user) {
-        const res = await api<CommunityViewerState & { ok: boolean }>('/api/auth/bot/consume', {
-          method: 'POST',
-          body: JSON.stringify({ code: cleaned, nickname: '' }),
-        });
-        if (res.authenticated && res.user) {
-          setCode('');
-          setStep({ kind: 'code' });
-          onLoggedIn(res);
-          onClose();
-          return;
+    const show = (next: Challenge) => {
+      if (cancelled) return;
+      setChallenge(next);
+      setError('');
+      waiting = next.status === 'pending';
+      if (next.status === 'verified') setNickname(next.suggested_nickname);
+    };
+    const poll = async () => {
+      if (!waiting || polling || document.hidden) return;
+      polling = true;
+      try {
+        show(await api<Challenge>(`${challengeUrl}/current`, { signal: AbortSignal.timeout(5000) }));
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : '暂时无法检查核验状态');
+      } finally {
+        polling = false;
+      }
+    };
+    const start = async () => {
+      try {
+        if (!starting.current) {
+          const url = renew.current ? `${challengeUrl}?renew=true` : challengeUrl;
+          renew.current = false;
+          starting.current = api<Challenge>(url, { method: 'POST', signal: AbortSignal.timeout(8000) })
+            .finally(() => { starting.current = null; });
+        }
+        show(await starting.current);
+        if (!cancelled) timer = window.setInterval(poll, 2000);
+      } catch (err) {
+        if (!cancelled) {
+          setChallenge({ status: 'expired' });
+          setError(err instanceof Error ? err.message : '暂时无法获取登录码');
         }
       }
+    };
+    void start();
+    document.addEventListener('visibilitychange', poll);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', poll);
+    };
+  }, [open, viewer?.authenticated, attempt]);
 
-      setNickname(info.suggested_nickname || '');
-      setStep({
-        kind: 'confirm',
-        code: cleaned,
-        userMasked: info.user_key_masked,
-        isNewUser: info.is_new_user,
-        sealdiceNickname: info.sealdice_nickname,
-        avatarUrl: info.avatar_url,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '登录码核验失败，请重新获取');
-    } finally {
-      setSubmitting(false);
+  const requestCode = (replace = false) => {
+    renew.current = replace;
+    setAttempt(value => value + 1);
+  };
+
+  const handleCopyCommand = async () => {
+    if (challenge?.status !== 'pending') return;
+    try {
+      await copyText(challenge.command);
+      setNotice('已复制指令，请到主群 @机器人 后粘贴发送。');
+    } catch {
+      setNotice('请手动复制上方登录指令。');
     }
   };
 
   const handleCompleteRegistration = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (step.kind !== 'confirm') return;
-    const trimmedNick = nickname.trim();
-    if (!trimmedNick) {
-      setError('请输入要在论坛展示的昵称。');
-      return;
-    }
+    if (challenge?.status !== 'verified' || submitting) return;
     setSubmitting(true);
     setError('');
     try {
-      const res = await api<CommunityViewerState & { ok: boolean }>('/api/auth/bot/consume', {
+      const res = await api<CommunityViewerState & { ok: boolean }>(`${challengeUrl}/consume`, {
         method: 'POST',
-        body: JSON.stringify({ code: step.code, nickname: trimmedNick }),
+        headers: { 'X-Login-Confirmation': challenge.confirmation },
+        body: JSON.stringify({ nickname: challenge.is_new_user ? nickname.trim() : '' }),
+        signal: AbortSignal.timeout(8000),
       });
-      if (res.authenticated && res.user) {
-        setCode('');
-        setStep({ kind: 'code' });
-        onLoggedIn(res);
+      if (!res.authenticated || !res.user) throw new Error('未能建立登录会话');
+      onLoggedIn(res);
+      onClose();
+    } catch (err) {
+      // 请求可能已成功提交，先查询当前会话再决定是否需要重新取码。
+      const viewerNow = await api<CommunityViewerState>('/api/auth/me', { signal: AbortSignal.timeout(5000) })
+        .catch(() => null);
+      if (viewerNow?.authenticated && viewerNow.user) {
+        onLoggedIn(viewerNow);
         onClose();
       } else {
-        setError('未能建立登录会话，请重新获取登录码。');
-        setStep({ kind: 'code' });
+        setError(err instanceof Error ? err.message : '完成登录失败');
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '完成登录失败');
     } finally {
       setSubmitting(false);
     }
@@ -193,10 +204,10 @@ export function QqLoginModal({ open, viewer, onClose, onLoggedIn, onLoggedOut }:
       aria-labelledby="comm-auth-title"
       onCancel={e => {
         e.preventDefault();
-        onClose();
+        if (!submitting) onClose();
       }}
       onClick={e => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget && !submitting) onClose();
       }}
     >
       <div className="comm-auth-card">
@@ -206,12 +217,12 @@ export function QqLoginModal({ open, viewer, onClose, onLoggedIn, onLoggedOut }:
             <h2 id="comm-auth-title">
               {viewer?.authenticated
                 ? '当前已认证轮回者身份'
-                : step.kind === 'confirm'
-                  ? '确认轮回者展示资料'
+                : challenge?.status === 'verified'
+                  ? '确认轮回者身份'
                   : '主群机器人登录码认证'}
             </h2>
           </div>
-          <button type="button" className="comm-dialog-close" onClick={onClose} aria-label="关闭登录窗口">
+          <button type="button" className="comm-dialog-close" disabled={submitting} onClick={onClose} aria-label="关闭登录窗口">
             ×
           </button>
         </header>
@@ -294,59 +305,34 @@ export function QqLoginModal({ open, viewer, onClose, onLoggedIn, onLoggedOut }:
               </button>
             </div>
           </div>
-        ) : step.kind === 'code' ? (
-          <form className="comm-auth-form" onSubmit={handleInspectCode}>
+        ) : challenge?.status !== 'verified' ? (
+          <div className="comm-auth-form">
             <p className="comm-auth-desc">
-              仅限<strong>宏观界域主群</strong>成员发言。请在主群点击官方机器人 <strong>{botName}</strong> 头像打开<strong>私聊</strong>发送{' '}
-              <code>/登录</code> 获取 6 位私密登录码（若提示尚未登记主群身份，先在主群发一次 <code>@{botName} /登录</code> 完成登记即可，群公屏不会泄露验证码）。
+              在<strong>宏观界域主群</strong> @ 官方机器人 <strong>{challenge?.status === 'pending' ? challenge.bot_name : botName}</strong>，
+              发送下方指令。收到回复后回到此页面。
             </p>
-            {viewer && !viewer.auth_configured && (
-              <p className="comm-auth-warn" role="status">
-                提示：当前服务器尚未配置机器人认证密钥，请联系维护者检查配置。
-              </p>
-            )}
-
-            <div className="comm-bot-row" style={{ marginTop: '4px' }}>
-              <span>私聊机器人指令：<code>/登录</code></span>
-              <button type="button" onClick={handleCopyCommand}>
-                复制 /登录
-              </button>
-            </div>
-
-            <label className="comm-field-label" htmlFor="comm-code-input">
-              6 位一次性私聊登录码（5 分钟内有效）
-            </label>
-            <div className="comm-input-row">
-              <input
-                id="comm-code-input"
-                data-testid="bot-login-code-input"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                placeholder="输入机器人私聊发你的 6 位数字码…"
-                value={code}
-                onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              />
-              <button type="submit" className="comm-primary-btn" disabled={submitting || code.trim().length !== 6}>
-                {submitting ? '正在核验…' : '下一步'}
-              </button>
-            </div>
-
-            <ul className="comm-auth-tips">
-              <li>第 1 步：若从未在主群发过言，先在主群发一次 <code>@{botName} /登录</code> 登记主群身份（群内不显示数字码）。</li>
-              <li>第 2 步：在<strong>{botName}</strong>的<strong>私聊窗口</strong>查收或发送 <code>/登录</code> 获取 6 位私密登录码填入上方。</li>
-              <li>首次登录会自动拉取你的 QQ 头像与海豹角色昵称，下一步可自由修改展示昵称。</li>
-            </ul>
+            {challenge?.status === 'pending' ? (
+              <>
+                <div className="comm-bot-row">
+                  <code data-testid="web-login-command">{challenge.command}</code>
+                  <button type="button" onClick={handleCopyCommand}>复制指令</button>
+                </div>
+                <p className="comm-auth-desc">登录码 5 分钟内有效。等待 QQ 核验…</p>
+              </>
+            ) : challenge?.status === 'expired' ? (
+              <div className="comm-auth-actions">
+                <button type="button" className="comm-primary-btn" onClick={() => requestCode()}>重新获取登录码</button>
+              </div>
+            ) : <p className="comm-auth-desc" role="status">正在获取登录码…</p>}
             {notice && <p className="comm-copied-hint" role="status">{notice}</p>}
             {error && <p className="comm-auth-error" role="alert">{error}</p>}
-          </form>
+          </div>
         ) : (
           <form className="comm-auth-form" onSubmit={handleCompleteRegistration}>
             <div className="comm-profile-row" style={{ marginBottom: '8px' }}>
-              {step.avatarUrl && (
+              {challenge.avatar_url && (
                 <img
-                  src={step.avatarUrl}
+                  src={challenge.avatar_url}
                   alt=""
                   className="comm-avatar-lg"
                   referrerPolicy="no-referrer"
@@ -357,27 +343,32 @@ export function QqLoginModal({ open, viewer, onClose, onLoggedIn, onLoggedOut }:
                   <strong>已核验主群成员身份</strong>
                 </div>
                 <p>
-                  标识：{step.userMasked}
-                  {step.sealdiceNickname ? ` · 海豹原名：${step.sealdiceNickname}` : ''}
+                  标识：{challenge.user_key_masked}
+                  {challenge.sealdice_nickname ? ` · 海豹原名：${challenge.sealdice_nickname}` : ''}
                 </p>
               </div>
             </div>
 
-            <label className="comm-field-label" htmlFor="comm-register-nick-input">
-              论坛展示昵称（已默认填入海豹昵称，可自由修改，最长 32 字）
-            </label>
-            <div className="comm-input-row">
-              <input
-                id="comm-register-nick-input"
-                data-testid="bot-login-nickname-input"
-                type="text"
-                maxLength={32}
-                placeholder="输入你在论坛展示的称呼…"
-                value={nickname}
-                onChange={e => setNickname(e.target.value)}
-                style={{ fontFamily: 'inherit' }}
-              />
-            </div>
+            <p className="comm-auth-desc">请确认这是刚才发指令的 QQ 账号。若身份不符，请换一个登录码。</p>
+            {challenge.is_new_user ? (
+              <>
+                <label className="comm-field-label" htmlFor="comm-register-nick-input">
+                  论坛展示昵称（已默认填入海豹昵称，可自由修改，最长 32 字）
+                </label>
+                <div className="comm-input-row">
+                  <input
+                    id="comm-register-nick-input"
+                    data-testid="bot-login-nickname-input"
+                    type="text"
+                    maxLength={32}
+                    placeholder="输入你在论坛展示的称呼…"
+                    value={nickname}
+                    onChange={e => setNickname(e.target.value)}
+                    style={{ fontFamily: 'inherit' }}
+                  />
+                </div>
+              </>
+            ) : <p className="comm-auth-desc">论坛昵称：{challenge.suggested_nickname}</p>}
 
             {error && <p className="comm-auth-error" role="alert">{error}</p>}
 
@@ -385,15 +376,12 @@ export function QqLoginModal({ open, viewer, onClose, onLoggedIn, onLoggedOut }:
               <button
                 type="button"
                 disabled={submitting}
-                onClick={() => {
-                  setStep({ kind: 'code' });
-                  setError('');
-                }}
+                onClick={() => requestCode(true)}
               >
-                重新输码
+                换一个登录码
               </button>
-              <button type="submit" className="comm-primary-btn" disabled={submitting || !nickname.trim()}>
-                {submitting ? '正在激活…' : '确认并登录'}
+              <button type="submit" className="comm-primary-btn" disabled={submitting || (challenge.is_new_user && !nickname.trim())}>
+                {submitting ? '正在登录…' : '确认并登录'}
               </button>
             </div>
           </form>
