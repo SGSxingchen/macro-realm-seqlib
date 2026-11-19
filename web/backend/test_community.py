@@ -451,6 +451,25 @@ class CommunityAndQqAuthTests(unittest.TestCase):
         }, json={"nickname": ""})
         self.assertEqual(returning_login.json()["user"]["nickname"], "雨霁终章")
 
+        # 发错账号时可换码，旧确认凭据不能消费其他账号的核验结果。
+        swapped = TestClient(app_main.app)
+        wrong_identity_code = swapped.post(challenge).json()["code"]
+        self.assertEqual(bot_bridge.post(verify, headers=token, json={
+            **claim, "code": wrong_identity_code,
+        }).status_code, 200)
+        stale_receipt = swapped.get(f"{challenge}/current").json()["confirmation"]
+        replacement_code = swapped.post(f"{challenge}?renew=true").json()["code"]
+        self.assertNotEqual(wrong_identity_code, replacement_code)
+        self.assertEqual(bot_bridge.post(verify, headers=token, json={
+            **claim, "code": wrong_identity_code,
+        }).status_code, 410)
+        self.assertEqual(bot_bridge.post(verify, headers=token, json={
+            **claim, "code": replacement_code, "open_user_id": "OpenQQ:4019653007-AAAAAAAAAAAAAAAA",
+        }).status_code, 200)
+        self.assertEqual(swapped.post(consume, headers={
+            "X-Login-Confirmation": stale_receipt,
+        }, json={"nickname": "失效确认"}).status_code, 409)
+
         admin_browser = TestClient(app_main.app)
         admin_code = admin_browser.post(challenge).json()["code"]
         self.assertEqual(bot_bridge.post(verify, headers=token, json={

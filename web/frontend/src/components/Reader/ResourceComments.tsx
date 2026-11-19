@@ -271,7 +271,7 @@ export function ResourceComments({
               <span>登录后可针对整份序列或具体能力卡发表评论与点赞</span>
               {onOpenAuth && (
                 <button type="button" className="comm-primary-btn" onClick={onOpenAuth}>
-                  主群短码登录
+                  主群认证登录
                 </button>
               )}
             </div>
@@ -313,7 +313,7 @@ export function ResourceComments({
           disabled={!viewer?.authenticated || Boolean(viewer.user?.is_banned)}
           placeholder={
             !viewer?.authenticated
-              ? '在主群发送 /登录 获取 6 位短码认证后即可参与本序列研讨…'
+              ? '完成轮回者登录后即可参与本序列研讨…'
               : viewer.user?.is_banned
                 ? `发言受限：${viewer.user.ban_reason || '请联系管理员'}`
                 : selectedAnchorId

@@ -486,7 +486,7 @@ export function CommunityBoard({
                         <strong>参与回帖</strong>
                         {!viewer?.authenticated && (
                           <button type="button" className="comm-primary-btn" onClick={onOpenAuth}>
-                            主群短码登录
+                            主群认证登录
                           </button>
                         )}
                       </div>
@@ -507,7 +507,7 @@ export function CommunityBoard({
                         disabled={!viewer?.authenticated || Boolean(viewer.user?.is_banned)}
                         placeholder={
                           !viewer?.authenticated
-                            ? '在主群发送 /登录 获取 6 位登录码认证后即可跟帖回复…'
+                            ? '完成轮回者登录后即可跟帖回复…'
                             : viewer.user?.is_banned
                               ? `发言受限：${viewer.user.ban_reason || '请联系管理员'}`
                               : replyQuote
@@ -703,9 +703,9 @@ export function CommunityBoard({
               ) : (
                 <div className="forum-guest-box">
                   <strong>宏观界域 · 轮回者交流区</strong>
-                  <p>在主群唤醒官方机器人发送 <code>/登录</code> 获取 6 位短码即可认证发言、招募跑团与评价强化序列。</p>
+                  <p>点击「主群认证登录」获取指令，再到主群 @ 官方机器人核验身份。登录后可发言、招募跑团与评价强化序列。</p>
                   <button type="button" className="comm-primary-btn forum-full-btn" onClick={onOpenAuth}>
-                    主群短码登录
+                    主群认证登录
                   </button>
                 </div>
               )}

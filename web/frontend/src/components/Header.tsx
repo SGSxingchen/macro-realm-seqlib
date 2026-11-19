@@ -46,7 +46,7 @@ export function Header({ recordCount, tab, onTab, viewer, onOpenAuth }: Props) {
               type="button"
               className={`comm-topbar-auth${user ? ' is-logged' : ''}`}
               onClick={onOpenAuth}
-              title={user ? `${user.nickname}（${user.qq_masked}）` : '使用主群机器人 /登录 短码认证'}
+              title={user ? `${user.nickname}（${user.qq_masked}）` : '使用主群机器人核验网页登录'}
             >
               {user ? (
                 <>
