@@ -443,6 +443,14 @@ class CommunityStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_bot_codes_user ON community_bot_codes(user_key, created_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_bot_codes_exp ON community_bot_codes(expires_at);
+
+                CREATE TABLE IF NOT EXISTS community_verified_members (
+                    user_key TEXT PRIMARY KEY,
+                    open_group_id TEXT NOT NULL,
+                    sealdice_nickname TEXT NOT NULL DEFAULT '',
+                    verified_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
                 """
             )
             # 在线平滑升级旧表结构（兼容已部署库）
@@ -779,13 +787,39 @@ class CommunityStore:
             user_row = conn.execute("SELECT * FROM community_users WHERE qq = ?", (qq,)).fetchone()
             return dict(user_row)
 
-    def issue_bot_login_code(
+    def bind_verified_member(
         self,
         *,
         user_key: str,
         open_group_id: str,
         sealdice_nickname: str = "",
+    ) -> dict[str, Any]:
+        now = now_ts()
+        clean_hint = re.sub(r"[\x00-\x1f\x7f]+", " ", sealdice_nickname or "")
+        clean_hint = re.sub(r"\s+", " ", clean_hint).strip()[:32]
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO community_verified_members (
+                    user_key, open_group_id, sealdice_nickname, verified_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(user_key) DO UPDATE SET
+                    open_group_id = excluded.open_group_id,
+                    sealdice_nickname = CASE WHEN excluded.sealdice_nickname != '' THEN excluded.sealdice_nickname ELSE community_verified_members.sealdice_nickname END,
+                    updated_at = excluded.updated_at
+                """,
+                (user_key, open_group_id, clean_hint, now, now),
+            )
+            return {"ok": True, "user_key": user_key, "sealdice_nickname": clean_hint}
+
+    def issue_bot_login_code(
+        self,
+        *,
+        user_key: str,
+        open_group_id: str = "",
+        sealdice_nickname: str = "",
         bot_app_id: str = OFFICIAL_BOT_APP_ID,
+        require_verified_member: bool = False,
     ) -> dict[str, Any]:
         now = now_ts()
         clean_hint = re.sub(r"[\x00-\x1f\x7f]+", " ", sealdice_nickname or "")
@@ -793,6 +827,23 @@ class CommunityStore:
         avatar_url = default_avatar_for_user(user_key, bot_app_id)
 
         with self._conn() as conn:
+            verified_row = conn.execute(
+                "SELECT * FROM community_verified_members WHERE user_key = ?",
+                (user_key,),
+            ).fetchone()
+            existing = conn.execute("SELECT nickname FROM community_users WHERE qq = ?", (user_key,)).fetchone()
+            is_admin = user_key in parse_admin_qqs()
+
+            if require_verified_member and not verified_row and not existing and not is_admin:
+                raise HTTPException(
+                    403,
+                    "尚未登记主群成员身份：请先在宏观界域主群内发送一次 @阿瓦娜 /登录 完成主群身份登记，之后私聊发送 /登录 即可接收私密登录码。",
+                )
+
+            effective_group = open_group_id or (str(verified_row["open_group_id"]) if verified_row else "private_c2c")
+            if not clean_hint and verified_row and str(verified_row["sealdice_nickname"]).strip():
+                clean_hint = str(verified_row["sealdice_nickname"]).strip()
+
             conn.execute("DELETE FROM community_bot_codes WHERE expires_at <= ?", (now - 3600,))
             recent_cnt = int(
                 conn.execute(
@@ -801,7 +852,7 @@ class CommunityStore:
                 ).fetchone()["c"]
             )
             if recent_cnt >= 6:
-                raise HTTPException(429, "登录码获取过于频繁，请直接使用刚才的 6 位验证码或 5 分钟后再试。")
+                raise HTTPException(429, "登录码获取过于频繁，请直接使用刚才私聊收到的 6 位验证码或 5 分钟后再试。")
 
             # 作废该用户此前未使用的旧短码，仅保留最新一个有效码
             conn.execute(
@@ -827,9 +878,8 @@ class CommunityStore:
                     avatar_url, status, created_at, expires_at, consumed_at
                 ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, 0)
                 """,
-                (code, user_key, open_group_id, bot_app_id, clean_hint, avatar_url, now, exp),
+                (code, user_key, effective_group, bot_app_id, clean_hint, avatar_url, now, exp),
             )
-            existing = conn.execute("SELECT nickname FROM community_users WHERE qq = ?", (user_key,)).fetchone()
             return {
                 "ok": True,
                 "code": code,
@@ -1774,9 +1824,10 @@ class BeginChallengeRequest(BaseModel):
 
 class BotIssueCodeRequest(BaseModel):
     open_user_id: str = Field(min_length=4, max_length=120)
-    open_group_id: str = Field(min_length=4, max_length=120)
+    open_group_id: str = Field(default="", max_length=120)
     sealdice_nickname: str = Field(default="", max_length=80)
     bot_app_id: str = Field(default="", max_length=32)
+    source: Literal["group", "private", "group_bind_only"] = "group"
 
 
 class BotInspectCodeRequest(BaseModel):
@@ -2146,7 +2197,7 @@ def build_community_router(
 
     @router.post("/auth/bot/issue-code")
     def auth_bot_issue_code(body: BotIssueCodeRequest, request: Request, response: Response):
-        """供本机海豹官方 Bot 插件调用：核验主群白名单并为群成员签发 6 位一次性登录短码。"""
+        """供本机海豹官方 Bot 插件调用：核验主群白名单并为群成员签发 6 位一次性私聊登录短码（绝不在公屏展示）。"""
         no_store(response)
         expected_tok = bot_bridge_token()
         if not expected_tok:
@@ -2157,11 +2208,6 @@ def build_community_router(
         if not provided_tok or not hmac.compare_digest(provided_tok, expected_tok):
             raise HTTPException(401, "机器人桥接鉴权未通过")
 
-        group_token = normalize_open_group_token(body.open_group_id)
-        allowed_groups = parse_allowed_open_groups()
-        if "*" not in allowed_groups and group_token not in allowed_groups:
-            raise HTTPException(403, "仅限在宏观界域主群内发送 /登录 获取论坛登录码")
-
         try:
             oid_hex = normalize_open_user_id(body.open_user_id)
         except ValueError as exc:
@@ -2169,11 +2215,36 @@ def build_community_router(
 
         user_key = f"oid:{oid_hex}"
         app_id = re.sub(r"[^0-9A-Za-z_-]", "", (body.bot_app_id or "").strip()) or OFFICIAL_BOT_APP_ID
+
+        if body.source == "private":
+            return store_getter().issue_bot_login_code(
+                user_key=user_key,
+                open_group_id="",
+                sealdice_nickname=body.sealdice_nickname,
+                bot_app_id=app_id,
+                require_verified_member=True,
+            )
+
+        group_token = normalize_open_group_token(body.open_group_id)
+        allowed_groups = parse_allowed_open_groups()
+        if not group_token or ("*" not in allowed_groups and group_token not in allowed_groups):
+            raise HTTPException(403, "仅限在宏观界域主群内认证登记成员资格")
+
+        # 记录该 OpenID 已在主群内核验过，此后支持随时直接私聊机器人发送 /登录
+        store_getter().bind_verified_member(
+            user_key=user_key,
+            open_group_id=body.open_group_id.strip(),
+            sealdice_nickname=body.sealdice_nickname,
+        )
+        if body.source == "group_bind_only":
+            return {"ok": True, "bound": True, "user_key": user_key}
+
         return store_getter().issue_bot_login_code(
             user_key=user_key,
             open_group_id=body.open_group_id.strip(),
             sealdice_nickname=body.sealdice_nickname,
             bot_app_id=app_id,
+            require_verified_member=False,
         )
 
     @router.post("/auth/bot/inspect")

@@ -398,7 +398,18 @@ class CommunityAndQqAuthTests(unittest.TestCase):
         )
         self.assertEqual(wrong_group.status_code, 403)
 
-        # 2. 主群成员正常签发 6 位短码，预检返回海豹默认昵称与 qlogo 官方 Bot 头像
+        # 1b. 未在主群登记过的陌生人直接私聊请求登录码，返回 403 拦截
+        stranger_dm = bot_bridge.post(
+            "/api/auth/bot/issue-code",
+            headers={"Authorization": "Bearer mock-secret-bearer-token"},
+            json={
+                "open_user_id": "OpenQQ:4019653007-49E8BA38D36D9D9EEEA615D657C94E2C",
+                "source": "private",
+            },
+        )
+        self.assertEqual(stranger_dm.status_code, 403)
+
+        # 2. 主群内登记成员后，后续直接私聊 source="private" 也可正常签发 6 位私密短码
         issued = bot_bridge.post(
             "/api/auth/bot/issue-code",
             headers={"Authorization": "Bearer mock-secret-bearer-token"},
@@ -407,10 +418,21 @@ class CommunityAndQqAuthTests(unittest.TestCase):
                 "open_group_id": "OpenQQ-Group:4019653007-6C93AE22F9628FC5D947F07C55643B91",
                 "sealdice_nickname": "雨霁",
                 "bot_app_id": "1903175013",
+                "source": "group",
             },
         )
         self.assertEqual(issued.status_code, 200)
-        code = issued.json()["code"]
+        dm_issued = bot_bridge.post(
+            "/api/auth/bot/issue-code",
+            headers={"Authorization": "Bearer mock-secret-bearer-token"},
+            json={
+                "open_user_id": "OpenQQ:4019653007-49E8BA38D36D9D9EEEA615D657C94E2C",
+                "bot_app_id": "1903175013",
+                "source": "private",
+            },
+        )
+        self.assertEqual(dm_issued.status_code, 200)
+        code = dm_issued.json()["code"]
         self.assertRegex(code, r"^\d{6}$")
 
         inspected = browser.post("/api/auth/bot/inspect", json={"code": code})

@@ -61,10 +61,10 @@ export function QqLoginModal({ open, viewer, onClose, onLoggedIn, onLoggedOut }:
   const handleCopyCommand = async () => {
     try {
       await copyText('/登录');
-      setNotice('已复制指令 /登录，前往主群 @' + botName + ' 发送即可');
+      setNotice('已复制指令 /登录，前往与机器人「' + botName + '」私聊发送即可获取登录码');
       window.setTimeout(() => setNotice(''), 3000);
     } catch {
-      setNotice('请手动在主群发送 /登录');
+      setNotice('请手动私聊机器人发送 /登录');
     }
   };
 
@@ -297,8 +297,8 @@ export function QqLoginModal({ open, viewer, onClose, onLoggedIn, onLoggedOut }:
         ) : step.kind === 'code' ? (
           <form className="comm-auth-form" onSubmit={handleInspectCode}>
             <p className="comm-auth-desc">
-              仅限<strong>宏观界域主群</strong>成员发言。无需密码，在主群内唤醒官方机器人 <strong>@{botName}</strong> 发送{' '}
-              <code>/登录</code>（或点击输入框旁指令菜单），将收到的 6 位数字登录码填入下方即可。
+              仅限<strong>宏观界域主群</strong>成员发言。请在主群点击官方机器人 <strong>{botName}</strong> 头像打开<strong>私聊</strong>发送{' '}
+              <code>/登录</code> 获取 6 位私密登录码（若提示尚未登记主群身份，先在主群发一次 <code>@{botName} /登录</code> 完成登记即可，群公屏不会泄露验证码）。
             </p>
             {viewer && !viewer.auth_configured && (
               <p className="comm-auth-warn" role="status">
@@ -307,14 +307,14 @@ export function QqLoginModal({ open, viewer, onClose, onLoggedIn, onLoggedOut }:
             )}
 
             <div className="comm-bot-row" style={{ marginTop: '4px' }}>
-              <span>主群指令：<code>@{botName} /登录</code></span>
+              <span>私聊机器人指令：<code>/登录</code></span>
               <button type="button" onClick={handleCopyCommand}>
                 复制 /登录
               </button>
             </div>
 
             <label className="comm-field-label" htmlFor="comm-code-input">
-              6 位一次性登录码（5 分钟内有效）
+              6 位一次性私聊登录码（5 分钟内有效）
             </label>
             <div className="comm-input-row">
               <input
@@ -324,7 +324,7 @@ export function QqLoginModal({ open, viewer, onClose, onLoggedIn, onLoggedOut }:
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 maxLength={6}
-                placeholder="输入机器人回复的 6 位数字码…"
+                placeholder="输入机器人私聊发你的 6 位数字码…"
                 value={code}
                 onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
               />
@@ -334,9 +334,9 @@ export function QqLoginModal({ open, viewer, onClose, onLoggedIn, onLoggedOut }:
             </div>
 
             <ul className="comm-auth-tips">
-              <li>在主群点击机器人指令菜单选择 <code>/登录</code>（或发送 <code>@{botName} .登录</code>）获取 6 位短码。</li>
-              <li>首次登录会自动拉取你的 QQ 头像与海豹角色昵称，你可以在下一步自由修改展示昵称。</li>
-              <li>验证通过后当前浏览器保持 30 天免重复登录。</li>
+              <li>第 1 步：若从未在主群发过言，先在主群发一次 <code>@{botName} /登录</code> 登记主群身份（群内不显示数字码）。</li>
+              <li>第 2 步：在<strong>{botName}</strong>的<strong>私聊窗口</strong>查收或发送 <code>/登录</code> 获取 6 位私密登录码填入上方。</li>
+              <li>首次登录会自动拉取你的 QQ 头像与海豹角色昵称，下一步可自由修改展示昵称。</li>
             </ul>
             {notice && <p className="comm-copied-hint" role="status">{notice}</p>}
             {error && <p className="comm-auth-error" role="alert">{error}</p>}
