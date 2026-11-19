@@ -334,6 +334,9 @@ export type CommunityUserProfile = {
 export type CommunityViewerState = {
   authenticated: boolean;
   auth_configured: boolean;
+  auth_mode?: 'official_bot_code' | 'qq_private_code';
+  bot_name?: string;
+  bot_app_id?: string;
   bot_qq: string;
   group_id: number;
   admin_authenticated: boolean;
@@ -345,6 +348,17 @@ export type CommunityViewerState = {
     expires_at?: string | null;
   } | null;
   user: CommunityUserProfile | null;
+};
+
+export type BotInspectCodeResponse = {
+  ok: boolean;
+  code: string;
+  user_key_masked: string;
+  is_new_user: boolean;
+  suggested_nickname: string;
+  sealdice_nickname: string;
+  avatar_url: string;
+  expires_at?: string | null;
 };
 
 export type QqChallengeBeginResponse = {

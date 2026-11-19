@@ -125,15 +125,16 @@ npm run dev
 
 审核任务以 JSON 文件保存在 `web/normalization_reviews/`。每个任务记录规范化前文本、规范化后文本、签名列表和状态；当前规则为凑齐 1 个签名即通过。
 
-### QQ 私聊验证码登录与社区（轮回者论坛 / 抗改名序列评论区）
+### 主群官方 QQ Bot 短码登录与社区（轮回者论坛 / 抗改名序列评论区）
 
 独立持久化于 `web/data/community.sqlite`（不改动任何 `序列库/`、`荣誉室/` TXT 源文件，在线自动兼容存量表升级）：
 
-- **QQ 私聊验证码三步登录**（服务端持有 `ONEBOT_SEQUENCE_TOKEN`，`challenge_id` 与绑定 QQ 仅保存在服务端会话库，绝不暴露给浏览器或接受任意 `challenge_id` 兑换；支持 QQ 内置 WebView 切后台重载自动续接验证）：
-  - `GET /api/auth/me`：读取当前浏览器轮回者身份、管理员权限与挂起验证信息。
-  - `POST /api/auth/qq/challenges`：`{ "qq": "123456789" }`，先核验在交易群 `672204828` 再发 `TRPG-...` 验证码。
-  - `GET /api/auth/qq/challenges/current`：轮询当前浏览器已绑定的验证状态（`pending` / `verified` / `expired` / `denied`）。
-  - `POST /api/auth/qq/challenges/consume`：状态变为 `verified` 后一次性原子消费，同时核验在交易群与 `.xlsx` 角色卡上传资格，通过后建立 30 天 HttpOnly 会话。
+- **主群官方 Bot 6 位短码登录**（本机海豹 JS 插件 `tools/sealdice_forum_auth.js` 监听主群 `/登录` 指令，携带 `COMMUNITY_BOT_TOKEN` 或 `ONEBOT_SEQUENCE_TOKEN` 调用后端签发 6 位短码；自动通过 `q.qlogo.cn/qqapp/{AppID}/{openid}/640` 获取高清 QQ 头像并默认带入海豹角色昵称，无需角色卡门槛）：
+  - `GET /api/auth/me`：读取当前浏览器轮回者身份、管理员权限与认证配置。
+  - `POST /api/auth/bot/issue-code`：供本机海豹插件调用，核验主群白名单（`COMMUNITY_ALLOWED_OPEN_GROUPS`）并签发 5 分钟有效的 6 位短码。
+  - `POST /api/auth/bot/inspect`：前端输入 6 位码后预检是否首次登录，返回默认海豹昵称与头像预览。
+  - `POST /api/auth/bot/consume`：一次性原子消费 6 位短码，保存用户确认的昵称并建立 30 天 HttpOnly 会话。
+  - `PATCH /api/auth/profile`：已登录轮回者自助修改论坛展示昵称（同步更新历史发言作者昵称）。
   - `POST /api/auth/logout`：销毁当前浏览器会话。
 - **轮回者论坛与抗重排序列评论区**（未登录公开只读，交易群轮回者登录后发帖、跟帖、点赞共鸣、关联能力卡锚点）：
   - `GET /api/community/home`：论坛紧凑主题列表（置顶优先 + 最后回复顶帖排序）与右侧全站最新序列评论动态流。

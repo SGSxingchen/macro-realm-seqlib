@@ -32,8 +32,17 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 
 QQ_RE = re.compile(r"^[1-9][0-9]{4,11}$")
+OPENID_HEX_RE = re.compile(r"^[0-9A-F]{16,64}$")
+USER_KEY_RE = re.compile(r"^(?:[1-9][0-9]{4,11}|oid:[0-9A-F]{16,64})$")
+BOT_SHORT_CODE_RE = re.compile(r"^[0-9]{6}$")
+
 EXPECTED_GROUP_ID = 672204828
-# 私聊验证码接收 BOT 的 QQ 号；换号时优先改环境变量 COMMUNITY_BOT_QQ，无需改代码
+OFFICIAL_BOT_APP_ID = os.getenv("COMMUNITY_BOT_APP_ID", "1903175013").strip() or "1903175013"
+OFFICIAL_BOT_NAME = os.getenv("COMMUNITY_BOT_NAME", "阿瓦娜").strip() or "阿瓦娜"
+DEFAULT_ALLOWED_OPEN_GROUPS = "OpenQQ-Group:4019653007-6C93AE22F9628FC5D947F07C55643B91"
+BOT_SHORT_CODE_TTL_SECONDS = 300
+
+# 私聊验证码接收 BOT 的 QQ 号（历史兼容）；换号时优先改环境变量 COMMUNITY_BOT_QQ
 EXPECTED_BOT_QQ = os.getenv("COMMUNITY_BOT_QQ", "412318056").strip() or "412318056"
 DEFAULT_AUTH_BASE = "https://trpg.chordvers.org/onebot-sequences"
 
@@ -78,20 +87,108 @@ def ts_to_iso(ts: int | float | None) -> str | None:
 
 
 def mask_qq(qq: str) -> str:
-    if not qq or len(qq) < 5:
+    if not qq:
+        return ""
+    if qq.startswith("oid:"):
+        raw = qq[4:]
+        if len(raw) <= 6:
+            return f"ID:{raw}"
+        return f"ID:{raw[:4]}…{raw[-4:]}"
+    if len(qq) < 5:
         return qq
     if len(qq) <= 7:
         return f"{qq[:2]}***{qq[-2:]}"
     return f"{qq[:3]}****{qq[-3:]}"
 
 
+def normalize_open_user_id(raw: str) -> str:
+    """将海豹 OpenQQ:4019653007-HEX、oid:HEX 或裸 HEX 归一化为 16~64 位大写 HEX openid。"""
+    val = (raw or "").strip()
+    if val.lower().startswith("oid:"):
+        val = val[4:].strip()
+    elif "-" in val and ":" in val:
+        val = val.rsplit("-", 1)[-1].strip()
+    val = val.upper()
+    if not OPENID_HEX_RE.fullmatch(val):
+        raise ValueError("无效的官方 Bot 用户 OpenID")
+    return val
+
+
+def normalize_user_key(raw: str) -> str:
+    """兼容历史数字 QQ、oid:<HEX>、OpenQQ:<uin>-<HEX> 或裸 <HEX> 用户标识。"""
+    val = (raw or "").strip()
+    if QQ_RE.fullmatch(val):
+        return val
+    try:
+        return f"oid:{normalize_open_user_id(val)}"
+    except ValueError:
+        raise ValueError("请输入有效的用户标识（QQ 号或官方 Bot ID）")
+
+
+def normalize_open_group_token(raw: str) -> str:
+    val = (raw or "").strip()
+    if "-" in val and val.lower().startswith("openqq-group:"):
+        val = val.rsplit("-", 1)[-1].strip()
+    return val.upper()
+
+
+def parse_allowed_open_groups() -> set[str]:
+    raw = os.getenv("COMMUNITY_ALLOWED_OPEN_GROUPS", DEFAULT_ALLOWED_OPEN_GROUPS)
+    result: set[str] = set()
+    for part in re.split(r"[,;\s]+", raw or DEFAULT_ALLOWED_OPEN_GROUPS):
+        tok = normalize_open_group_token(part)
+        if tok:
+            result.add(tok)
+    return result
+
+
+def bot_bridge_token() -> str:
+    return (
+        os.getenv("COMMUNITY_BOT_TOKEN")
+        or os.getenv("ONEBOT_SEQUENCE_TOKEN")
+        or ""
+    ).strip()
+
+
+def bot_auth_configured() -> bool:
+    return bool(bot_bridge_token())
+
+
+def default_avatar_for_user(user_key: str, app_id: str | None = None) -> str:
+    if user_key.startswith("oid:"):
+        oid = user_key[4:]
+        aid = (app_id or OFFICIAL_BOT_APP_ID).strip() or OFFICIAL_BOT_APP_ID
+        return f"https://q.qlogo.cn/qqapp/{aid}/{oid}/640"
+    if QQ_RE.fullmatch(user_key):
+        return f"https://q1.qlogo.cn/g?b=qq&nk={user_key}&s=640"
+    return ""
+
+
+def clean_nickname(raw: str, *, max_len: int = 32) -> str:
+    cleaned = re.sub(r"[\x00-\x1f\x7f]+", " ", raw or "")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if not cleaned:
+        raise ValueError("昵称不能为空")
+    if len(cleaned) > max_len:
+        raise ValueError(f"昵称长度不能超过 {max_len} 个字符")
+    return cleaned
+
+
 def parse_admin_qqs() -> set[str]:
     raw = os.getenv("COMMUNITY_ADMIN_QQS", "")
+    extra_oids = os.getenv("COMMUNITY_ADMIN_OPENIDS", "FF834522288AB2D2993970BE14970D3A")
     result: set[str] = set()
-    for part in re.split(r"[,;\s]+", raw):
+    for part in re.split(r"[,;\s]+", f"{raw},{extra_oids}"):
         cleaned = part.strip()
+        if not cleaned:
+            continue
         if QQ_RE.fullmatch(cleaned):
             result.add(cleaned)
+            continue
+        try:
+            result.add(f"oid:{normalize_open_user_id(cleaned)}")
+        except ValueError:
+            continue
     return result
 
 
@@ -331,6 +428,21 @@ class CommunityStore:
                     updated_at INTEGER NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_res_alias_key ON community_resource_aliases(canonical_key);
+
+                CREATE TABLE IF NOT EXISTS community_bot_codes (
+                    code TEXT PRIMARY KEY,
+                    user_key TEXT NOT NULL,
+                    open_group_id TEXT NOT NULL,
+                    bot_app_id TEXT NOT NULL DEFAULT '',
+                    sealdice_nickname TEXT NOT NULL DEFAULT '',
+                    avatar_url TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'consumed', 'expired')),
+                    created_at INTEGER NOT NULL,
+                    expires_at INTEGER NOT NULL,
+                    consumed_at INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS idx_bot_codes_user ON community_bot_codes(user_key, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_bot_codes_exp ON community_bot_codes(expires_at);
                 """
             )
             # 在线平滑升级旧表结构（兼容已部署库）
@@ -609,14 +721,21 @@ class CommunityStore:
         avatar_url: str,
         card_count: int,
         group_id: int,
+        preserve_existing_nickname: bool = False,
     ) -> dict[str, Any]:
         now = now_ts()
         sid_hash = self._hash_sid(raw_sid, secret)
         safe_nick = (nickname or "").strip() or f"轮回者{qq[-4:]}"
-        safe_avatar = (avatar_url or "").strip() or f"https://q1.qlogo.cn/g?b=qq&nk={qq}&s=640"
+        safe_avatar = (avatar_url or "").strip() or default_avatar_for_user(qq)
         with self._conn() as conn:
             existing = conn.execute("SELECT * FROM community_users WHERE qq = ?", (qq,)).fetchone()
             if existing:
+                final_nick = (
+                    str(existing["nickname"]).strip() or safe_nick
+                    if preserve_existing_nickname
+                    else safe_nick
+                )
+                final_cards = max(int(existing["card_count"] or 0), int(card_count or 0))
                 conn.execute(
                     """
                     UPDATE community_users
@@ -628,7 +747,7 @@ class CommunityStore:
                         updated_at = ?
                     WHERE qq = ?
                     """,
-                    (safe_nick, safe_avatar, int(card_count or 0), int(group_id), now, now, qq),
+                    (final_nick, safe_avatar, final_cards, int(group_id), now, now, qq),
                 )
             else:
                 conn.execute(
@@ -660,6 +779,251 @@ class CommunityStore:
             user_row = conn.execute("SELECT * FROM community_users WHERE qq = ?", (qq,)).fetchone()
             return dict(user_row)
 
+    def issue_bot_login_code(
+        self,
+        *,
+        user_key: str,
+        open_group_id: str,
+        sealdice_nickname: str = "",
+        bot_app_id: str = OFFICIAL_BOT_APP_ID,
+    ) -> dict[str, Any]:
+        now = now_ts()
+        clean_hint = re.sub(r"[\x00-\x1f\x7f]+", " ", sealdice_nickname or "")
+        clean_hint = re.sub(r"\s+", " ", clean_hint).strip()[:32]
+        avatar_url = default_avatar_for_user(user_key, bot_app_id)
+
+        with self._conn() as conn:
+            conn.execute("DELETE FROM community_bot_codes WHERE expires_at <= ?", (now - 3600,))
+            recent_cnt = int(
+                conn.execute(
+                    "SELECT COUNT(*) AS c FROM community_bot_codes WHERE user_key = ? AND created_at >= ?",
+                    (user_key, now - 300),
+                ).fetchone()["c"]
+            )
+            if recent_cnt >= 6:
+                raise HTTPException(429, "登录码获取过于频繁，请直接使用刚才的 6 位验证码或 5 分钟后再试。")
+
+            # 作废该用户此前未使用的旧短码，仅保留最新一个有效码
+            conn.execute(
+                "UPDATE community_bot_codes SET status = 'expired' WHERE user_key = ? AND status = 'pending'",
+                (user_key,),
+            )
+
+            code = ""
+            for _ in range(25):
+                candidate = f"{secrets.randbelow(900000) + 100000:06d}"
+                clash = conn.execute("SELECT 1 FROM community_bot_codes WHERE code = ?", (candidate,)).fetchone()
+                if not clash:
+                    code = candidate
+                    break
+            if not code:
+                raise HTTPException(503, "登录码生成繁忙，请稍后再试")
+
+            exp = now + BOT_SHORT_CODE_TTL_SECONDS
+            conn.execute(
+                """
+                INSERT INTO community_bot_codes (
+                    code, user_key, open_group_id, bot_app_id, sealdice_nickname,
+                    avatar_url, status, created_at, expires_at, consumed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, 0)
+                """,
+                (code, user_key, open_group_id, bot_app_id, clean_hint, avatar_url, now, exp),
+            )
+            existing = conn.execute("SELECT nickname FROM community_users WHERE qq = ?", (user_key,)).fetchone()
+            return {
+                "ok": True,
+                "code": code,
+                "user_key": user_key,
+                "is_existing_user": bool(existing),
+                "current_nickname": str(existing["nickname"]) if existing else clean_hint,
+                "expires_in_seconds": BOT_SHORT_CODE_TTL_SECONDS,
+                "expires_at": ts_to_iso(exp),
+            }
+
+    def inspect_bot_login_code(self, code: str) -> dict[str, Any]:
+        cleaned = (code or "").strip()
+        if not BOT_SHORT_CODE_RE.fullmatch(cleaned):
+            raise HTTPException(400, "请输入群内机器人回复的 6 位数字登录码")
+        now = now_ts()
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM community_bot_codes WHERE code = ?", (cleaned,)).fetchone()
+            if not row:
+                raise HTTPException(404, "登录码不存在或已失效，请在主群发送 /登录 重新获取")
+            if row["status"] == "consumed":
+                raise HTTPException(409, "该登录码已被使用，请重新发送 /登录 获取新码")
+            if row["status"] != "pending" or int(row["expires_at"]) <= now:
+                conn.execute("UPDATE community_bot_codes SET status = 'expired' WHERE code = ?", (cleaned,))
+                raise HTTPException(410, "登录码已过期（有效期 5 分钟），请在主群重新发送 /登录")
+
+            user_key = str(row["user_key"])
+            existing = conn.execute("SELECT * FROM community_users WHERE qq = ?", (user_key,)).fetchone()
+            suggested = (
+                str(existing["nickname"]).strip()
+                if existing and str(existing["nickname"]).strip()
+                else (str(row["sealdice_nickname"]).strip() or f"轮回者{user_key[-4:]}")
+            )
+            avatar = (
+                str(row["avatar_url"]).strip()
+                or (str(existing["avatar_url"]).strip() if existing else "")
+                or default_avatar_for_user(user_key, str(row["bot_app_id"] or ""))
+            )
+            return {
+                "ok": True,
+                "code": cleaned,
+                "user_key_masked": mask_qq(user_key),
+                "is_new_user": not bool(existing),
+                "suggested_nickname": suggested,
+                "sealdice_nickname": str(row["sealdice_nickname"] or ""),
+                "avatar_url": avatar,
+                "expires_at": ts_to_iso(int(row["expires_at"])),
+            }
+
+    def consume_bot_login_code(
+        self,
+        raw_sid: str,
+        secret: bytes,
+        *,
+        code: str,
+        nickname: str | None = None,
+    ) -> dict[str, Any]:
+        cleaned = (code or "").strip()
+        if not BOT_SHORT_CODE_RE.fullmatch(cleaned):
+            raise HTTPException(400, "请输入有效的 6 位数字登录码")
+        now = now_ts()
+        sid_hash = self._hash_sid(raw_sid, secret)
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM community_bot_codes WHERE code = ?", (cleaned,)).fetchone()
+            if not row:
+                raise HTTPException(404, "登录码不存在或已失效，请在主群发送 /登录 重新获取")
+            if row["status"] == "consumed":
+                raise HTTPException(409, "该登录码已被使用，请重新发送 /登录 获取新码")
+            if row["status"] != "pending" or int(row["expires_at"]) <= now:
+                conn.execute("UPDATE community_bot_codes SET status = 'expired' WHERE code = ?", (cleaned,))
+                raise HTTPException(410, "登录码已过期（有效期 5 分钟），请在主群重新发送 /登录")
+
+            updated = conn.execute(
+                "UPDATE community_bot_codes SET status = 'consumed', consumed_at = ? WHERE code = ? AND status = 'pending'",
+                (now, cleaned),
+            )
+            if updated.rowcount != 1:
+                raise HTTPException(409, "该登录码已被使用，请重新获取")
+
+            user_key = str(row["user_key"])
+            existing = conn.execute("SELECT * FROM community_users WHERE qq = ?", (user_key,)).fetchone()
+            avatar = (
+                str(row["avatar_url"]).strip()
+                or (str(existing["avatar_url"]).strip() if existing else "")
+                or default_avatar_for_user(user_key, str(row["bot_app_id"] or ""))
+            )
+
+            provided_nick = (nickname or "").strip()
+            if provided_nick:
+                try:
+                    final_nick = clean_nickname(provided_nick)
+                except ValueError as exc:
+                    raise HTTPException(400, str(exc)) from exc
+            elif existing and str(existing["nickname"]).strip():
+                final_nick = str(existing["nickname"]).strip()
+            else:
+                fallback_raw = str(row["sealdice_nickname"] or "").strip() or f"轮回者{user_key[-4:]}"
+                final_nick = clean_nickname(fallback_raw)
+
+            if existing:
+                old_nick = str(existing["nickname"])
+                conn.execute(
+                    """
+                    UPDATE community_users
+                    SET nickname = ?,
+                        avatar_url = ?,
+                        last_login_at = ?,
+                        updated_at = ?
+                    WHERE qq = ?
+                    """,
+                    (final_nick, avatar, now, now, user_key),
+                )
+                if final_nick != old_nick:
+                    self._sync_author_profile_in_posts(conn, user_key=user_key, nickname=final_nick, avatar_url=avatar)
+                elif avatar:
+                    conn.execute(
+                        "UPDATE community_posts SET author_avatar = ? WHERE author_qq = ?",
+                        (avatar, user_key),
+                    )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO community_users (
+                        qq, nickname, avatar_url, card_count, group_id, role,
+                        banned_until, ban_reason, first_login_at, last_login_at, updated_at
+                    ) VALUES (?, ?, ?, 0, ?, 'member', 0, '', ?, ?, ?)
+                    """,
+                    (user_key, final_nick, avatar, EXPECTED_GROUP_ID, now, now, now),
+                )
+
+            conn.execute(
+                """
+                UPDATE browser_sessions
+                SET user_qq = ?,
+                    pending_challenge_id = NULL,
+                    pending_qq = NULL,
+                    pending_bot_qq = NULL,
+                    pending_code = NULL,
+                    pending_expires_at = NULL,
+                    pending_created_at = NULL,
+                    updated_at = ?,
+                    expires_at = ?
+                WHERE sid_hash = ?
+                """,
+                (user_key, now, now + BROWSER_TTL_SECONDS, sid_hash),
+            )
+            user_row = conn.execute("SELECT * FROM community_users WHERE qq = ?", (user_key,)).fetchone()
+            return dict(user_row)
+
+    @staticmethod
+    def _sync_author_profile_in_posts(
+        conn: sqlite3.Connection,
+        *,
+        user_key: str,
+        nickname: str,
+        avatar_url: str = "",
+    ) -> None:
+        if avatar_url:
+            conn.execute(
+                "UPDATE community_posts SET author_nickname = ?, author_avatar = ? WHERE author_qq = ?",
+                (nickname, avatar_url, user_key),
+            )
+        else:
+            conn.execute(
+                "UPDATE community_posts SET author_nickname = ? WHERE author_qq = ?",
+                (nickname, user_key),
+            )
+        conn.execute(
+            "UPDATE community_posts SET reply_to_nickname = ? WHERE reply_to_qq = ?",
+            (nickname, user_key),
+        )
+
+    def update_user_nickname(self, user_key: str, nickname: str) -> dict[str, Any]:
+        try:
+            final_nick = clean_nickname(nickname)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        now = now_ts()
+        with self._conn() as conn:
+            existing = conn.execute("SELECT * FROM community_users WHERE qq = ?", (user_key,)).fetchone()
+            if not existing:
+                raise HTTPException(404, "用户不存在")
+            conn.execute(
+                "UPDATE community_users SET nickname = ?, updated_at = ? WHERE qq = ?",
+                (final_nick, now, user_key),
+            )
+            self._sync_author_profile_in_posts(
+                conn,
+                user_key=user_key,
+                nickname=final_nick,
+                avatar_url=str(existing["avatar_url"] or ""),
+            )
+            row = conn.execute("SELECT * FROM community_users WHERE qq = ?", (user_key,)).fetchone()
+            return dict(row)
+
     def logout_session(self, raw_sid: str | None, secret: bytes) -> None:
         if not raw_sid:
             return
@@ -688,8 +1052,8 @@ class CommunityStore:
                     (banned_until, reason.strip(), now, qq),
                 )
             else:
-                nick = nickname_hint.strip() or f"QQ {qq}"
-                avatar = f"https://q1.qlogo.cn/g?b=qq&nk={qq}&s=640"
+                nick = nickname_hint.strip() or (f"轮回者 {mask_qq(qq)}" if qq.startswith("oid:") else f"QQ {qq}")
+                avatar = default_avatar_for_user(qq)
                 conn.execute(
                     """
                     INSERT INTO community_users (
@@ -752,7 +1116,7 @@ class CommunityStore:
                 "qq_masked": mask_qq(author_qq),
                 "qq": author_qq if (include_full_qq or viewer_is_mod or is_mine) else None,
                 "nickname": d["author_nickname"],
-                "avatar_url": d["author_avatar"] or f"https://q1.qlogo.cn/g?b=qq&nk={author_qq}&s=640",
+                "avatar_url": d["author_avatar"] or default_avatar_for_user(author_qq),
                 "badge": d["author_role_badge"] or "",
             },
             "content": content_active,
@@ -1408,6 +1772,26 @@ class BeginChallengeRequest(BaseModel):
     qq: str
 
 
+class BotIssueCodeRequest(BaseModel):
+    open_user_id: str = Field(min_length=4, max_length=120)
+    open_group_id: str = Field(min_length=4, max_length=120)
+    sealdice_nickname: str = Field(default="", max_length=80)
+    bot_app_id: str = Field(default="", max_length=32)
+
+
+class BotInspectCodeRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=6)
+
+
+class BotConsumeCodeRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=6)
+    nickname: str = Field(default="", max_length=40)
+
+
+class UpdateNicknameRequest(BaseModel):
+    nickname: str = Field(min_length=1, max_length=40)
+
+
 class CreateBoardPostRequest(BaseModel):
     title: str = Field(default="", max_length=100)
     content: str = Field(min_length=1, max_length=4000)
@@ -1508,10 +1892,14 @@ def build_community_router(
                 "verification_code": sess.get("pending_code") or "",
                 "expires_at": sess.get("pending_expires_at"),
             }
+        auth_ready = bot_auth_configured() or upstream_getter().configured()
         if not user:
             return {
                 "authenticated": False,
-                "auth_configured": upstream_getter().configured(),
+                "auth_configured": auth_ready,
+                "auth_mode": "official_bot_code",
+                "bot_name": OFFICIAL_BOT_NAME,
+                "bot_app_id": OFFICIAL_BOT_APP_ID,
                 "bot_qq": EXPECTED_BOT_QQ,
                 "group_id": EXPECTED_GROUP_ID,
                 "admin_authenticated": admin_cookie,
@@ -1525,7 +1913,10 @@ def build_community_router(
         badge = "维护者" if qq_val in parse_admin_qqs() else ("协管" if user.get("role") == "moderator" else "")
         return {
             "authenticated": True,
-            "auth_configured": upstream_getter().configured(),
+            "auth_configured": auth_ready,
+            "auth_mode": "official_bot_code",
+            "bot_name": OFFICIAL_BOT_NAME,
+            "bot_app_id": OFFICIAL_BOT_APP_ID,
             "bot_qq": EXPECTED_BOT_QQ,
             "group_id": EXPECTED_GROUP_ID,
             "admin_authenticated": admin_cookie,
@@ -1535,7 +1926,7 @@ def build_community_router(
                 "qq": qq_val,
                 "qq_masked": mask_qq(qq_val),
                 "nickname": user["nickname"],
-                "avatar_url": user["avatar_url"] or f"https://q1.qlogo.cn/g?b=qq&nk={qq_val}&s=640",
+                "avatar_url": user["avatar_url"] or default_avatar_for_user(qq_val),
                 "card_count": int(user.get("card_count") or 0),
                 "badge": badge,
                 "is_banned": banned,
@@ -1547,7 +1938,7 @@ def build_community_router(
     def require_active_member(request: Request) -> tuple[dict[str, Any], bool, str]:
         _sess, user, admin_cookie, is_mod = viewer_context(request)
         if not user:
-            raise HTTPException(401, "请先使用交易群内 QQ 号完成私聊验证码登录")
+            raise HTTPException(401, "请先在主群发送 /登录 获取 6 位登录码完成认证")
         if user_is_banned(user):
             reason = (user.get("ban_reason") or "").strip()
             detail = f"当前轮回者账号已被限制发言（原因：{reason}）" if reason else "当前轮回者账号已被限制发言"
@@ -1753,6 +2144,83 @@ def build_community_router(
             **format_viewer(updated_sess, user, admin_cookie=admin_cookie, is_mod=is_mod),
         }
 
+    @router.post("/auth/bot/issue-code")
+    def auth_bot_issue_code(body: BotIssueCodeRequest, request: Request, response: Response):
+        """供本机海豹官方 Bot 插件调用：核验主群白名单并为群成员签发 6 位一次性登录短码。"""
+        no_store(response)
+        expected_tok = bot_bridge_token()
+        if not expected_tok:
+            raise HTTPException(503, "服务器尚未配置机器人桥接密钥")
+
+        auth_header = (request.headers.get("Authorization") or "").strip()
+        provided_tok = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
+        if not provided_tok or not hmac.compare_digest(provided_tok, expected_tok):
+            raise HTTPException(401, "机器人桥接鉴权未通过")
+
+        group_token = normalize_open_group_token(body.open_group_id)
+        allowed_groups = parse_allowed_open_groups()
+        if "*" not in allowed_groups and group_token not in allowed_groups:
+            raise HTTPException(403, "仅限在宏观界域主群内发送 /登录 获取论坛登录码")
+
+        try:
+            oid_hex = normalize_open_user_id(body.open_user_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+        user_key = f"oid:{oid_hex}"
+        app_id = re.sub(r"[^0-9A-Za-z_-]", "", (body.bot_app_id or "").strip()) or OFFICIAL_BOT_APP_ID
+        return store_getter().issue_bot_login_code(
+            user_key=user_key,
+            open_group_id=body.open_group_id.strip(),
+            sealdice_nickname=body.sealdice_nickname,
+            bot_app_id=app_id,
+        )
+
+    @router.post("/auth/bot/inspect")
+    def auth_bot_inspect_code(body: BotInspectCodeRequest, response: Response):
+        """网页端输入 6 位码后预检：若为新用户则返回默认海豹昵称与高清头像供确认/修改；老用户可直接完成登录。"""
+        no_store(response)
+        return store_getter().inspect_bot_login_code(body.code)
+
+    @router.post("/auth/bot/consume")
+    def auth_bot_consume_code(body: BotConsumeCodeRequest, request: Request, response: Response):
+        """一次性原子消费 6 位登录码，创建或更新用户昵称/头像并建立 30 天 HttpOnly 登录会话。"""
+        no_store(response)
+        sid, _sess, _created = store_getter().get_or_create_session(
+            request.cookies.get(BROWSER_COOKIE),
+            secret_getter(),
+        )
+        user = store_getter().consume_bot_login_code(
+            sid,
+            secret_getter(),
+            code=body.code,
+            nickname=body.nickname,
+        )
+        set_browser_cookie(response, request, sid)
+        updated_sess = store_getter().get_session(sid, secret_getter())
+        admin_cookie = is_admin_request(request)
+        is_mod = admin_cookie or user_is_qq_moderator(user)
+        return {
+            "ok": True,
+            **format_viewer(updated_sess, user, admin_cookie=admin_cookie, is_mod=is_mod),
+        }
+
+    @router.patch("/auth/profile")
+    def auth_update_profile(body: UpdateNicknameRequest, request: Request, response: Response):
+        """已登录用户自助修改论坛展示昵称（同步更新历史发帖展示昵称）。"""
+        no_store(response)
+        sess, user, admin_cookie, _is_mod = viewer_context(request)
+        if not user:
+            raise HTTPException(401, "请先登录后再修改昵称")
+        if user_is_banned(user):
+            raise HTTPException(403, "当前账号处于禁言状态，暂不可修改昵称")
+        updated_user = store_getter().update_user_nickname(str(user["qq"]), body.nickname)
+        is_mod = admin_cookie or user_is_qq_moderator(updated_user)
+        return {
+            "ok": True,
+            **format_viewer(sess, updated_user, admin_cookie=admin_cookie, is_mod=is_mod),
+        }
+
     @router.post("/auth/logout")
     def auth_logout(request: Request, response: Response):
         no_store(response)
@@ -1948,11 +2416,12 @@ def build_community_router(
     def moderation_ban_user(body: AdminBanUserRequest, request: Request, response: Response):
         no_store(response)
         actor, _user = require_moderator(request)
-        target_qq = (body.qq or "").strip()
-        if not QQ_RE.fullmatch(target_qq):
-            raise HTTPException(400, "请输入有效的目标 QQ 号（5～12 位数字）")
+        try:
+            target_qq = normalize_user_key(body.qq)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         if target_qq in parse_admin_qqs() and not is_admin_request(request):
-            raise HTTPException(403, "不能封禁站点维护者白名单 QQ")
+            raise HTTPException(403, "不能封禁站点维护者白名单账号")
 
         if body.unban:
             banned_until = 0
@@ -1972,16 +2441,18 @@ def build_community_router(
         )
         return {"ok": True, "qq": target_qq, "banned_until": row["banned_until"], "ban_reason": row["ban_reason"]}
 
-    @router.post("/community/moderation/users/{qq}/role")
+    @router.post("/community/moderation/users/{qq:path}/role")
     def moderation_set_role(qq: str, body: AdminRoleRequest, request: Request, response: Response):
         no_store(response)
         _sess, user, admin_cookie, _is_mod = viewer_context(request)
         is_super = admin_cookie or bool(user and str(user["qq"]) in parse_admin_qqs())
         if not is_super:
             raise HTTPException(403, "仅站点维护者可调整协管权限")
-        if not QQ_RE.fullmatch(qq.strip()):
-            raise HTTPException(400, "QQ 号格式不合法")
-        row = store_getter().set_user_role(qq.strip(), body.role)
+        try:
+            target_qq = normalize_user_key(qq)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        row = store_getter().set_user_role(target_qq, body.role)
         return {"ok": True, "qq": row["qq"], "role": row["role"]}
 
     @router.post("/community/moderation/announcement")

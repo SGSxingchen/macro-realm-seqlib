@@ -486,7 +486,7 @@ export function CommunityBoard({
                         <strong>参与回帖</strong>
                         {!viewer?.authenticated && (
                           <button type="button" className="comm-primary-btn" onClick={onOpenAuth}>
-                            QQ 验证登录
+                            主群短码登录
                           </button>
                         )}
                       </div>
@@ -507,7 +507,7 @@ export function CommunityBoard({
                         disabled={!viewer?.authenticated || Boolean(viewer.user?.is_banned)}
                         placeholder={
                           !viewer?.authenticated
-                            ? '使用交易群内 QQ 私聊验证码登录后即可跟帖回复…'
+                            ? '在主群发送 /登录 获取 6 位登录码认证后即可跟帖回复…'
                             : viewer.user?.is_banned
                               ? `发言受限：${viewer.user.ban_reason || '请联系管理员'}`
                               : replyQuote
@@ -686,16 +686,26 @@ export function CommunityBoard({
                         <strong>{viewer.user.nickname}</strong>
                         {viewer.user.badge && <em className="comm-role-badge">{viewer.user.badge}</em>}
                       </div>
-                      <span>{viewer.user.qq_masked} · 角色卡 {viewer.user.card_count} 份</span>
+                      <span>
+                        {viewer.user.qq_masked} ·{' '}
+                        <button
+                          type="button"
+                          className="comm-link-inline"
+                          style={{ fontSize: '12px', padding: 0 }}
+                          onClick={onOpenAuth}
+                        >
+                          修改昵称
+                        </button>
+                      </span>
                     </div>
                   </div>
                 </div>
               ) : (
                 <div className="forum-guest-box">
                   <strong>宏观界域 · 轮回者交流区</strong>
-                  <p>验证交易群（{viewer?.group_id || 672204828}）QQ 与角色卡资格后，可发帖招募、研讨构筑与评价强化序列。</p>
+                  <p>在主群唤醒官方机器人发送 <code>/登录</code> 获取 6 位短码即可认证发言、招募跑团与评价强化序列。</p>
                   <button type="button" className="comm-primary-btn forum-full-btn" onClick={onOpenAuth}>
-                    QQ 验证登录
+                    主群短码登录
                   </button>
                 </div>
               )}

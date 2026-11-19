@@ -32,6 +32,7 @@ from .community import (
     BROWSER_COOKIE,
     CommunityStore,
     UpstreamAuthClient,
+    bot_auth_configured,
     build_community_router,
     compute_resource_key,
     parse_admin_qqs,
@@ -802,7 +803,7 @@ def health():
         "ok": True,
         "admin_configured": bool(admin_password()),
         "wiki_configured": wiki_credentials_configured(),
-        "qq_auth_configured": upstream_auth_client().configured(),
+        "qq_auth_configured": bot_auth_configured() or upstream_auth_client().configured(),
     }
 
 

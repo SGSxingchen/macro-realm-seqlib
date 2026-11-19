@@ -372,6 +372,106 @@ class CommunityAndQqAuthTests(unittest.TestCase):
         self.assertEqual(detail["floor"], 1)
         self.assertEqual(detail["replies"][0]["floor"], 2)
 
+    def test_official_bot_short_code_login_and_nickname_edit(self) -> None:
+        bot_bridge = TestClient(app_main.app)
+        browser = TestClient(app_main.app)
+
+        # 1. 未带 Bearer 密钥或非主群请求拒绝签发
+        unauth = bot_bridge.post(
+            "/api/auth/bot/issue-code",
+            json={
+                "open_user_id": "OpenQQ:4019653007-49E8BA38D36D9D9EEEA615D657C94E2C",
+                "open_group_id": "OpenQQ-Group:4019653007-6C93AE22F9628FC5D947F07C55643B91",
+                "sealdice_nickname": "雨霁",
+            },
+        )
+        self.assertEqual(unauth.status_code, 401)
+
+        wrong_group = bot_bridge.post(
+            "/api/auth/bot/issue-code",
+            headers={"Authorization": "Bearer mock-secret-bearer-token"},
+            json={
+                "open_user_id": "OpenQQ:4019653007-49E8BA38D36D9D9EEEA615D657C94E2C",
+                "open_group_id": "OpenQQ-Group:4019653007-CAB18FD223F3C863DC20A42B6456BA16",
+                "sealdice_nickname": "雨霁",
+            },
+        )
+        self.assertEqual(wrong_group.status_code, 403)
+
+        # 2. 主群成员正常签发 6 位短码，预检返回海豹默认昵称与 qlogo 官方 Bot 头像
+        issued = bot_bridge.post(
+            "/api/auth/bot/issue-code",
+            headers={"Authorization": "Bearer mock-secret-bearer-token"},
+            json={
+                "open_user_id": "OpenQQ:4019653007-49E8BA38D36D9D9EEEA615D657C94E2C",
+                "open_group_id": "OpenQQ-Group:4019653007-6C93AE22F9628FC5D947F07C55643B91",
+                "sealdice_nickname": "雨霁",
+                "bot_app_id": "1903175013",
+            },
+        )
+        self.assertEqual(issued.status_code, 200)
+        code = issued.json()["code"]
+        self.assertRegex(code, r"^\d{6}$")
+
+        inspected = browser.post("/api/auth/bot/inspect", json={"code": code})
+        self.assertEqual(inspected.status_code, 200)
+        ins_data = inspected.json()
+        self.assertTrue(ins_data["is_new_user"])
+        self.assertEqual(ins_data["suggested_nickname"], "雨霁")
+        self.assertEqual(
+            ins_data["avatar_url"],
+            "https://q.qlogo.cn/qqapp/1903175013/49E8BA38D36D9D9EEEA615D657C94E2C/640",
+        )
+
+        # 3. 首次登录可自定义修改昵称并建立会话；同一短码二次消费返回 409
+        consumed = browser.post("/api/auth/bot/consume", json={"code": code, "nickname": "雨霁·改"})
+        self.assertEqual(consumed.status_code, 200)
+        viewer = consumed.json()
+        self.assertTrue(viewer["authenticated"])
+        self.assertEqual(viewer["user"]["qq"], "oid:49E8BA38D36D9D9EEEA615D657C94E2C")
+        self.assertEqual(viewer["user"]["nickname"], "雨霁·改")
+
+        replay = TestClient(app_main.app).post("/api/auth/bot/consume", json={"code": code, "nickname": "重放"})
+        self.assertEqual(replay.status_code, 409)
+
+        # 4. 登录后发帖与自助修改昵称（历史帖子作者名同步更新）
+        post_res = browser.post("/api/community/board", json={"title": "主群短码测试帖", "content": "无需角色卡即可发帖"})
+        self.assertEqual(post_res.status_code, 200)
+        post_id = post_res.json()["post"]["id"]
+
+        renamed = browser.patch("/api/auth/profile", json={"nickname": "雨霁终章"})
+        self.assertEqual(renamed.status_code, 200)
+        self.assertEqual(renamed.json()["user"]["nickname"], "雨霁终章")
+
+        thread = browser.get(f"/api/community/threads/{post_id}").json()["thread"]
+        self.assertEqual(thread["author"]["nickname"], "雨霁终章")
+
+        # 5. 维护者 OpenID 白名单自动享有管理员身份，且后台支持封禁/解封 oid:... 账号
+        admin_issue = bot_bridge.post(
+            "/api/auth/bot/issue-code",
+            headers={"Authorization": "Bearer mock-secret-bearer-token"},
+            json={
+                "open_user_id": "OpenQQ:4019653007-FF834522288AB2D2993970BE14970D3A",
+                "open_group_id": "OpenQQ-Group:4019653007-6C93AE22F9628FC5D947F07C55643B91",
+                "sealdice_nickname": "牛奶泡LanStarD",
+            },
+        ).json()
+        admin_browser = TestClient(app_main.app)
+        admin_login = admin_browser.post(
+            "/api/auth/bot/consume",
+            json={"code": admin_issue["code"], "nickname": "牛奶泡LanStarD"},
+        ).json()
+        self.assertTrue(admin_login["is_moderator"])
+        self.assertEqual(admin_login["user"]["badge"], "维护者")
+
+        ban_oid = admin_browser.post(
+            "/api/community/moderation/ban",
+            json={"qq": "oid:49E8BA38D36D9D9EEEA615D657C94E2C", "duration_hours": 24, "reason": "OpenID封禁测试"},
+        )
+        self.assertEqual(ban_oid.status_code, 200)
+        blocked = browser.post("/api/community/board", json={"title": "被禁后发帖", "content": "测试拦截"})
+        self.assertEqual(blocked.status_code, 403)
+
 
 if __name__ == "__main__":
     unittest.main()

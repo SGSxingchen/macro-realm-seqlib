@@ -95,8 +95,8 @@ export function CommunityModerationPanel({ onOpenResource }: Props) {
   const handleManualBan = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleaned = banQq.trim();
-    if (!/^[1-9][0-9]{4,11}$/.test(cleaned)) {
-      flash('请输入有效的 5～12 位 QQ 号');
+    if (!cleaned || cleaned.length < 5) {
+      flash('请输入有效的账号标识（数字 QQ 号或 oid:... / OpenID）');
       return;
     }
     const hoursNum = Number(banHours);
@@ -112,7 +112,7 @@ export function CommunityModerationPanel({ onOpenResource }: Props) {
       });
       setBanQq('');
       setBanReason('');
-      flash(`已对 QQ ${cleaned} 执行禁言`);
+      flash(`已对账号 ${cleaned} 执行禁言`);
       await loadUsers();
     } catch (err) {
       flash(err instanceof Error ? err.message : '封禁操作失败');
@@ -189,12 +189,12 @@ export function CommunityModerationPanel({ onOpenResource }: Props) {
           <p className="hint">正在读取社区统计…</p>
         )}
         <hr style={{ border: 0, borderTop: '1px solid var(--line)', margin: '14px 0' }} />
-        <h4>手动封禁 / 禁言指定 QQ</h4>
+        <h4>手动封禁 / 禁言指定账号</h4>
         <form onSubmit={handleManualBan} style={{ display: 'grid', gap: '8px' }}>
           <input
-            placeholder="目标 QQ 号（未登录过也可预先拉黑）"
+            placeholder="目标账号标识（如 oid:XXXX... 或旧数字 QQ 号）"
             value={banQq}
-            onChange={e => setBanQq(e.target.value.replace(/[^\d]/g, '').slice(0, 12))}
+            onChange={e => setBanQq(e.target.value.slice(0, 80))}
           />
           <div className="row">
             <select value={banHours} onChange={e => setBanHours(e.target.value)}>
@@ -370,7 +370,7 @@ export function CommunityModerationPanel({ onOpenResource }: Props) {
                   <div key={u.qq} className="comm-admin-row">
                     <div className="comm-admin-row-head">
                       <span>
-                        <strong>{u.nickname}</strong> · QQ: <code>{u.qq}</code> · 角色卡 {u.card_count} 份 · 有效发言 {u.post_count} 条
+                        <strong>{u.nickname}</strong> · 账号: <code>{u.qq}</code> · 有效发言 {u.post_count} 条
                       </span>
                       <div className="row">
                         {u.role === 'env_admin' && <StatusBadge ok>环境变量维护者</StatusBadge>}

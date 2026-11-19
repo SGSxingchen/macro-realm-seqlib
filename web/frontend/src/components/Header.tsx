@@ -46,7 +46,7 @@ export function Header({ recordCount, tab, onTab, viewer, onOpenAuth }: Props) {
               type="button"
               className={`comm-topbar-auth${user ? ' is-logged' : ''}`}
               onClick={onOpenAuth}
-              title={user ? `${user.nickname}（QQ: ${user.qq}）` : '使用群内 QQ 私聊验证码登录'}
+              title={user ? `${user.nickname}（${user.qq_masked}）` : '使用主群机器人 /登录 短码认证'}
             >
               {user ? (
                 <>
@@ -55,7 +55,7 @@ export function Header({ recordCount, tab, onTab, viewer, onOpenAuth }: Props) {
                   {user.badge && <em className="comm-topbar-badge">{user.badge}</em>}
                 </>
               ) : (
-                'QQ 登录'
+                '轮回者登录'
               )}
             </button>
           )}

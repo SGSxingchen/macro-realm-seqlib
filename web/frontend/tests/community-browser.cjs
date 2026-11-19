@@ -188,55 +188,71 @@ const resources = [{
           body = {
             authenticated: loggedIn,
             auth_configured: true,
+            auth_mode: 'official_bot_code',
+            bot_name: '阿瓦娜',
+            bot_app_id: '1903175013',
             bot_qq: '412318056',
             group_id: 672204828,
             admin_authenticated: false,
             is_moderator: loggedIn,
-            pending_challenge: loggedIn ? null : pendingChallenge,
+            pending_challenge: null,
             user: currentUser,
           };
-        } else if (url.pathname === '/api/auth/qq/challenges' && req.method() === 'POST') {
-          const exp = new Date(Date.now() + 300000).toISOString();
-          pendingChallenge = {
-            qq: '1348697221',
-            bot_qq: '412318056',
-            verification_code: 'TRPG-TESTCODE8888',
-            expires_at: exp,
-          };
+        } else if (url.pathname === '/api/auth/bot/inspect' && req.method() === 'POST') {
           body = {
             ok: true,
-            qq: '1348697221',
-            group_id: 672204828,
-            bot_qq: '412318056',
-            verification_code: 'TRPG-TESTCODE8888',
-            message_to_send: 'TRPG-TESTCODE8888',
-            expires_at: exp,
-            status: 'pending',
+            code: '839204',
+            user_key_masked: 'ID:FF83…0D3A',
+            is_new_user: true,
+            suggested_nickname: '牛奶泡LanStarD',
+            sealdice_nickname: '牛奶泡LanStarD',
+            avatar_url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+            expires_at: new Date(Date.now() + 300000).toISOString(),
           };
-        } else if (url.pathname === '/api/auth/qq/challenges/current') {
-          body = {
-            qq: '1348697221',
-            bot_qq: '412318056',
-            status: challengeVerified ? 'verified' : 'pending',
-            expires_at: pendingChallenge?.expires_at || new Date(Date.now() + 300000).toISOString(),
-          };
-        } else if (url.pathname === '/api/auth/qq/challenges/consume' && req.method() === 'POST') {
+        } else if (url.pathname === '/api/auth/bot/consume' && req.method() === 'POST') {
+          const payload = JSON.parse(req.postData() || '{}');
           loggedIn = true;
-          pendingChallenge = null;
+          const finalNick = (payload.nickname || '').trim() || '轮回者星尘';
           body = {
             ok: true,
             authenticated: true,
             auth_configured: true,
+            auth_mode: 'official_bot_code',
+            bot_name: '阿瓦娜',
+            bot_app_id: '1903175013',
             bot_qq: '412318056',
             group_id: 672204828,
             admin_authenticated: false,
             is_moderator: true,
             user: {
-              qq: '1348697221',
-              qq_masked: '134****7221',
-              nickname: '轮回者星尘',
+              qq: 'oid:FF834522288AB2D2993970BE14970D3A',
+              qq_masked: 'ID:FF83…0D3A',
+              nickname: finalNick,
               avatar_url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
-              card_count: 2,
+              card_count: 0,
+              badge: '维护者',
+              is_banned: false,
+            },
+          };
+        } else if (url.pathname === '/api/auth/profile' && req.method() === 'PATCH') {
+          const payload = JSON.parse(req.postData() || '{}');
+          body = {
+            ok: true,
+            authenticated: true,
+            auth_configured: true,
+            auth_mode: 'official_bot_code',
+            bot_name: '阿瓦娜',
+            bot_app_id: '1903175013',
+            bot_qq: '412318056',
+            group_id: 672204828,
+            admin_authenticated: false,
+            is_moderator: true,
+            user: {
+              qq: 'oid:FF834522288AB2D2993970BE14970D3A',
+              qq_masked: 'ID:FF83…0D3A',
+              nickname: payload.nickname || '轮回者星尘',
+              avatar_url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+              card_count: 0,
               badge: '维护者',
               is_banned: false,
             },
@@ -384,21 +400,18 @@ const resources = [{
       await page.getByRole('heading', { name: '轮回者终端论坛' }).waitFor();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `No overflow on forum list at ${width}px`);
 
-      // Simulate QQ WebView reload bug scenario:
-      // 1. User requests code -> 2. Switches to QQ chat -> 3. Reopens page (full reload) after sending code -> Should auto-complete login without losing challenge!
+      // Official Bot 6-digit short code login + default SealDice nickname editable flow
       if (width <= 820) {
         await page.getByRole('button', { name: '导航', exact: true }).click();
       }
-      await page.getByRole('button', { name: 'QQ 登录' }).click();
-      await page.locator('#comm-qq-input').fill('1348697221');
-      await page.getByRole('button', { name: '获取验证码' }).click();
-      await page.getByTestId('qq-verification-code').waitFor();
-      assert.equal(await page.getByTestId('qq-verification-code').textContent(), 'TRPG-TESTCODE8888');
-
-      // Simulate user leaving WebView, sending code in QQ, and page reloading on return
-      challengeVerified = true;
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      // Background auto-resume should automatically poll & consume and display logged-in nickname!
+      await page.getByRole('button', { name: '轮回者登录' }).click();
+      await page.getByTestId('bot-login-code-input').fill('839204');
+      await page.getByRole('button', { name: '下一步' }).click();
+      const nickInput = page.getByTestId('bot-login-nickname-input');
+      await nickInput.waitFor();
+      assert.equal(await nickInput.inputValue(), '牛奶泡LanStarD');
+      await nickInput.fill('轮回者星尘');
+      await page.getByRole('button', { name: '确认并登录' }).click();
       await page.waitForFunction(() => document.body.textContent.includes('轮回者星尘'));
 
       await page.screenshot({ path: path.join(out, `forum-light-${width}.png`), fullPage: true, animations: 'disabled' });
